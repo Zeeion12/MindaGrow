@@ -128,7 +128,8 @@ const Chatbot = () => {
           </ul>
         </div>
       </nav>
-      <div className="flex flex-col h-150 border border-gray-300 rounded-lg overflow-hidden bg-white shadow-lg">
+      
+      <div className="pt-[100px] flex flex-col h-150 border border-gray-300 rounded-lg overflow-hidden bg-white shadow-lg">
         {/* Header Chatbot */}
         <div className="bg-blue-600 text-white px-4 py-3 flex items-center">
           <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-3">
