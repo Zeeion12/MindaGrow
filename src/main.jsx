@@ -1,11 +1,24 @@
-// src/main.jsx
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import './index.css';
+import App from './App';
+import Chatbot from './Chatbot';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+// Definisikan routing
+const router = createBrowserRouter([
+  {
+      path: '/',
+      element: <App />, // Halaman Utama
+  },
+  {
+      path: '/chatbot',
+      element: <Chatbot />, // Halaman Chatbot
+  },
+]);
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
 )

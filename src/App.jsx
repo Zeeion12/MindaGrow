@@ -1,21 +1,25 @@
-// src/App.jsx
-import Chatbot from './Chatbot';
+import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import './index.css'
 import Navibar from './Navibar';
+import Chatbot from './Chatbot'
 
-function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <Navibar />
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Aplikasi Edukasi AI dengan Gamifikasi</h1>
-        
-        <div className="max-w-2xl mx-auto">
-          <Chatbot />
-
+export default function App() {
+  return(
+    <>
+      <Navibar/>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col">
+          <h1 className="text-center text-3xl font-bold">Welcome To MindaGrow</h1>
+          <p className="text-center mt-4">
+            Your E - Learning Platform
+          </p>
+          <Link to='/chatbot' >
+            <button className='bg-biru-dasar text-white hover:bg-gold-first  p-[10px] m-10  font-semibold rounded-2xl '>Click Here To Chat With ChatBot</button>
+          </Link>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-export default App;

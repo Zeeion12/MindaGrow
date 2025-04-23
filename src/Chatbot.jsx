@@ -1,6 +1,8 @@
 // src/Chatbot.jsx
 import { useState, useRef, useEffect } from 'react';
 import { sendMessageToGroq, isDatasetQuestion, queryDataset } from './service/api';
+import { Link } from 'react-router-dom';
+import Navibar from './Navibar';
 
 const Chatbot = () => {
   const [input, setInput] = useState('');
@@ -114,73 +116,85 @@ const Chatbot = () => {
   };
 
   return (
-    <div className="flex flex-col h-96 border border-gray-300 rounded-lg overflow-hidden bg-white shadow-lg">
-      {/* Header Chatbot */}
-      <div className="bg-blue-600 text-white px-4 py-3 flex items-center">
-        <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-3">
-          <span className="text-blue-600 text-xl">🤖</span>
+    <div>
+      <nav className="navbar fixed w-full bg-biru-dasar flex justify-between items-center font-poppins shadow-lg ">
+        <div className="logoPort">
+          <h1 className="text-emerald-50 text-2xl font-bold p-[15px]">MindaGrow</h1>
         </div>
-        <div>
-          <h3 className="font-medium">AI Chatbot</h3>
-          <p className="text-xs opacity-80">Powered by Groq API + Python Analytics</p>
+        <div className="navButton font-poppins p-[15px] text-amber-50 font-medium">
+          <ul className="flex space-x-5"> 
+            <li><Link to='/'>Back To Home</Link></li>
+          
+          </ul>
         </div>
-      </div>
-      
-      {/* Area Chat */}
-      <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
-        {messages.map((message, index) => (
-          <div 
-            key={index} 
-            className={`mb-4 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}
-          >
-            <div 
-              className={`inline-block px-4 py-2 rounded-lg max-w-xs ${
-                message.sender === 'user' 
-                  ? 'bg-blue-600 text-white rounded-br-none' 
-                  : 'bg-gray-200 text-gray-800 rounded-bl-none'
-              }`}
-            >
-              {message.text.split('\n').map((line, i) => (
-                <span key={i}>
-                  {line}
-                  {i < message.text.split('\n').length - 1 && <br />}
-                </span>
-              ))}
-            </div>
+      </nav>
+      <div className="flex flex-col h-150 border border-gray-300 rounded-lg overflow-hidden bg-white shadow-lg">
+        {/* Header Chatbot */}
+        <div className="bg-blue-600 text-white px-4 py-3 flex items-center">
+          <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-3">
+            <span className="text-blue-600 text-xl">🤖</span>
           </div>
-        ))}
-        {isLoading && (
-          <div className="text-left mb-4">
-            <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg rounded-bl-none inline-block">
-              <div className="flex space-x-1">
-                <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce"></div>
-                <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+          <div>
+            <h3 className="font-medium">AI Chatbot</h3>
+            <p className="text-xs opacity-80">Powered by Groq API + Python Analytics</p>
+          </div>
+        </div>
+        
+        {/* Area Chat */}
+        <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
+          {messages.map((message, index) => (
+            <div 
+              key={index} 
+              className={`mb-4 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}
+            >
+              <div 
+                className={`inline-block px-4 py-2 rounded-lg max-w-xs ${
+                  message.sender === 'user' 
+                    ? 'bg-blue-600 text-white rounded-br-none' 
+                    : 'bg-gray-200 text-gray-800 rounded-bl-none'
+                }`}
+              >
+                {message.text.split('\n').map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < message.text.split('\n').length - 1 && <br />}
+                  </span>
+                ))}
               </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          ))}
+          {isLoading && (
+            <div className="text-left mb-4">
+              <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg rounded-bl-none inline-block">
+                <div className="flex space-x-1">
+                  <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce"></div>
+                  <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="bg-gray-600 rounded-full h-2 w-2 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        
+        {/* Form Input */}
+        <form onSubmit={handleSendMessage} className="border-t border-gray-300 p-2 flex">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ketik pesan..."
+            className="flex-1 py-2 px-3 focus:outline-none rounded-l-lg"
+          />
+          <button 
+            type="submit"
+            disabled={isLoading || input.trim() === ''}
+            className="bg-blue-600 text-white px-4 py-2 rounded-r-lg disabled:opacity-50"
+          >
+            Kirim
+          </button>
+        </form>
       </div>
-      
-      {/* Form Input */}
-      <form onSubmit={handleSendMessage} className="border-t border-gray-300 p-2 flex">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ketik pesan..."
-          className="flex-1 py-2 px-3 focus:outline-none rounded-l-lg"
-        />
-        <button 
-          type="submit"
-          disabled={isLoading || input.trim() === ''}
-          className="bg-blue-600 text-white px-4 py-2 rounded-r-lg disabled:opacity-50"
-        >
-          Kirim
-        </button>
-      </form>
-    
     </div>
   );
 };
