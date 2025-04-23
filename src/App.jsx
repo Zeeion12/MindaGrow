@@ -172,4 +172,4 @@ export default function ChatbotApp() {
   );
 }
 
-export default App;
+// Removed duplicate default export
