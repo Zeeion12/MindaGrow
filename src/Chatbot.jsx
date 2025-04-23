@@ -1,26 +1,13 @@
 // src/Chatbot.jsx
 import { useState, useRef, useEffect } from 'react';
+import { sendMessageToGroq } from './service/api';
 
 const Chatbot = () => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
-
-  // Responses dari AI sederhana
-  const botResponses = {
-    "halo": "Halo! Apa kabar?",
-    "hai": "Hai! Ada yang bisa saya bantu?",
-    "selamat pagi": "Selamat pagi! Semoga hari Anda menyenangkan!",
-    "selamat siang": "Selamat siang! Ada yang bisa saya bantu hari ini?",
-    "selamat malam": "Selamat malam! Bagaimana hari Anda?",
-    "bantuan": "Saya dapat membantu Anda dengan berbagai informasi. Cukup tanyakan saja!",
-    "terima kasih": "Sama-sama! Senang bisa membantu.",
-    "siapa kamu": "Saya adalah chatbot AI sederhana yang dibuat untuk membantu Anda.",
-    "apa kabar": "Saya baik-baik saja, terima kasih! Bagaimana dengan Anda?",
-    "bye": "Sampai jumpa lagi! Semoga hari Anda menyenangkan!"
-  };
-
+  
   // Auto-scroll ke pesan terbaru
   useEffect(() => {
     scrollToBottom();
@@ -30,26 +17,42 @@ const Chatbot = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Mendapatkan respons dari 'AI'
-  const getBotResponse = (userInput) => {
-    const input = userInput.toLowerCase().trim();
-    
-    // Coba cari jawaban langsung
-    for (const [key, value] of Object.entries(botResponses)) {
-      if (input.includes(key)) {
-        return value;
-      }
-    }
-    
-    // Jika tidak ada jawaban yang cocok
-    if (input.includes("?")) {
-      return "Pertanyaan yang menarik! Saya masih belajar untuk menjawabnya.";
-    } else {
-      return "Maaf, saya tidak mengerti maksud Anda. Coba ungkapkan dengan cara lain atau tanyakan sesuatu yang berbeda.";
+  // Mendapatkan respons dari Groq API
+  const getGroqResponse = async (userMessage) => {
+    try {
+      // Format riwayat pesan untuk API
+      const messageHistory = messages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+      
+      // Tambahkan pesan terbaru
+      messageHistory.push({
+        role: 'user',
+        content: userMessage
+      });
+      
+      // Tambahkan sistem prompt untuk memberikan konteks pada AI
+      const systemPrompt = {
+        role: 'system',
+        content: `Anda adalah asisten AI yang membantu dalam memberikan informasi yang akurat dan bermanfaat. 
+                 Anda menggunakan Bahasa Indonesia yang baik dan benar.
+                 Berikan jawaban yang singkat dan jelas, kecuali diminta lebih detail.
+                 Jika Anda tidak yakin atau tidak memiliki informasi yang cukup, berikan jawaban yang jujur bahwa Anda tidak memiliki cukup informasi.`
+      };
+      
+      // Kirim ke API Groq dengan sistem prompt
+      const allMessages = [systemPrompt, ...messageHistory];
+      const response = await sendMessageToGroq(allMessages);
+      return response;
+    } catch (error) {
+      console.error('Error mendapatkan respons dari Groq:', error);
+      // Tetap memberikan pesan error yang informatif kepada pengguna
+      return "Maaf, terjadi kesalahan saat berkomunikasi dengan API. Mohon periksa koneksi internet Anda atau coba lagi nanti.";
     }
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     
     if (input.trim() === '') return;
@@ -59,18 +62,28 @@ const Chatbot = () => {
     setMessages(prevMessages => [...prevMessages, userMessage]);
     
     // Reset input dan tampilkan loading
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
     
-    // Simulasi delay respons AI (untuk pengalaman yang lebih realistis)
-    setTimeout(() => {
+    try {
+      // Selalu gunakan Groq API untuk respons
+      const botResponse = await getGroqResponse(currentInput);
       const botMessage = { 
-        text: getBotResponse(input), 
+        text: botResponse, 
         sender: 'bot' 
       };
       setMessages(prevMessages => [...prevMessages, botMessage]);
+    } catch (error) {
+      console.error('Error dalam respons API:', error);
+      const botMessage = { 
+        text: "Maaf, terjadi kesalahan saat mencoba mendapatkan respons. Mohon periksa koneksi internet Anda dan coba lagi.", 
+        sender: 'bot' 
+      };
+      setMessages(prevMessages => [...prevMessages, botMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -82,7 +95,7 @@ const Chatbot = () => {
         </div>
         <div>
           <h3 className="font-medium">AI Chatbot</h3>
-          <p className="text-xs opacity-80">Online</p>
+          <p className="text-xs opacity-80">Powered by Groq API</p>
         </div>
       </div>
       
@@ -105,7 +118,12 @@ const Chatbot = () => {
                     : 'bg-gray-200 text-gray-800 rounded-bl-none'
                 }`}
               >
-                {message.text}
+                {message.text.split('\n').map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < message.text.split('\n').length - 1 && <br />}
+                  </span>
+                ))}
               </div>
             </div>
           ))
