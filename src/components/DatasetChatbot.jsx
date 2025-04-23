@@ -1,13 +1,13 @@
-// src/Chatbot.jsx
-import { useState, useRef, useEffect } from 'react';
-import { sendMessageToGroq, isDatasetQuestion, queryDataset } from './service/api';
+// src/components/DatasetChatbot.jsx
+import { useState, useEffect, useRef } from 'react';
+import { queryDataset } from '../service/api';
 
-const Chatbot = () => {
+const DatasetChatbot = () => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
-  
+
   // Auto-scroll ke pesan terbaru
   useEffect(() => {
     scrollToBottom();
@@ -16,7 +16,7 @@ const Chatbot = () => {
   // Tambahkan pesan selamat datang saat pertama kali dibuka
   useEffect(() => {
     const welcomeMessage = { 
-      text: "Halo! Saya adalah chatbot AI yang dapat membantu menjawab pertanyaan Anda. Saya juga bisa menganalisis dataset edukasi AI gamifikasi anak. Apa yang ingin Anda tanyakan?", 
+      text: "Selamat datang di Dataset Chatbot! Saya dapat menjawab pertanyaan tentang dataset edukasi AI gamifikasi anak. Silakan tanyakan tentang jumlah siswa, rata-rata skor, distribusi umur, korelasi skor dan absensi, atau rekomendasi strategi gamifikasi.", 
       sender: 'bot' 
     };
     setMessages([welcomeMessage]);
@@ -26,40 +26,7 @@ const Chatbot = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Mendapatkan respons dari Groq API
-  const getGroqResponse = async (userMessage) => {
-    try {
-      // Format riwayat pesan untuk API
-      const messageHistory = messages.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
-      }));
-      
-      // Tambahkan pesan terbaru
-      messageHistory.push({
-        role: 'user',
-        content: userMessage
-      });
-      
-      // Tambahkan sistem prompt untuk memberikan konteks pada AI
-      const systemPrompt = {
-        role: 'system',
-        content: `Anda adalah asisten AI yang membantu dalam memberikan informasi yang akurat dan bermanfaat. 
-                 Anda menggunakan Bahasa Indonesia yang baik dan benar.
-                 Berikan jawaban yang singkat dan jelas, kecuali diminta lebih detail.
-                 Jika Anda tidak yakin atau tidak memiliki informasi yang cukup, berikan jawaban yang jujur bahwa Anda tidak memiliki cukup informasi.`
-      };
-      
-      // Kirim ke API Groq dengan sistem prompt
-      const allMessages = [systemPrompt, ...messageHistory];
-      const response = await sendMessageToGroq(allMessages);
-      return response;
-    } catch (error) {
-      console.error('Error mendapatkan respons dari Groq:', error);
-      throw error;
-    }
-  };
-
+  // Handle submit pesan
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
@@ -75,39 +42,22 @@ const Chatbot = () => {
     setIsLoading(true);
     
     try {
-      let botResponse;
-      
-      // Periksa apakah pertanyaan berkaitan dengan dataset
-      if (isDatasetQuestion(currentInput)) {
-        // Jika ya, gunakan backend Python untuk menjawab
-        botResponse = await queryDataset(currentInput);
-      } else {
-        // Jika tidak, gunakan Groq API
-        botResponse = await getGroqResponse(currentInput);
-      }
+      // Kirim pertanyaan ke backend Python
+      const response = await queryDataset(currentInput);
       
       const botMessage = { 
-        text: botResponse, 
+        text: response, 
         sender: 'bot' 
       };
       setMessages(prevMessages => [...prevMessages, botMessage]);
     } catch (error) {
-      console.error('Error dalam respons:', error);
+      console.error('Error dalam mendapatkan respons:', error);
       
-      let errorMessage;
-      if (error.message.includes('API key')) {
-        errorMessage = "Maaf, terjadi masalah dengan API key. Pastikan Anda telah mengonfigurasi API key Groq di file .env.";
-      } else if (error.message.includes('backend Python')) {
-        errorMessage = "Maaf, terjadi masalah saat menghubungi backend Python. Pastikan server Python berjalan di http://localhost:5000.";
-      } else {
-        errorMessage = "Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi nanti.";
-      }
-      
-      const botMessage = { 
-        text: errorMessage, 
+      const errorMessage = { 
+        text: "Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Pastikan backend Python berjalan di http://localhost:5000 dan coba lagi.",
         sender: 'bot' 
       };
-      setMessages(prevMessages => [...prevMessages, botMessage]);
+      setMessages(prevMessages => [...prevMessages, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -118,11 +68,11 @@ const Chatbot = () => {
       {/* Header Chatbot */}
       <div className="bg-blue-600 text-white px-4 py-3 flex items-center">
         <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center mr-3">
-          <span className="text-blue-600 text-xl">🤖</span>
+          <span className="text-blue-600 text-xl">📊</span>
         </div>
         <div>
-          <h3 className="font-medium">AI Chatbot</h3>
-          <p className="text-xs opacity-80">Powered by Groq API + Python Analytics</p>
+          <h3 className="font-medium">Dataset Chatbot</h3>
+          <p className="text-xs opacity-80">Analisis Data Edukasi AI Gamifikasi</p>
         </div>
       </div>
       
@@ -169,7 +119,7 @@ const Chatbot = () => {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ketik pesan..."
+          placeholder="Tanyakan tentang dataset..."
           className="flex-1 py-2 px-3 focus:outline-none rounded-l-lg"
         />
         <button 
@@ -180,9 +130,21 @@ const Chatbot = () => {
           Kirim
         </button>
       </form>
-    
+      
+      {/* Contoh Pertanyaan */}
+      <div className="bg-blue-50 p-3 border-t border-blue-100">
+        <h4 className="text-sm font-medium text-blue-800 mb-1">Contoh Pertanyaan:</h4>
+        <div className="grid grid-cols-2 gap-1 text-xs text-blue-700">
+          <div>• Berapa jumlah siswa dalam dataset?</div>
+          <div>• Berapa rata-rata skor mata pelajaran?</div>
+          <div>• Bagaimana distribusi umur siswa?</div>
+          <div>• Apa korelasi antara absensi dan skor?</div>
+          <div>• Siapa siswa dengan skor tertinggi?</div>
+          <div>• Berikan rekomendasi strategi gamifikasi</div>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default Chatbot;
+export default DatasetChatbot;

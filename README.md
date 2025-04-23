@@ -1,24 +1,55 @@
-# MindaGrow AI Chatbot
+# MindaGrow - Aplikasi Edukasi AI dengan Gamifikasi
 
-Aplikasi chatbot AI sederhana dengan menggunakan React, Vite, dan Groq API.
+Aplikasi chatbot AI yang terintegrasi dengan analisis data edukasi untuk memberikan rekomendasi strategi gamifikasi berdasarkan dataset siswa.
 
-## Fitur
+## Fitur Utama
 
-- Antarmuka chat yang responsif dan modern
-- Integrasi dengan Groq API untuk respons AI yang cerdas
-- Mode fallback untuk berfungsi tanpa API
-- Mendukung format teks multi-baris
-- Indikator loading saat menunggu respons
+- Chatbot AI berbasis Groq LLM API untuk menjawab pertanyaan umum
+- Analisis dataset edukasi menggunakan algoritma machine learning di backend Python
+- Deteksi otomatis pertanyaan terkait dataset dan pengalihan ke backend analitik
+- Visualisasi data untuk memahami pola dan tren
+- Rekomendasi strategi gamifikasi berdasarkan karakteristik siswa
 
-## Pengaturan
+## Struktur Proyek
 
-### Persyaratan
+```
+MindaGrow/
+├── public/
+├── src/
+│   ├── assets/
+│   ├── components/
+│   │   ├── DataAnalyzer.jsx
+│   │   └── DataVisualization.jsx
+│   ├── service/
+│   │   ├── api.js
+│   │   └── python_backend/
+│   │       ├── app.py
+│   │       ├── requirements.txt
+│   │       └── dataset_edukasi_ai_gamifikasi_anak.csv
+│   ├── App.jsx
+│   ├── Chatbot.jsx
+│   ├── dataset_edukasi_ai_gamifikasi_anak.csv
+│   ├── index.css
+│   ├── main.jsx
+│   └── Navibar.jsx
+├── .env
+├── .gitignore
+├── postcss.config.js
+├── package.json
+├── tailwind.config.js
+└── vite.config.js
+```
 
-- Node.js (versi terbaru direkomendasikan)
-- npm atau yarn
-- Groq API key
+## Teknologi yang Digunakan
 
-### Langkah Instalasi
+- **Frontend**: React, Vite, Tailwind CSS
+- **AI**: Groq LLM API
+- **Backend Analitik**: Python, Flask, pandas, scikit-learn
+- **Visualisasi**: Recharts
+
+## Cara Setup
+
+### Frontend (React)
 
 1. Clone repository
 ```bash
@@ -29,60 +60,69 @@ cd MindaGrow
 2. Install dependensi
 ```bash
 npm install
-# atau
-yarn
 ```
 
-3. Salin file `.env.example` ke `.env` (atau buat file `.env` baru)
-```bash
-cp .env.example .env
-# atau buat manual
-```
-
-4. Edit file `.env` dan tambahkan Groq API key Anda
+3. Buat file `.env` dan tambahkan API key Groq
 ```
 VITE_GROQ_API_KEY=your_groq_api_key_here
 ```
 
-5. Jalankan aplikasi dalam mode pengembangan
+4. Jalankan aplikasi frontend
 ```bash
 npm run dev
-# atau
-yarn dev
 ```
 
-6. Buka browser dan akses `http://localhost:3000`
+### Backend Python
+
+1. Masuk ke direktori backend
+```bash
+cd src/service/python_backend
+```
+
+2. Setup virtual environment (opsional tapi direkomendasikan)
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/MacOS
+venv\Scripts\activate  # Windows
+```
+
+3. Install dependensi Python
+```bash
+pip install -r requirements.txt
+```
+
+4. Jalankan server backend
+```bash
+python app.py
+```
 
 ## Penggunaan
 
-- Ketik pesan di kotak input dan tekan Enter atau klik tombol Kirim
-- Toggle API di pojok kanan atas untuk beralih antara mode API dan mode lokal
-- Pesan dan jawaban akan muncul di area obrolan
+1. Buka browser dan akses `http://localhost:3000`
+2. Mulai berinteraksi dengan chatbot
+3. Untuk pertanyaan umum, chatbot akan menggunakan Groq API
+4. Untuk pertanyaan terkait dataset (contoh: "berapa jumlah siswa"), chatbot akan secara otomatis menggunakan backend Python
 
-## Penyesuaian
+## Contoh Pertanyaan yang Didukung
 
-### Mengubah Model AI
+### Pertanyaan Dataset
+- "Berapa jumlah siswa dalam dataset?"
+- "Berapa rata-rata skor mata pelajaran?"
+- "Bagaimana distribusi umur siswa?"
+- "Apa korelasi antara absensi dan skor?"
+- "Siapa siswa dengan skor tertinggi?"
+- "Berikan rekomendasi strategi gamifikasi"
+- "Prediksi skor dengan absensi 3 hari"
 
-Buka file `src/services/api.js` dan ubah parameter `model` dalam fungsi `sendMessageToGroq`:
+### Pertanyaan Umum
+- Semua pertanyaan umum akan dijawab oleh model Groq LLM
 
-```javascript
-body: JSON.stringify({
-  model: 'llama3-8b-8192', // Ubah ke model lain yang didukung Groq
-  // ...
-})
-```
+## Catatan
 
-### Menambahkan Respons Lokal
+- Pastikan backend Python berjalan saat Anda ingin mengakses fitur analisis dataset
+- Dataset yang digunakan adalah `dataset_edukasi_ai_gamifikasi_anak.csv` yang berisi data 500 siswa
+- Aplikasi secara otomatis mendeteksi apakah pertanyaan terkait dengan dataset
 
-Buka file `src/Chatbot.jsx` dan tambahkan entri ke objek `botResponses`:
-
-```javascript
-const botResponses = {
-  "kata_kunci": "Respons untuk kata kunci ini",
-  // ...
-};
-```
-
-## Lisensi
+## License
 
 MIT
