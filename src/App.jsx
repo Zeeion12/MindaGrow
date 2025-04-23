@@ -6,6 +6,7 @@ export default function ChatbotApp() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [keySubmitted, setKeySubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -24,16 +25,17 @@ export default function ChatbotApp() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setErrorMessage('');
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
+          model: 'llama3-8b-8192', // Groq's model
           messages: [...messages, userMessage].map(msg => ({
             role: msg.role,
             content: msg.content
@@ -43,7 +45,9 @@ export default function ChatbotApp() {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
       }
 
       const data = await response.json();
@@ -54,7 +58,8 @@ export default function ChatbotApp() {
       
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Error calling OpenAI API:', error);
+      console.error('Error calling Groq API:', error);
+      setErrorMessage(error.message || 'Error connecting to the API');
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, I had trouble processing your request. Please try again later.' 
@@ -77,19 +82,19 @@ export default function ChatbotApp() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-900 text-white">
       {!keySubmitted ? (
         <div className="flex flex-col items-center justify-center h-full">
-          <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-            <h1 className="text-2xl font-bold mb-4 text-center">OpenAI Chatbot</h1>
-            <p className="mb-4 text-gray-600">Please enter your OpenAI API key to start:</p>
+          <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
+            <h1 className="text-2xl font-bold mb-4 text-center">Groq AI Chatbot</h1>
+            <p className="mb-4 text-gray-300">Please enter your Groq API key to start:</p>
             <form onSubmit={handleKeySubmit} className="flex flex-col">
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="border rounded-md p-2 mb-4"
-                placeholder="sk-..."
+                className="border rounded-md p-2 mb-4 bg-gray-700 text-white border-gray-600"
+                placeholder="gsk_..."
                 required
               />
               <button
@@ -103,7 +108,7 @@ export default function ChatbotApp() {
         </div>
       ) : (
         <>
-          <header className="bg-blue-600 text-white p-4 shadow-md">
+          <header className="bg-gray-800 text-white p-4 shadow-md">
             <h1 className="text-xl font-semibold">AI Chatbot</h1>
           </header>
           
@@ -114,19 +119,22 @@ export default function ChatbotApp() {
                   key={index}
                   className={`mb-4 ${
                     message.role === 'user' 
-                      ? 'ml-auto bg-blue-500 text-white' 
-                      : 'mr-auto bg-gray-200 text-gray-800'
+                      ? 'ml-auto bg-blue-600 text-white' 
+                      : 'mr-auto bg-gray-700 text-white'
                   } rounded-lg p-3 max-w-xs md:max-w-md`}
                 >
                   {message.content}
                 </div>
               ))}
+              {errorMessage && (
+                <div className="text-red-400 text-sm mb-4">Error: {errorMessage}</div>
+              )}
               {isLoading && (
-                <div className="mr-auto bg-gray-200 text-gray-800 rounded-lg p-3 max-w-xs md:max-w-md">
+                <div className="mr-auto bg-gray-700 text-white rounded-lg p-3 max-w-xs md:max-w-md">
                   <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
                   </div>
                 </div>
               )}
@@ -134,13 +142,13 @@ export default function ChatbotApp() {
             </div>
           </div>
           
-          <footer className="p-4 border-t">
+          <footer className="p-4 border-t border-gray-700">
             <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="flex-1 border rounded-l-md p-2"
+                className="flex-1 border rounded-l-md p-2 bg-gray-700 text-white border-gray-600"
                 placeholder="Type a message..."
                 disabled={isLoading}
               />
