@@ -52,6 +52,8 @@ export const sendMessageToGroq = async (messages) => {
  */
 export const queryDataset = async (question) => {
   try {
+    console.log('Mengirim pertanyaan ke backend Python:', question);
+    
     const response = await fetch(`${PYTHON_BACKEND_URL}/dataset/query`, {
       method: 'POST',
       headers: {
@@ -63,10 +65,12 @@ export const queryDataset = async (question) => {
     });
 
     if (!response.ok) {
+      console.error('Error response dari backend Python:', response.status, response.statusText);
       throw new Error(`Error API: ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log('Respons dari backend Python:', data);
     return data.answer;
   } catch (error) {
     console.error('Error saat mengirim pertanyaan ke backend Python:', error);
@@ -76,10 +80,15 @@ export const queryDataset = async (question) => {
 
 /**
  * Memeriksa apakah pertanyaan berkaitan dengan dataset
+ * Fungsi ini lebih fleksibel dalam mendeteksi pertanyaan terkait dataset
  * @param {string} question - Pertanyaan pengguna
  * @returns {boolean} - True jika pertanyaan berkaitan dengan dataset
  */
 export const isDatasetQuestion = (question) => {
+  // Selalu kirim ke Python backend untuk analisis lebih fleksibel
+  return true;
+  
+  /* Kode lama yang lebih ketat - tidak digunakan lagi
   const datasetKeywords = [
     'dataset', 'data', 'siswa', 'pelajar', 'murid', 'sekolah',
     'nilai', 'skor', 'absensi', 'absen', 'umur', 'grade', 'kelas',
@@ -93,4 +102,5 @@ export const isDatasetQuestion = (question) => {
   const lowerQuestion = question.toLowerCase();
   
   return datasetKeywords.some(keyword => lowerQuestion.includes(keyword));
+  */
 };
