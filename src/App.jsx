@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Navibar from './Navibar';
 
 export default function ChatbotApp() {
   const [messages, setMessages] = useState([]);
@@ -82,18 +83,20 @@ export default function ChatbotApp() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-white">
+    <div className="flex flex-col h-screen bg-putih-second text-white">
+      
       {!keySubmitted ? (
+        <Navibar/>,
         <div className="flex flex-col items-center justify-center h-full">
-          <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full max-w-md">
-            <h1 className="text-2xl font-bold mb-4 text-center">Groq AI Chatbot</h1>
-            <p className="mb-4 text-gray-300">Please enter your Groq API key to start:</p>
+          <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+            <h1 className="text-2xl font-bold mb-4 text-center text-biru-dasar">MindaGrow AI Chatbot</h1>
+            <p className="mb-4 text-black">Please enter your API key to start:</p>
             <form onSubmit={handleKeySubmit} className="flex flex-col">
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="border rounded-md p-2 mb-4 bg-gray-700 text-white border-gray-600"
+                className="border rounded-md p-2 mb-4 bg-white-700 text-black border-gray-600"
                 placeholder="gsk_..."
                 required
               />
@@ -108,8 +111,8 @@ export default function ChatbotApp() {
         </div>
       ) : (
         <>
-          <header className="bg-gray-800 text-white p-4 shadow-md">
-            <h1 className="text-xl font-semibold">AI Chatbot</h1>
+          <header className="bg-biru-dasar text-white p-4 shadow-md">
+            <h1 className="text-xl font-semibold">MindaGrow Chatbot</h1>
           </header>
           
           <div className="flex-1 overflow-y-auto p-4">
@@ -119,8 +122,8 @@ export default function ChatbotApp() {
                   key={index}
                   className={`mb-4 ${
                     message.role === 'user' 
-                      ? 'ml-auto bg-blue-600 text-white' 
-                      : 'mr-auto bg-gray-700 text-white'
+                      ? 'ml-auto bg-biru-dasar text-white' 
+                      : 'mr-auto bg-white text-black'
                   } rounded-lg p-3 max-w-xs md:max-w-md`}
                 >
                   {message.content}
@@ -148,13 +151,13 @@ export default function ChatbotApp() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="flex-1 border rounded-l-md p-2 bg-gray-700 text-white border-gray-600"
+                className="flex-1 border rounded-l-md p-2 bg-white text-black border-gray-600"
                 placeholder="Type a message..."
                 disabled={isLoading}
               />
               <button
                 type="submit"
-                className={`bg-blue-600 text-white py-2 px-4 rounded-r-md ${
+                className={`bg-biru-dasar text-white py-2 px-4 rounded-r-md ${
                   isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'
                 }`}
                 disabled={isLoading}

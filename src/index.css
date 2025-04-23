@@ -10,12 +10,10 @@
 @import "tailwindcss";
 
 @theme {
-    --color-coklat: #806044;
-    --color-coklat-susu: #E6D7C3;
-    --color-kopi-susu: #c4b19a;
     --font-poppins: Poppins, "sans-serif";
     --font-inter: Inter, "sans-serif";
     --color-biru-dasar: #4778EC;
+    --color-putih-second: #E2E8F0;
 }
 
 html body {
