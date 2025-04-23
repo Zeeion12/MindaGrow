@@ -1,4 +1,5 @@
-import ChatbotApp from "./components/chatbotApp";
+// Di dalam src/components/App.jsx
+import ChatbotApp from './chatbotApp';
 
 function App() {
   return (
@@ -7,8 +8,5 @@ function App() {
     </div>
   );
 }
-<<<<<<< HEAD
 
 export default App;
-=======
->>>>>>> 0552dce3f3910561eff6c31304f695f99c8ba243
