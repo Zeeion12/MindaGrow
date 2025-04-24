@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './index.css'
-import Navibar from './Navibar';
+import Navibar from './components/layout/Navibar';
 import Chatbot from './Chatbot'
 
 export default function App() {

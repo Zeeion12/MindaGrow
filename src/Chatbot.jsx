@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { sendMessageToGroq, isDatasetQuestion, queryDataset } from './service/api';
 import { Link } from 'react-router-dom';
-import Navibar from './Navibar';
+import Navibar from './components/layout/Navibar';
 
 const Chatbot = () => {
   const [input, setInput] = useState('');
