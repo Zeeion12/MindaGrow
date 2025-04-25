@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/authContext'; // Pastikan path ini benar
+import { useAuth } from '../../context/AuthContext'; // Pastikan path ini benar
 
 export default function Navibar() {
     const navigate = useNavigate();
