@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
 import { useAuth } from './context/authContext';
@@ -15,7 +15,7 @@ import RegisterGuru from './components/auth/register/registerGuru';
 export default function App() {
   // Cek apakah user sudah login
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const { login, register } = useAuth();
+  const { login, register, currentUser } = useAuth();
   
   // Cek status login saat komponen dimuat
   useEffect(() => {
@@ -24,29 +24,58 @@ export default function App() {
       setIsLoggedIn(true);
     }
   }, []);
+
+  // Effect untuk mengubah status login ketika currentUser berubah
+  useEffect(() => {
+    if (currentUser) {
+      setIsLoggedIn(true);
+    } else {
+      setIsLoggedIn(false);
+    }
+  }, [currentUser]);
   
   // Handler untuk login sukses
   const handleLoginSuccess = () => {
     setIsLoggedIn(true);
   };
   
-  // Jika sudah login, tampilkan konten dashboard
+  // Handler untuk logout sukses
+  const handleLogoutSuccess = () => {
+    setIsLoggedIn(false);
+  };
+  
+  // Jika sudah login, tampilkan konten dashboard dan fitur lainnya
   if (isLoggedIn) {
     return (
-      <>
-        <Navbar />
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="flex flex-col">
-            <h1 className="text-center text-3xl font-bold">Welcome To MindaGrow</h1>
-            <p className="text-center mt-4">
-              Your E - Learning Platform
-            </p>
-            <Link to='/chatbot' >
-              <button className='bg-biru-dasar text-white hover:bg-gold-first p-[10px] m-10 font-semibold rounded-2xl '>Click Here To Chat with AI</button>
-            </Link>
-          </div>
-        </div>
-      </>
+      <Routes>
+        <Route path="/" element={
+          <>
+            <Navbar />
+            <div className="flex min-h-screen items-center justify-center">
+              <div className="flex flex-col">
+                <h1 className="text-center text-3xl font-bold">Welcome To MindaGrow</h1>
+                <p className="text-center mt-4">
+                  Your E - Learning Platform
+                </p>
+                <Link to='/chatbot'>
+                  <button className='bg-biru-dasar text-white hover:bg-gold-first p-[10px] m-10 font-semibold rounded-2xl'>Click Here To Chat with AI</button>
+                </Link>
+              </div>
+            </div>
+          </>
+        } />
+        
+        <Route path="/chatbot" element={
+          <>
+            <Navbar />
+            <Chatbot />
+          </>
+        } />
+        
+        {/* Tambahkan rute lain yang memerlukan autentikasi di sini */}
+        
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     );
   }
   

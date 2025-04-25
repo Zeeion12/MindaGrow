@@ -94,9 +94,15 @@ export const AuthProvider = ({ children }) => {
 
   // Fungsi logout
   const logout = () => {
+    // Hapus token dan data user dari localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    
+    // Reset state user
     setCurrentUser(null);
+    
+    console.log('User logged out successfully');
+    return { success: true };
   };
 
   // Nilai yang akan disediakan ke komponen lain
