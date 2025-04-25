@@ -45,7 +45,9 @@ export const AuthProvider = ({ children }) => {
               id: '123',
               name: 'User Test',
               email: email,
-              role: 'siswa'
+              role: 'siswa',
+              // Default avatar placeholder
+              profileImage: null
             },
             token: 'sample-token-xyz'
           });
@@ -92,6 +94,62 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Fungsi update profil
+  const updateProfile = async (userData) => {
+    try {
+      // Simulasi API call untuk update profil
+      // Ganti dengan implementasi API sesungguhnya
+      const response = await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({ success: true });
+        }, 1000);
+      });
+
+      if (response.success) {
+        // Update user data di localStorage
+        const updatedUser = { ...currentUser, ...userData };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        // Update state
+        setCurrentUser(updatedUser);
+        return { success: true };
+      } else {
+        return { success: false, message: 'Update profil gagal' };
+      }
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return { success: false, message: 'Terjadi kesalahan saat update profil' };
+    }
+  };
+
+  // Fungsi update foto profil
+  const updateProfileImage = async (imageUrl) => {
+    try {
+      // Simulasi API call untuk update foto profil
+      // Ganti dengan implementasi API sesungguhnya
+      const response = await new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({ success: true });
+        }, 1000);
+      });
+
+      if (response.success) {
+        // Update user data di localStorage
+        const updatedUser = { ...currentUser, profileImage: imageUrl };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        // Update state
+        setCurrentUser(updatedUser);
+        return { success: true };
+      } else {
+        return { success: false, message: 'Update foto profil gagal' };
+      }
+    } catch (error) {
+      console.error('Update profile image error:', error);
+      return { success: false, message: 'Terjadi kesalahan saat update foto profil' };
+    }
+  };
+
   // Fungsi logout
   const logout = () => {
     // Hapus token dan data user dari localStorage
@@ -110,6 +168,8 @@ export const AuthProvider = ({ children }) => {
     currentUser,
     login,
     register,
+    updateProfile,
+    updateProfileImage,
     logout,
     loading
   };
