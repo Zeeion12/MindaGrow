@@ -5,7 +5,7 @@ import { useAuth } from './context/AuthContext';
 import Chatbot from './Chatbot';
 
 // Import komponen autentikasi
-import Login from './components/auth/login';
+import Login from './components/auth/Login';
 import RoleSelection from './components/auth/RoleSelection';
 import RegisterSiswa from './components/auth/RegisterSiswa';
 import RegisterOrangtua from './components/auth/RegisterOrangtua';
@@ -13,6 +13,9 @@ import RegisterGuru from './components/auth/RegisterGuru';
 
 // Import halaman utama
 import MainPage from './pages/MainPage';
+
+// Import dashboard
+import StudentDashboard from './components/dashboard/StudentDashboard';
 
 export default function App() {
   // Cek apakah user sudah login
@@ -54,7 +57,12 @@ export default function App() {
       {/* Rute yang perlu login */}
       {isLoggedIn ? (
         <>
-          <Route path="/dashboard" element={<MainPage isLoggedIn={isLoggedIn} />} />
+          <Route path="/dashboard" element={<StudentDashboard />} />
+          <Route path="/kursus" element={<StudentDashboard />} />
+          <Route path="/kelas" element={<StudentDashboard />} />
+          <Route path="/game" element={<StudentDashboard />} />
+          <Route path="/notifikasi" element={<StudentDashboard />} />
+          <Route path="/pengaturan" element={<StudentDashboard />} />
           <Route path="/chatbot" element={<Chatbot />} />
           <Route path="/profile" element={<div>Halaman Profil</div>} />
         </>
@@ -62,6 +70,11 @@ export default function App() {
         // Redirect ke login jika mencoba mengakses rute yang memerlukan autentikasi
         <>
           <Route path="/dashboard" element={<Navigate to="/login" />} />
+          <Route path="/kursus" element={<Navigate to="/login" />} />
+          <Route path="/kelas" element={<Navigate to="/login" />} />
+          <Route path="/game" element={<Navigate to="/login" />} />
+          <Route path="/notifikasi" element={<Navigate to="/login" />} />
+          <Route path="/pengaturan" element={<Navigate to="/login" />} />
           <Route path="/chatbot" element={<Navigate to="/login" />} />
           <Route path="/profile" element={<Navigate to="/login" />} />
         </>

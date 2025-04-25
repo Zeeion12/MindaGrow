@@ -69,7 +69,7 @@ const MainPage = () => {
               </Link>
             </div>
           </div>
-          <div className="w-full lg:w-1/2 mt-10 lg:mt-0">
+          <div className="w-full lg:w-1/2 mt-4 lg:mt-0">
             <img 
               src="/images/HeroSection.png" 
               alt="Anak belajar dengan MindaGrow" 

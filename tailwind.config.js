@@ -8,7 +8,7 @@ export default {
     extend: {
       colors: {
         'biru-dasar': '#4169E1',  // Royal Blue untuk navbar
-        'biru-tua': '#1e3a8a',    // Dark blue untuk footer
+        'biru-tua': '#1F2937',    // Dark blue untuk footer
         'gold-first': '#FFD700',   // Gold untuk hover dan highlight
         'coklat': '#D2B48C',       // Tan untuk hover text
       },
