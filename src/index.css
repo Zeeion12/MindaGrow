@@ -16,6 +16,9 @@
   --color-putih-second: #E2E8F0;
   --color-gold-first: #FBBF24;
   --color-biru-tua: #1F2937;
+
+  /* BreakPoint (Responsive) */
+  --breakpoint-xs: 200px;
 }
 
 html body {
