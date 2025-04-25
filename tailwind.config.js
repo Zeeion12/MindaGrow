@@ -1,4 +1,3 @@
-// tailwind.config.js
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -6,7 +5,16 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'biru-dasar': '#4169E1',  // Royal Blue untuk navbar
+        'gold-first': '#FFD700',   // Gold untuk hover dan highlight
+        'coklat': '#D2B48C',       // Tan untuk hover text
+      },
+      fontFamily: {
+        'poppins': ['Poppins', 'sans-serif'],
+      },
+    },
   },
   plugins: [],
 }
