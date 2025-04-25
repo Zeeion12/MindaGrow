@@ -1,26 +1,14 @@
-/* Font */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 }
 
-@import "tailwindcss";
-
-@theme {
-  --font-poppins: Poppins, "sans-serif";
-  --font-inter: Inter, "sans-serif";
-  --color-biru-dasar: #4778EC;
-  --color-putih-second: #E2E8F0;
-  --color-gold-first: #FBBF24;
-}
-
-html body {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    background-color: #EFE6DC;
-    scroll-behavior: smooth;
+body {
+  margin: 0;
 }
