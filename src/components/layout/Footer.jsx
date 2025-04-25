@@ -7,7 +7,7 @@ import {
 
 const socialMedia = [
     { name: "Facebook", icon: SiFacebook, url: "https://facebook.com", color: "hover:bg-[#1877F2]", brandColor: "#1877F2" },
-    { name: "Twitter", icon: SiX, url: "https://twitter.com", color: "hover:bg-[#1DA1F2]", brandColor: "#1DA1F2" },
+    { name: "Twitter", icon: SiX, url: "https://twitter.com", color: "hover:bg-[#000000]", brandColor: "#000000" },
     { name: "Instagram", icon: SiInstagram, url: "https://instagram.com", color: "hover:bg-[#E4405F]", brandColor: "#E4405F" },
     { name: "YouTube", icon: SiYoutube, url: "https://youtube.com", color: "hover:bg-[#FF0000]", brandColor: "#FF0000" },
 ];
