@@ -14,7 +14,7 @@ const socialMedia = [
 
 export default function Footer () {
     return(
-        <footer className="bg-biru-dasar px-4 md:px-16 lg:px-28 py-8 mt-auto">
+        <footer className="bg-biru-tua px-4 md:px-16 lg:px-28 py-8 mt-auto">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
                     <h2 className="text-lg font-bold mb-3 text-white">PT MANUT WAE</h2>

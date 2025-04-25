@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 
 const MainPage = () => {
@@ -50,7 +49,6 @@ const MainPage = () => {
 
   return (
     <>
-      <Navbar />
       
       {/* Hero Section */}
       <section className="bg-biru-dasar text-white">
@@ -73,7 +71,7 @@ const MainPage = () => {
           </div>
           <div className="w-full lg:w-1/2 mt-10 lg:mt-0">
             <img 
-              src="/images/hero-kids.png" 
+              src="/images/HeroSection.png" 
               alt="Anak belajar dengan MindaGrow" 
               className="mx-auto"
               onError={(e) => {
