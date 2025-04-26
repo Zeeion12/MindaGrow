@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './context/authContext';
 import Chatbot from './Chatbot';
 
 // Import komponen autentikasi
@@ -15,7 +15,7 @@ import RegisterGuru from './components/auth/RegisterGuru';
 import MainPage from './pages/MainPage';
 
 // Import dashboard
-import StudentDashboard from './components/dashboard/StudentDashboard';
+import StudentDashboard from './components/dashboard/Student/StudentDashboard';
 
 export default function App() {
   // Cek apakah user sudah login

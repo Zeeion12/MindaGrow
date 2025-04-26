@@ -17,13 +17,13 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="w-[140px] bg-blue-500 flex flex-col min-h-screen">
+    <div className="w-[185px] bg-biru-dasar flex flex-col min-h-screen">
       {/* Logo */}
       <div className="p-4 flex items-center">
         <img 
           src="/images/Logo.png" 
           alt="MindaGrow" 
-          className="w-8 h-8 mr-2"
+          className="w-12 h-12 mr-2"
           onError={(e) => {
             e.target.onerror = null;
             e.target.src = "https://via.placeholder.com/32/FFFFFF/000000?text=M";
