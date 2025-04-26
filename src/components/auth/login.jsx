@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { FaGoogle, FaEye, FaEyeSlash, FaUser, FaLock } from 'react-icons/fa';
 
 const Login = () => {
   const location = useLocation();
@@ -8,29 +9,32 @@ const Login = () => {
   const { login } = useAuth();
   
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
+    rememberMe: false
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Periksa apakah ada pesan dari halaman lain (misalnya setelah register)
   const [message, setMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   useEffect(() => {
-    // Ambil pesan dari state location jika ada
     if (location.state && location.state.message) {
       setMessage(location.state.message);
-      // Bersihkan state location
       window.history.replaceState({}, document.title);
     }
   }, [location]);
 
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === 'checkbox' ? checked : value,
     });
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   const handleSubmit = async (e) => {
@@ -38,19 +42,12 @@ const Login = () => {
     setLoading(true);
     setError('');
     
-    console.log("Login dimulai dengan email:", formData.email);
-
     try {
-      // Panggil fungsi login dari AuthContext
-      const result = await login(formData.email, formData.password);
-      
-      console.log("Hasil login:", result);
+      const result = await login(formData.username, formData.password);
       
       if (!result.success) {
-        setError(result.message || 'Login gagal. Silakan periksa email dan password Anda.');
+        setError(result.message || 'Login gagal. Silakan periksa NIS/NIK/NUPTK dan password Anda.');
       }
-      // Tidak perlu redirect manual karena AuthContext sudah menanganinya
-      
     } catch (err) {
       console.error("Error saat login:", err);
       setError('Terjadi kesalahan saat login. Silakan coba lagi.');
@@ -59,76 +56,139 @@ const Login = () => {
     }
   };
 
+  const handleGoogleLogin = () => {
+    // Implementasi login dengan Google
+    console.log("Login dengan Google");
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold">Login</h1>
-          <p className="text-gray-600 mt-1">Masuk ke akun Anda</p>
+    <div className="flex h-screen overflow-hidden">
+      {/* Left Side - Login Form */}
+      <div className="w-1/2 bg-blue-50 flex items-center justify-center">
+        <div className="w-4/5 max-w-xl px-10 py-8">
+          <h1 className="text-3xl font-bold text-center mb-10">Login</h1>
+          
+          {message && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6 text-base">
+              {message}
+            </div>
+          )}
+          
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 text-base">
+              {error}
+            </div>
+          )}
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="username" className="block text-gray-700 mb-2 text-base">NIS/NIK/NUPTK</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-500">
+                  <FaUser className="text-lg" />
+                </div>
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                  value={formData.username}
+                  onChange={handleChange}
+                  required
+                  placeholder="dimasrizky822@gmail.com"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label htmlFor="password" className="block text-gray-700 text-base">Password</label>
+                <Link to="/forgot-password" className="text-blue-600 hover:underline text-base">
+                  Lupa password?
+                </Link>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-500">
+                  <FaLock className="text-lg" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  name="password"
+                  className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  placeholder="••••••"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-600"
+                  onClick={togglePasswordVisibility}
+                >
+                  {showPassword ? <FaEyeSlash className="text-lg" /> : <FaEye className="text-lg" />}
+                </button>
+              </div>
+            </div>
+            
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="rememberMe"
+                  className="h-5 w-5 text-blue-600 rounded"
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                />
+                <span className="ml-2 text-gray-700 text-base">Ingatkan saya</span>
+              </label>
+            </div>
+            
+            <button
+              type="submit"
+              className="w-full bg-blue-500 text-white py-3 px-5 rounded-full hover:bg-blue-600 transition duration-200 font-semibold text-lg"
+              disabled={loading}
+            >
+              {loading ? 'Sedang memproses...' : 'Masuk'}
+            </button>
+          
+            <div className="flex items-center justify-center my-6">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <span className="mx-4 text-gray-500 text-base">Atau</span>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              className="w-full flex justify-center items-center bg-white text-gray-700 border border-gray-300 rounded-full py-3 px-6 hover:bg-gray-50 transition duration-200 text-base mt-4"
+            >
+              <FaGoogle className="text-blue-500 mr-3 text-xl" />
+            </button>
+          
+            <div className="text-center mt-8">
+              <p className="text-gray-600 text-base">
+                Belum punya akun? {' '}
+                <Link to="/role-selection" className="text-blue-500 font-medium hover:underline">
+                  Register
+                </Link>
+              </p>
+            </div>
+          </form>
         </div>
-        
-        {message && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {message}
-          </div>
-        )}
-        
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
-          </div>
-          
-          <div className="flex justify-end mb-6">
-            <Link to="/forgot-password" className="text-blue-500 hover:underline">
-              Lupa password?
-            </Link>
-          </div>
-          
-          <button
-            type="submit"
-            className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200"
-            disabled={loading}
-          >
-            {loading ? 'Sedang memproses...' : 'Login'}
-          </button>
-        </form>
-        
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Belum memiliki akun?{' '}
-            <Link to="/role-selection" className="text-blue-500 hover:underline">
-              Daftar Sekarang
-            </Link>
-          </p>
-        </div>
+      </div>
+      
+      {/* Right Side - Image */}
+      <div className="w-1/2 bg-red-500 overflow-hidden">
+        <img
+          src="/images/login mindagrow.jpg"
+          alt="Students looking up"
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = "https://source.unsplash.com/random/1080x1920/?students,education";
+          }}
+        />
       </div>
     </div>
   );
