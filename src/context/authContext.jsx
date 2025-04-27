@@ -36,43 +36,30 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Fungsi login
-  const login = async (email, password) => {
+  const login = async (identifier, password) => {
     try {
-      console.log("Mencoba login dengan email:", email);
+      console.log("Mencoba login dengan identifier:", identifier);
       setLoading(true);
       
-      // Simulasi API call untuk login
-      // Ganti dengan implementasi API sesungguhnya
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          // Simulasi data user, sesuaikan dengan kebutuhan proyek
-          // Untuk tujuan demo, kita anggap login selalu berhasil
-          resolve({
-            success: true,
-            data: {
-              id: '123',
-              name: "User Test",
-              email: email,
-              role: 'siswa',
-              // Default avatar placeholder
-              profileImage: null
-            },
-            token: 'sample-token-xyz'
-          });
-        }, 1000);
+      // Panggil API login
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: identifier, password }),
       });
+      
+      const data = await response.json();
+      console.log("Hasil login:", data);
 
-      console.log("Hasil login:", response);
-
-      if (response.success) {
-        const { data, token } = response;
-        
+      if (response.ok) {
         // Simpan data user dan token ke localStorage
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(data));
+        localStorage.setItem('token', data.token || 'sample-token-xyz');
+        localStorage.setItem('user', JSON.stringify(data.user));
         
         // Update state
-        setCurrentUser(data);
+        setCurrentUser(data.user);
         console.log("Login berhasil, navigasi ke dashboard");
         
         // Navigasi ke dashboard
@@ -80,8 +67,8 @@ export const AuthProvider = ({ children }) => {
         
         return { success: true };
       } else {
-        console.error("Login gagal:", response);
-        return { success: false, message: 'Login gagal' };
+        console.error("Login gagal:", data);
+        return { success: false, message: data.message || 'Login gagal' };
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -97,17 +84,32 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       console.log("Mencoba register dengan data:", userData, "role:", role);
       
-      // Simulasi API call untuk registrasi
-      // Ganti dengan implementasi API sesungguhnya
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 1000);
+      // Siapkan data untuk API
+      const registerData = {
+        name: userData.namaLengkap,
+        email: userData.email || userData.surel,
+        password: userData.password,
+        role: role,
+        // Tambahkan field lain sesuai kebutuhan
+        ...(role === 'siswa' && { nis: userData.nis }),
+        ...(role === 'orangtua' && { nik: userData.nik }),
+        ...(role === 'guru' && { nuptk: userData.nuptk }),
+        gender: userData.gender
+      };
+      
+      // Panggil API register
+      const response = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registerData),
       });
+      
+      const data = await response.json();
+      console.log("Hasil register:", data);
 
-      console.log("Hasil register:", response);
-
-      if (response.success) {
+      if (response.ok) {
         // Redirect ke login setelah registrasi berhasil
         navigate('/login', { 
           state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
@@ -115,8 +117,8 @@ export const AuthProvider = ({ children }) => {
         
         return { success: true };
       } else {
-        console.error("Registrasi gagal:", response);
-        return { success: false, message: 'Registrasi gagal' };
+        console.error("Registrasi gagal:", data);
+        return { success: false, message: data.message || 'Registrasi gagal' };
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -130,17 +132,20 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (userData) => {
     try {
       setLoading(true);
-      console.log("Mencoba update profil dengan data:", userData);
       
-      // Simulasi API call untuk update profil
-      // Ganti dengan implementasi API sesungguhnya
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 1000);
+      // Panggil API update profile
+      const response = await fetch('http://localhost:5000/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(userData),
       });
+      
+      const data = await response.json();
 
-      if (response.success) {
+      if (response.ok) {
         // Update user data di localStorage
         const updatedUser = { ...currentUser, ...userData };
         localStorage.setItem('user', JSON.stringify(updatedUser));
@@ -149,44 +154,11 @@ export const AuthProvider = ({ children }) => {
         setCurrentUser(updatedUser);
         return { success: true };
       } else {
-        return { success: false, message: 'Update profil gagal' };
+        return { success: false, message: data.message || 'Update profil gagal' };
       }
     } catch (error) {
       console.error('Update profile error:', error);
       return { success: false, message: 'Terjadi kesalahan saat update profil' };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fungsi update foto profil
-  const updateProfileImage = async (imageUrl) => {
-    try {
-      setLoading(true);
-      console.log("Mencoba update foto profil:", imageUrl);
-      
-      // Simulasi API call untuk update foto profil
-      // Ganti dengan implementasi API sesungguhnya
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 1000);
-      });
-
-      if (response.success) {
-        // Update user data di localStorage
-        const updatedUser = { ...currentUser, profileImage: imageUrl };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        
-        // Update state
-        setCurrentUser(updatedUser);
-        return { success: true };
-      } else {
-        return { success: false, message: 'Update foto profil gagal' };
-      }
-    } catch (error) {
-      console.error('Update profile image error:', error);
-      return { success: false, message: 'Terjadi kesalahan saat update foto profil' };
     } finally {
       setLoading(false);
     }
@@ -217,7 +189,6 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     updateProfile,
-    updateProfileImage,
     logout,
     loading
   };
