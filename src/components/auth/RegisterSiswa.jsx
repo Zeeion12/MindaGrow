@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const RegisterSiswa = () => {
   const navigate = useNavigate();
-  const { register, currentUser } = useAuth();
+  const { register, currentUser, logout } = useAuth();
   
   const [formData, setFormData] = useState({
     namaLengkap: '',
@@ -22,11 +22,11 @@ const RegisterSiswa = () => {
   const [konfirmasiPasswordVisible, setKonfirmasiPasswordVisible] = useState(false);
 
   useEffect(() => {
-    // Redirect ke dashboard jika sudah login
-    if (currentUser) {
-      navigate('/dashboard');
-    }
-  }, [currentUser, navigate]);
+    // Logout terlebih dahulu saat mengakses halaman register
+    // untuk mencegah redirect otomatis ke dashboard
+    logout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -61,13 +61,14 @@ const RegisterSiswa = () => {
     setError('');
 
     try {
-      // Siapkan data untuk dikirim ke server sesuai struktur tabel PostgreSQL
+      // Siapkan data untuk dikirim ke server sesuai struktur yang
+      // sudah dikoreksi untuk server.js
       const userData = {
         role: 'siswa',
-        nama_lengkap: formData.namaLengkap,
+        namaLengkap: formData.namaLengkap,
         nis: formData.nis,
-        no_telepon: formData.noTelepon,
-        email: formData.surel, 
+        noTelepon: formData.noTelepon,
+        surel: formData.surel, 
         gender: formData.gender,
         password: formData.password
       };

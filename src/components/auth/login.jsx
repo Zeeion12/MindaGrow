@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login, currentUser } = useAuth();
+  const { login, currentUser, logout } = useAuth();
   
   const [formData, setFormData] = useState({
     username: '',
@@ -22,15 +22,7 @@ const Login = () => {
     // Redirect ke dashboard jika sudah login
     if (currentUser) {
       // Redirect based on user role
-      if (currentUser.role === 'siswa') {
-        navigate('/dashboard/student');
-      } else if (currentUser.role === 'guru') {
-        navigate('/dashboard/teacher');
-      } else if (currentUser.role === 'orangtua') {
-        navigate('/dashboard/parent');
-      } else {
-        navigate('/dashboard');
-      }
+      navigateByRole(currentUser);
       return;
     }
     
@@ -41,6 +33,25 @@ const Login = () => {
       window.history.replaceState({}, document.title);
     }
   }, [location, currentUser, navigate]);
+
+  // Fungsi untuk mengarahkan pengguna berdasarkan role
+  const navigateByRole = (user) => {
+    if (!user) return;
+    
+    switch(user.role) {
+      case 'siswa':
+        navigate('/dashboard/student');
+        break;
+      case 'guru':
+        navigate('/dashboard/teacher');
+        break;
+      case 'orangtua':
+        navigate('/dashboard/parent');
+        break;
+      default:
+        navigate('/dashboard');
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -62,12 +73,21 @@ const Login = () => {
     try {
       console.log('Mencoba login dengan username:', formData.username);
       
-      // Gunakan fungsi login dari AuthContext
       const result = await login(formData.username, formData.password);
       
       if (result.success) {
-        // Redirect berdasarkan role akan ditangani oleh useEffect di atas
-        console.log('Login berhasil');
+        console.log('Login berhasil, user:', result.user);
+        
+        // Navigasi berdasarkan role
+        if (result.user && result.user.role) {
+          console.log(`Mengarahkan ke dashboard/${result.user.role}`);
+          navigate(`/dashboard/${result.user.role === 'siswa' ? 'student' : 
+                              result.user.role === 'guru' ? 'teacher' : 
+                              result.user.role === 'orangtua' ? 'parent' : ''}`);
+        } else {
+          console.log('Mengarahkan ke dashboard default');
+          navigate('/dashboard/siswa');
+        }
       } else {
         setError(result.message || 'Username atau password salah');
       }

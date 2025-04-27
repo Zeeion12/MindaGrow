@@ -11,29 +11,37 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Periksa token di localStorage
-    const token = localStorage.getItem('token');
-    
-    if (token) {
-      try {
-        // Ambil data user dari localStorage sebagai fallback
-        const userData = JSON.parse(localStorage.getItem('user'));
-        if (userData) {
-          setCurrentUser(userData);
+    const initAuth = async () => {
+      // Periksa token di localStorage
+      const token = localStorage.getItem('token');
+      
+      if (token) {
+        try {
+          // Ambil data user dari localStorage sebagai fallback
+          const userDataStr = localStorage.getItem('user');
+          if (userDataStr) {
+            const userData = JSON.parse(userDataStr);
+            setCurrentUser(userData);
+          }
+          
+          // Coba fetch user profile jika backend sudah siap
+          try {
+            await fetchUserProfile(token);
+          } catch (err) {
+            console.error("Profile API not available yet:", err);
+            // Tetap gunakan data dari localStorage
+          }
+        } catch (error) {
+          console.error("Error parsing stored user:", error);
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
         }
-        
-        // Coba fetch user profile jika backend sudah siap
-        fetchUserProfile(token).catch(err => {
-          console.error("Profile API not available yet:", err);
-        });
-      } catch (error) {
-        console.error("Error parsing stored user:", error);
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
       }
-    }
+      
+      setLoading(false);
+    };
     
-    setLoading(false);
+    initAuth();
   }, []);
 
   // Fungsi untuk mengambil profil pengguna
@@ -86,7 +94,12 @@ export const AuthProvider = ({ children }) => {
         
         // Update current user state
         setCurrentUser(data.user);
-        return { success: true };
+        
+        // Return lebih banyak informasi
+        return { 
+          success: true, 
+          user: data.user
+        };
       } else {
         return { 
           success: false, 

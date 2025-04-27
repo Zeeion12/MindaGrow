@@ -1,15 +1,18 @@
-/* Font */
+/* Impor font terlebih dahulu */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 
+/* Impor tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variabel kustom menggunakan CSS variables */
 :root {
   line-height: 1.5;
   font-weight: 400;
-}
-
-@import "tailwindcss";
-
-@theme {
+  
+  /* Variabel kustom */
   --font-poppins: Poppins, "sans-serif";
   --font-inter: Inter, "sans-serif";
   --color-biru-dasar: #4778EC;
@@ -21,10 +24,12 @@
   --breakpoint-xs: 200px;
 }
 
-html body {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    background-color: #EFE6DC;
-    scroll-behavior: smooth;
+/* Styling lainnya */
+html, body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #EFE6DC;
+  scroll-behavior: smooth;
+  font-family: var(--font-inter);
 }
