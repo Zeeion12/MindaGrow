@@ -51,21 +51,32 @@ const RegisterOrangtua = () => {
     setError('');
 
     try {
-      // Simulasi API call untuk registrasi
-      // Ganti dengan API call sebenarnya sesuai kebutuhan
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 1000);
+      console.log('Mengirim data registrasi siswa ke server');
+      const response = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'siswa',
+          namaLengkap: formData.namaLengkap,
+          nis: formData.nis,
+          noTelepon: formData.noTelepon,
+          surel: formData.surel,
+          gender: formData.gender,
+          password: formData.password
+        }),
       });
 
-      if (response.success) {
+      const data = await response.json();
+
+      if (data.success) {
         // Redirect ke halaman login setelah registrasi berhasil
         navigate('/login', { 
           state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
         });
       } else {
-        setError('Registrasi gagal. Silakan coba lagi.');
+        setError(data.message || 'Registrasi gagal. Silakan coba lagi.');
       }
     } catch (err) {
       setError('Terjadi kesalahan saat melakukan registrasi.');

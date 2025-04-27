@@ -36,9 +36,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Fungsi login
-  const login = async (identifier, password) => {
+  const login = async (username, password) => {
     try {
-      console.log("Mencoba login dengan identifier:", identifier);
+      console.log("Mencoba login dengan username:", username);
       setLoading(true);
       
       // Panggil API login
@@ -47,15 +47,15 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username: identifier, password }),
+        body: JSON.stringify({ username, password }),
       });
       
       const data = await response.json();
       console.log("Hasil login:", data);
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         // Simpan data user dan token ke localStorage
-        localStorage.setItem('token', data.token || 'sample-token-xyz');
+        localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         
         // Update state
@@ -78,89 +78,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Fungsi register
+  // Fungsi register - tidak digunakan, karena masing-masing form register sudah menangani registernya
   const register = async (userData, role) => {
     try {
-      setLoading(true);
-      console.log("Mencoba register dengan data:", userData, "role:", role);
-      
-      // Siapkan data untuk API
-      const registerData = {
-        name: userData.namaLengkap,
-        email: userData.email || userData.surel,
-        password: userData.password,
-        role: role,
-        // Tambahkan field lain sesuai kebutuhan
-        ...(role === 'siswa' && { nis: userData.nis }),
-        ...(role === 'orangtua' && { nik: userData.nik }),
-        ...(role === 'guru' && { nuptk: userData.nuptk }),
-        gender: userData.gender
-      };
-      
-      // Panggil API register
-      const response = await fetch('http://localhost:5000/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registerData),
-      });
-      
-      const data = await response.json();
-      console.log("Hasil register:", data);
-
-      if (response.ok) {
-        // Redirect ke login setelah registrasi berhasil
-        navigate('/login', { 
-          state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
-        });
-        
-        return { success: true };
-      } else {
-        console.error("Registrasi gagal:", data);
-        return { success: false, message: data.message || 'Registrasi gagal' };
-      }
+      return { success: true }; // Dummy return
     } catch (error) {
-      console.error('Registration error:', error);
-      return { success: false, message: 'Terjadi kesalahan saat registrasi' };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fungsi update profil
-  const updateProfile = async (userData) => {
-    try {
-      setLoading(true);
-      
-      // Panggil API update profile
-      const response = await fetch('http://localhost:5000/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(userData),
-      });
-      
-      const data = await response.json();
-
-      if (response.ok) {
-        // Update user data di localStorage
-        const updatedUser = { ...currentUser, ...userData };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        
-        // Update state
-        setCurrentUser(updatedUser);
-        return { success: true };
-      } else {
-        return { success: false, message: data.message || 'Update profil gagal' };
-      }
-    } catch (error) {
-      console.error('Update profile error:', error);
-      return { success: false, message: 'Terjadi kesalahan saat update profil' };
-    } finally {
-      setLoading(false);
+      return { success: false, message: 'Terjadi kesalahan' };
     }
   };
 
@@ -188,7 +111,6 @@ export const AuthProvider = ({ children }) => {
     currentUser,
     login,
     register,
-    updateProfile,
     logout,
     loading
   };

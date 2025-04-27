@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { BiCrown } from 'react-icons/bi';
-import { useAuth } from '../../../context/authContext';
+import { useAuth } from '../../../context/AuthContext';
 import SideBar from '../../layout/SideBar';
 
 // Card Import

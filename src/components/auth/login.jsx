@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/authContext';
+import { useAuth } from '../../context/AuthContext';
 import { FaGoogle, FaEye, FaEyeSlash, FaUser, FaLock } from 'react-icons/fa';
 
 const Login = () => {
@@ -43,10 +43,32 @@ const Login = () => {
     setError('');
     
     try {
-      const result = await login(formData.username, formData.password);
+      console.log('Mencoba login dengan username:', formData.username);
       
-      if (!result.success) {
-        setError(result.message || 'Login gagal. Silakan periksa NIS/NIK/NUPTK dan password Anda.');
+      // Call API
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password
+        }),
+      });
+      
+      const data = await response.json();
+      console.log('Login response:', data);
+      
+      if (response.ok && data.success) {
+        // Save user data and token
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Redirect to dashboard
+        navigate('/dashboard');
+      } else {
+        setError(data.message || 'Login gagal. Silakan periksa username dan password Anda.');
       }
     } catch (err) {
       console.error("Error saat login:", err);
@@ -61,6 +83,7 @@ const Login = () => {
     console.log("Login dengan Google");
   };
 
+  // Return component JSX (sama dengan kode asli)
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left Side - Login Form */}
@@ -95,7 +118,7 @@ const Login = () => {
                   value={formData.username}
                   onChange={handleChange}
                   required
-                  placeholder="dimasrizky822@gmail.com"
+                  placeholder="Masukkan NIS/NIK/NUPTK"
                 />
               </div>
             </div>

@@ -51,33 +51,53 @@ const RegisterSiswa = () => {
     setError('');
 
     try {
-      // Simulasi API call untuk registrasi
-      // Ganti dengan API call sebenarnya sesuai kebutuhan
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ success: true });
-        }, 1000);
+      // Panggil API register
+      console.log('Mengirim data registrasi siswa ke server');
+      const response = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'siswa',
+          namaLengkap: formData.namaLengkap,
+          nis: formData.nis,
+          noTelepon: formData.noTelepon,
+          surel: formData.surel,
+          gender: formData.gender,
+          password: formData.password
+        }),
       });
 
-      if (response.success) {
-        // Redirect ke halaman login setelah registrasi berhasil
+      // Handle response
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Terjadi kesalahan saat registrasi');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Redirect ke halaman login
         navigate('/login', { 
           state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
         });
       } else {
-        setError('Registrasi gagal. Silakan coba lagi.');
+        setError(data.message || 'Registrasi gagal. Silakan coba lagi.');
       }
     } catch (err) {
-      setError('Terjadi kesalahan saat melakukan registrasi.');
+      setError(err.message || 'Terjadi kesalahan saat melakukan registrasi.');
       console.error('Registration error:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  // Return component JSX (sama dengan kode asli)
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-10">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+        {/* Form content (tidak diubah) */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">REGISTER - Siswa</h1>
         </div>
@@ -89,6 +109,7 @@ const RegisterSiswa = () => {
         )}
 
         <form onSubmit={handleSubmit}>
+          {/* Form fields (tidak diubah) */}
           <div className="mb-4">
             <label htmlFor="namaLengkap" className="block text-gray-700 font-medium mb-2">
               Nama Lengkap
