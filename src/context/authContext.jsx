@@ -1,47 +1,74 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 
-// Buat konteks autentikasi
 const AuthContext = createContext();
 
-// Provider untuk autentikasi
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    // Cek apakah user sudah login ketika aplikasi dimuat
-    const checkUserStatus = () => {
-      try {
-        const token = localStorage.getItem('token');
-        const user = JSON.parse(localStorage.getItem('user'));
-        
-        if (token && user) {
-          console.log("User sudah login:", user);
-          setCurrentUser(user);
-        } else {
-          console.log("User belum login");
-          setCurrentUser(null);
-        }
-      } catch (error) {
-        console.error('Error checking authentication status:', error);
-        setCurrentUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Periksa token di localStorage
+    const token = localStorage.getItem('token');
     
-    checkUserStatus();
+    if (token) {
+      try {
+        // Ambil data user dari localStorage sebagai fallback
+        const userData = JSON.parse(localStorage.getItem('user'));
+        if (userData) {
+          setCurrentUser(userData);
+        }
+        
+        // Coba fetch user profile jika backend sudah siap
+        fetchUserProfile(token).catch(err => {
+          console.error("Profile API not available yet:", err);
+        });
+      } catch (error) {
+        console.error("Error parsing stored user:", error);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
+    }
+    
+    setLoading(false);
   }, []);
+
+  // Fungsi untuk mengambil profil pengguna
+  const fetchUserProfile = async (token) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/profile', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setCurrentUser(userData.user);
+        // Update localStorage untuk konsistensi
+        localStorage.setItem('user', JSON.stringify(userData.user));
+      } else {
+        // Token tidak valid, hapus dari localStorage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setCurrentUser(null);
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      // Jangan hapus data kalau server tidak merespon
+      // localStorage.removeItem('token');
+      // localStorage.removeItem('user');
+    }
+  };
 
   // Fungsi login
   const login = async (username, password) => {
     try {
-      console.log("Mencoba login dengan username:", username);
-      setLoading(true);
-      
-      // Panggil API login
       const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
         headers: {
@@ -51,84 +78,80 @@ export const AuthProvider = ({ children }) => {
       });
       
       const data = await response.json();
-      console.log("Hasil login:", data);
-
+      
       if (response.ok && data.success) {
-        // Simpan data user dan token ke localStorage
+        // Simpan token dan user data
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         
-        // Update state
+        // Update current user state
         setCurrentUser(data.user);
-        console.log("Login berhasil, navigasi ke dashboard");
-        
-        // Navigasi ke dashboard
-        navigate('/dashboard');
-        
         return { success: true };
       } else {
-        console.error("Login gagal:", data);
-        return { success: false, message: data.message || 'Login gagal' };
+        return { 
+          success: false, 
+          message: data.message || 'Login gagal. Silakan periksa username dan password Anda.' 
+        };
       }
     } catch (error) {
-      console.error('Login error:', error);
-      return { success: false, message: 'Terjadi kesalahan saat login' };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fungsi register - tidak digunakan, karena masing-masing form register sudah menangani registernya
-  const register = async (userData, role) => {
-    try {
-      return { success: true }; // Dummy return
-    } catch (error) {
-      return { success: false, message: 'Terjadi kesalahan' };
+      console.error("Error during login:", error);
+      return { 
+        success: false, 
+        message: 'Terjadi kesalahan saat login. Silakan coba lagi.'
+      };
     }
   };
 
   // Fungsi logout
   const logout = () => {
-    console.log("Logout dimulai");
-    
-    // Hapus token dan data user dari localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    
-    // Reset state user
     setCurrentUser(null);
-    
-    console.log("Logout selesai, navigasi ke login");
-    
-    // Navigasi ke halaman login
-    navigate('/login');
-    
-    return { success: true };
   };
 
-  // Nilai yang akan disediakan ke komponen lain
+  // Fungsi register
+  const register = async (userData) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        return { success: true, message: data.message || 'Registrasi berhasil!' };
+      } else {
+        return { 
+          success: false, 
+          message: data.message || 'Registrasi gagal. Silakan coba lagi.' 
+        };
+      }
+    } catch (error) {
+      console.error("Error during registration:", error);
+      return { 
+        success: false, 
+        message: 'Terjadi kesalahan saat registrasi. Silakan coba lagi.'
+      };
+    }
+  };
+
   const value = {
     currentUser,
     login,
-    register,
     logout,
+    register,
     loading
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading ? children : (
-        <div className="flex justify-center items-center min-h-screen">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      )}
+      {!loading && children}
     </AuthContext.Provider>
   );
-};
-
-// Custom hook untuk menggunakan konteks autentikasi
-export const useAuth = () => {
-  return useContext(AuthContext);
 };
 
 export default AuthContext;

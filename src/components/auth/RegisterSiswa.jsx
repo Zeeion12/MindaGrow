@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const RegisterSiswa = () => {
   const navigate = useNavigate();
+  const { register, currentUser } = useAuth();
+  
   const [formData, setFormData] = useState({
     namaLengkap: '',
     nis: '',
@@ -17,6 +20,13 @@ const RegisterSiswa = () => {
   const [error, setError] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [konfirmasiPasswordVisible, setKonfirmasiPasswordVisible] = useState(false);
+
+  useEffect(() => {
+    // Redirect ke dashboard jika sudah login
+    if (currentUser) {
+      navigate('/dashboard');
+    }
+  }, [currentUser, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -51,53 +61,40 @@ const RegisterSiswa = () => {
     setError('');
 
     try {
-      // Panggil API register
-      console.log('Mengirim data registrasi siswa ke server');
-      const response = await fetch('http://localhost:5000/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role: 'siswa',
-          namaLengkap: formData.namaLengkap,
-          nis: formData.nis,
-          noTelepon: formData.noTelepon,
-          surel: formData.surel,
-          gender: formData.gender,
-          password: formData.password
-        }),
-      });
-
-      // Handle response
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Terjadi kesalahan saat registrasi');
-      }
-
-      const data = await response.json();
+      // Siapkan data untuk dikirim ke server sesuai struktur tabel PostgreSQL
+      const userData = {
+        role: 'siswa',
+        nama_lengkap: formData.namaLengkap,
+        nis: formData.nis,
+        no_telepon: formData.noTelepon,
+        email: formData.surel, 
+        gender: formData.gender,
+        password: formData.password
+      };
       
-      if (data.success) {
-        // Redirect ke halaman login
+      console.log('Mengirim data registrasi:', userData);
+      
+      const result = await register(userData);
+      
+      if (result.success) {
+        // Redirect ke halaman login dengan message
         navigate('/login', { 
           state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
         });
       } else {
-        setError(data.message || 'Registrasi gagal. Silakan coba lagi.');
+        setError(result.message || 'Registrasi gagal. Silakan coba lagi.');
       }
     } catch (err) {
-      setError(err.message || 'Terjadi kesalahan saat melakukan registrasi.');
+      setError('Terjadi kesalahan saat melakukan registrasi.');
       console.error('Registration error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Return component JSX (sama dengan kode asli)
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-10">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        {/* Form content (tidak diubah) */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">REGISTER - Siswa</h1>
         </div>
@@ -109,7 +106,6 @@ const RegisterSiswa = () => {
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Form fields (tidak diubah) */}
           <div className="mb-4">
             <label htmlFor="namaLengkap" className="block text-gray-700 font-medium mb-2">
               Nama Lengkap

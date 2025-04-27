@@ -51,16 +51,16 @@ const RegisterOrangtua = () => {
     setError('');
 
     try {
-      console.log('Mengirim data registrasi siswa ke server');
+      console.log('Mengirim data registrasi orangtua ke server');
       const response = await fetch('http://localhost:5000/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          role: 'siswa',
+          role: 'orangtua',
           namaLengkap: formData.namaLengkap,
-          nis: formData.nis,
+          nik: formData.nik,
           noTelepon: formData.noTelepon,
           surel: formData.surel,
           gender: formData.gender,

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { FaGoogle, FaEye, FaEyeSlash, FaUser, FaLock } from 'react-icons/fa';
+import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, currentUser } = useAuth();
   
   const [formData, setFormData] = useState({
     username: '',
@@ -19,11 +19,28 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   
   useEffect(() => {
+    // Redirect ke dashboard jika sudah login
+    if (currentUser) {
+      // Redirect based on user role
+      if (currentUser.role === 'siswa') {
+        navigate('/dashboard/student');
+      } else if (currentUser.role === 'guru') {
+        navigate('/dashboard/teacher');
+      } else if (currentUser.role === 'orangtua') {
+        navigate('/dashboard/parent');
+      } else {
+        navigate('/dashboard');
+      }
+      return;
+    }
+    
+    // Tampilkan pesan dari state location (misalnya dari halaman register)
     if (location.state && location.state.message) {
       setMessage(location.state.message);
+      // Bersihkan state agar pesan tidak muncul lagi setelah refresh
       window.history.replaceState({}, document.title);
     }
-  }, [location]);
+  }, [location, currentUser, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -45,30 +62,14 @@ const Login = () => {
     try {
       console.log('Mencoba login dengan username:', formData.username);
       
-      // Call API
-      const response = await fetch('http://localhost:5000/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password
-        }),
-      });
+      // Gunakan fungsi login dari AuthContext
+      const result = await login(formData.username, formData.password);
       
-      const data = await response.json();
-      console.log('Login response:', data);
-      
-      if (response.ok && data.success) {
-        // Save user data and token
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        
-        // Redirect to dashboard
-        navigate('/dashboard');
+      if (result.success) {
+        // Redirect berdasarkan role akan ditangani oleh useEffect di atas
+        console.log('Login berhasil');
       } else {
-        setError(data.message || 'Login gagal. Silakan periksa username dan password Anda.');
+        setError(result.message || 'Username atau password salah');
       }
     } catch (err) {
       console.error("Error saat login:", err);
@@ -83,7 +84,6 @@ const Login = () => {
     console.log("Login dengan Google");
   };
 
-  // Return component JSX (sama dengan kode asli)
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left Side - Login Form */}
