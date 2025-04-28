@@ -81,7 +81,7 @@ const Login = () => {
         
         // Pastikan navigasi langsung berdasarkan role
         const roleRouteMap = {
-          'siswa': '/dashboard/student',
+          'siswa': '/dashboard/Student',
           'guru': '/dashboard/teacher',
           'orangtua': '/dashboard/parent'
         };
@@ -167,7 +167,7 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  placeholder="••••••"
+                  placeholder=" "
                 />
                 <button
                   type="button"
