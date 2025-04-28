@@ -1,168 +1,330 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import axios from 'axios';
 
+// Create Auth Context
 const AuthContext = createContext();
 
-export function useAuth() {
+// Custom hook to use the auth context
+export const useAuth = () => {
   return useContext(AuthContext);
-}
+};
 
+// Auth Provider component
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  const [error, setError] = useState(null);
+  
+  // Setup axios interceptor for handling expired tokens
   useEffect(() => {
-    const initAuth = async () => {
-      // Periksa token di localStorage
-      const token = localStorage.getItem('token');
-      
-      if (token) {
-        try {
-          // Ambil data user dari localStorage sebagai fallback
-          const userDataStr = localStorage.getItem('user');
-          if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-            setCurrentUser(userData);
-          }
-          
-          // Coba fetch user profile jika backend sudah siap
-          try {
-            await fetchUserProfile(token);
-          } catch (err) {
-            console.error("Profile API not available yet:", err);
-            // Tetap gunakan data dari localStorage
-          }
-        } catch (error) {
-          console.error("Error parsing stored user:", error);
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
+    const interceptor = axios.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.response && error.response.status === 401) {
+          // Token expired or invalid
+          logout();
         }
+        return Promise.reject(error);
+      }
+    );
+    
+    return () => {
+      // Remove interceptor when component unmounts
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
+  
+  // Check if user is authenticated on component mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+  
+  // Check auth status from the server
+  const checkAuthStatus = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('authToken');
+      
+      if (!token) {
+        setCurrentUser(null);
+        setLoading(false);
+        return;
       }
       
-      setLoading(false);
-    };
-    
-    initAuth();
-  }, []);
-
-  // Fungsi untuk mengambil profil pengguna
-  const fetchUserProfile = async (token) => {
-    try {
-      const response = await fetch('http://localhost:5000/api/profile', {
-        method: 'GET',
+      // Configure axios with token
+      const config = {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+          'Authorization': `Bearer ${token}`
+        }
+      };
       
-      if (response.ok) {
-        const userData = await response.json();
-        setCurrentUser(userData.user);
-        // Update localStorage untuk konsistensi
-        localStorage.setItem('user', JSON.stringify(userData.user));
+      // Verify token with server
+      const response = await axios.get('/api/auth/check-status', config);
+      
+      if (response.data.success) {
+        setCurrentUser(response.data.user);
       } else {
-        // Token tidak valid, hapus dari localStorage
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        // Token invalid or expired
+        localStorage.removeItem('authToken');
         setCurrentUser(null);
+        setError('Sesi telah berakhir. Silakan login kembali.');
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
-      // Jangan hapus data kalau server tidak merespon
-      // localStorage.removeItem('token');
-      // localStorage.removeItem('user');
+      console.error('Error checking auth status:', error);
+      localStorage.removeItem('authToken');
+      setCurrentUser(null);
+      setError('Terjadi kesalahan saat memeriksa status autentikasi.');
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Fungsi login
+  
+  // Login function
   const login = async (username, password) => {
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+      setLoading(true);
+      setError(null);
+      
+      const response = await axios.post('/api/auth/login', {
+        username,
+        password
       });
       
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        // Simpan token dan user data
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
+      if (response.data.success) {
+        // Store token in localStorage
+        localStorage.setItem('authToken', response.data.token);
         
-        // Update current user state
-        setCurrentUser(data.user);
+        // Pastikan data user lengkap dan disimpan dengan benar
+        console.log('User data from server:', response.data.user);
         
-        // Return lebih banyak informasi
-        return { 
-          success: true, 
-          user: data.user
+        // Set current user dengan data lengkap dari server
+        setCurrentUser(response.data.user);
+        
+        return {
+          success: true,
+          user: response.data.user
         };
       } else {
-        return { 
-          success: false, 
-          message: data.message || 'Login gagal. Silakan periksa username dan password Anda.' 
+        setError(response.data.message || 'Login gagal');
+        return {
+          success: false,
+          message: response.data.message || 'Login gagal'
         };
       }
     } catch (error) {
-      console.error("Error during login:", error);
-      return { 
-        success: false, 
-        message: 'Terjadi kesalahan saat login. Silakan coba lagi.'
+      console.error('Login error:', error);
+      
+      // Handle specific error responses
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Login gagal');
+        return {
+          success: false,
+          message: error.response.data.message || 'Login gagal'
+        };
+      }
+      
+      setError('Terjadi kesalahan saat login');
+      return {
+        success: false,
+        message: 'Terjadi kesalahan saat login'
       };
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Fungsi logout
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setCurrentUser(null);
-  };
-
-  // Fungsi register
+  
+  // Register function
   const register = async (userData) => {
     try {
-      const response = await fetch('http://localhost:5000/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
+      setLoading(true);
+      setError(null);
       
-      const data = await response.json();
+      const response = await axios.post('/api/auth/register', userData);
       
-      if (response.ok && data.success) {
-        return { success: true, message: data.message || 'Registrasi berhasil!' };
+      if (response.data.success) {
+        return {
+          success: true,
+          message: response.data.message
+        };
       } else {
-        return { 
-          success: false, 
-          message: data.message || 'Registrasi gagal. Silakan coba lagi.' 
+        setError(response.data.message || 'Registrasi gagal');
+        return {
+          success: false,
+          message: response.data.message || 'Registrasi gagal'
         };
       }
     } catch (error) {
-      console.error("Error during registration:", error);
-      return { 
-        success: false, 
-        message: 'Terjadi kesalahan saat registrasi. Silakan coba lagi.'
+      console.error('Registration error:', error);
+      
+      // Handle specific error responses
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Registrasi gagal');
+        return {
+          success: false,
+          message: error.response.data.message || 'Registrasi gagal'
+        };
+      }
+      
+      setError('Terjadi kesalahan saat registrasi');
+      return {
+        success: false,
+        message: 'Terjadi kesalahan saat registrasi'
       };
+    } finally {
+      setLoading(false);
     }
   };
-
+  
+  // Logout function
+  const logout = () => {
+    localStorage.removeItem('authToken');
+    setCurrentUser(null);
+    setError(null);
+  };
+  
+  // Update user profile
+  const updateProfile = async (userData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('authToken');
+      
+      if (!token) {
+        setError('Tidak terotentikasi');
+        return {
+          success: false,
+          message: 'Tidak terotentikasi'
+        };
+      }
+      
+      // Configure axios with token
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+      
+      // Update user profile
+      const response = await axios.put('/api/user/profile', userData, config);
+      
+      if (response.data.success) {
+        setCurrentUser(response.data.user);
+        return {
+          success: true,
+          user: response.data.user,
+          message: response.data.message || 'Profil berhasil diperbarui'
+        };
+      } else {
+        setError(response.data.message || 'Gagal memperbarui profil');
+        return {
+          success: false,
+          message: response.data.message || 'Gagal memperbarui profil'
+        };
+      }
+    } catch (error) {
+      console.error('Update profile error:', error);
+      
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Gagal memperbarui profil');
+        return {
+          success: false,
+          message: error.response.data.message || 'Gagal memperbarui profil'
+        };
+      }
+      
+      setError('Terjadi kesalahan saat memperbarui profil');
+      return {
+        success: false,
+        message: 'Terjadi kesalahan saat memperbarui profil'
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Change password
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('authToken');
+      
+      if (!token) {
+        setError('Tidak terotentikasi');
+        return {
+          success: false,
+          message: 'Tidak terotentikasi'
+        };
+      }
+      
+      // Configure axios with token
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+      
+      // Change password
+      const response = await axios.post('/api/user/change-password', {
+        currentPassword,
+        newPassword
+      }, config);
+      
+      if (response.data.success) {
+        return {
+          success: true,
+          message: response.data.message || 'Password berhasil diubah'
+        };
+      } else {
+        setError(response.data.message || 'Gagal mengubah password');
+        return {
+          success: false,
+          message: response.data.message || 'Gagal mengubah password'
+        };
+      }
+    } catch (error) {
+      console.error('Change password error:', error);
+      
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Gagal mengubah password');
+        return {
+          success: false,
+          message: error.response.data.message || 'Gagal mengubah password'
+        };
+      }
+      
+      setError('Terjadi kesalahan saat mengubah password');
+      return {
+        success: false,
+        message: 'Terjadi kesalahan saat mengubah password'
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Auth context value
   const value = {
     currentUser,
+    loading,
+    error,
     login,
-    logout,
     register,
-    loading
+    logout,
+    updateProfile,
+    changePassword,
+    refreshUser: checkAuthStatus
   };
-
+  
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

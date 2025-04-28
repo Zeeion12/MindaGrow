@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login, currentUser, logout } = useAuth();
+  const { login, currentUser } = useAuth();
   
   const [formData, setFormData] = useState({
     username: '',
@@ -73,21 +73,25 @@ const Login = () => {
     try {
       console.log('Mencoba login dengan username:', formData.username);
       
+      // Call the login function from AuthContext
       const result = await login(formData.username, formData.password);
       
       if (result.success) {
         console.log('Login berhasil, user:', result.user);
         
-        // Navigasi berdasarkan role
-        if (result.user && result.user.role) {
-          console.log(`Mengarahkan ke dashboard/${result.user.role}`);
-          navigate(`/dashboard/${result.user.role === 'siswa' ? 'student' : 
-                              result.user.role === 'guru' ? 'teacher' : 
-                              result.user.role === 'orangtua' ? 'parent' : ''}`);
-        } else {
-          console.log('Mengarahkan ke dashboard default');
-          navigate('/dashboard/siswa');
-        }
+        // Pastikan navigasi langsung berdasarkan role
+        const roleRouteMap = {
+          'siswa': '/dashboard/student',
+          'guru': '/dashboard/teacher',
+          'orangtua': '/dashboard/parent'
+        };
+        
+        // Navigasi langsung berdasarkan role, jika tidak ada role gunakan default
+        const redirectPath = roleRouteMap[result.user.role] || '/dashboard';
+        console.log('Redirecting to:', redirectPath);
+        
+        // Lakukan navigasi dengan replace: true untuk mencegah "back" ke halaman login
+        navigate(redirectPath, { replace: true });
       } else {
         setError(result.message || 'Username atau password salah');
       }
@@ -102,6 +106,7 @@ const Login = () => {
   const handleGoogleLogin = () => {
     // Implementasi login dengan Google
     console.log("Login dengan Google");
+    setError("Fitur login dengan Google belum diimplementasi");
   };
 
   return (
@@ -207,6 +212,7 @@ const Login = () => {
               className="w-full flex justify-center items-center bg-white text-gray-700 border border-gray-300 rounded-full py-3 px-6 hover:bg-gray-50 transition duration-200 text-base mt-4"
             >
               <FaGoogle className="text-blue-500 mr-3 text-xl" />
+              Login dengan Google
             </button>
           
             <div className="text-center mt-8">

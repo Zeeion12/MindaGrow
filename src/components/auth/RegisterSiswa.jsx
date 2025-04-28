@@ -61,8 +61,7 @@ const RegisterSiswa = () => {
     setError('');
 
     try {
-      // Siapkan data untuk dikirim ke server sesuai struktur yang
-      // sudah dikoreksi untuk server.js
+      // Siapkan data untuk dikirim ke server
       const userData = {
         role: 'siswa',
         namaLengkap: formData.namaLengkap,
@@ -154,7 +153,7 @@ const RegisterSiswa = () => {
 
           <div className="mb-4">
             <label htmlFor="surel" className="block text-gray-700 font-medium mb-2">
-              Surel
+              Surel (Email)
             </label>
             <input
               type="email"
