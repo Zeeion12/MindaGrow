@@ -1,20 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BiCrown } from 'react-icons/bi';
+import { BiCrown, BiLogOut, BiUser, BiCog } from 'react-icons/bi';
 import { useAuth } from '../../../context/AuthContext';
 import SideBar from '../../layout/SideBar';
+import LogoutConfirmationModal from '../../common/LogoutConfirmationModal';
 import axios from 'axios';
 
 // Card Import
 import CardKursus from '../../layout/TaskCard/CardKursus';
 
 const StudentDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const profileMenuRef = useRef(null);
+  
+  // Handler untuk membuka modal konfirmasi logout
+  const handleLogoutClick = () => {
+    setShowProfileMenu(false);
+    setShowLogoutModal(true);
+  };
+  
+  // Handler untuk logout setelah konfirmasi
+  const handleLogoutConfirm = () => {
+    logout();
+    navigate('/login');
+  };
+  
+  // Handler untuk menutup menu profil ketika klik di luar menu
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setShowProfileMenu(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [profileMenuRef]);
   
   useEffect(() => {
     // Redirect ke login jika user tidak ada
@@ -101,18 +131,54 @@ const StudentDashboard = () => {
             👋 Selamat datang, {userName}! Siap belajar seru hari ini?
           </h1>
           
-          {/* User Avatar */}
-          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-            {currentUser?.profile_image ? (
-              <img 
-                src={currentUser.profile_image} 
-                alt="Profile" 
-                className="w-full h-full rounded-full object-cover"
-              />
-            ) : (
-              <span className="text-xl font-bold text-gray-500">
-                {userName.charAt(0).toUpperCase()}
-              </span>
+          {/* User Avatar dan Profile Menu */}
+          <div className="relative" ref={profileMenuRef}>
+            <div 
+              className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center cursor-pointer"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+            >
+              {currentUser?.profile_image ? (
+                <img 
+                  src={currentUser.profile_image} 
+                  alt="Profile" 
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-xl font-bold text-gray-500">
+                  {userName.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+            
+            {/* Profile Menu Dropdown */}
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20">
+                <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
+                  <p className="font-semibold">{userName}</p>
+                  <p className="text-xs text-gray-500">Siswa</p>
+                </div>
+                
+                <a 
+                  href="#profile" 
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                >
+                  <BiUser className="mr-2" /> Profile
+                </a>
+                
+                <a 
+                  href="#settings" 
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                >
+                  <BiCog className="mr-2" /> Pengaturan
+                </a>
+                
+                <button 
+                  onClick={handleLogoutClick}
+                  className="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                >
+                  <BiLogOut className="mr-2" /> Logout
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -177,6 +243,13 @@ const StudentDashboard = () => {
           </div>
         )}
       </main>
+      
+      {/* Modal Konfirmasi Logout */}
+      <LogoutConfirmationModal 
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogoutConfirm}
+      />
     </div>
   );
 };

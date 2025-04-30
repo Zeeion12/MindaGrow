@@ -19,10 +19,10 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   
   useEffect(() => {
-    // Redirect ke dashboard jika sudah login
+    // Cek jika pengguna sudah login saat komponen dimuat
     if (currentUser) {
-      // Redirect based on user role
-      navigateByRole(currentUser);
+      // Redirect berdasarkan role
+      redirectToUserDashboard(currentUser);
       return;
     }
     
@@ -32,24 +32,26 @@ const Login = () => {
       // Bersihkan state agar pesan tidak muncul lagi setelah refresh
       window.history.replaceState({}, document.title);
     }
-  }, [location, currentUser, navigate]);
+  }, [currentUser, location, navigate]);
 
-  // Fungsi untuk mengarahkan pengguna berdasarkan role
-  const navigateByRole = (user) => {
+  // Fungsi untuk mengarahkan pengguna ke dashboard yang sesuai
+  const redirectToUserDashboard = (user) => {
     if (!user) return;
+    
+    console.log('Redirecting user with role:', user.role);
     
     switch(user.role) {
       case 'siswa':
-        navigate('/dashboard/student');
+        navigate('/dashboard/student', { replace: true });
         break;
       case 'guru':
-        navigate('/dashboard/teacher');
+        navigate('/dashboard/teacher', { replace: true });
         break;
       case 'orangtua':
-        navigate('/dashboard/parent');
+        navigate('/dashboard/parent', { replace: true });
         break;
       default:
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
     }
   };
 
@@ -79,19 +81,8 @@ const Login = () => {
       if (result.success) {
         console.log('Login berhasil, user:', result.user);
         
-        // Pastikan navigasi langsung berdasarkan role
-        const roleRouteMap = {
-          'siswa': '/dashboard/Student',
-          'guru': '/dashboard/teacher',
-          'orangtua': '/dashboard/parent'
-        };
-        
-        // Navigasi langsung berdasarkan role, jika tidak ada role gunakan default
-        const redirectPath = roleRouteMap[result.user.role] || '/dashboard';
-        console.log('Redirecting to:', redirectPath);
-        
-        // Lakukan navigasi dengan replace: true untuk mencegah "back" ke halaman login
-        navigate(redirectPath, { replace: true });
+        // Redirect berdasarkan role langsung setelah login berhasil
+        redirectToUserDashboard(result.user);
       } else {
         setError(result.message || 'Username atau password salah');
       }
@@ -167,7 +158,7 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  placeholder=" "
+                  placeholder="••••••"
                 />
                 <button
                   type="button"
