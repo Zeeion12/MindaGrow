@@ -1,7 +1,11 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL;
+// Set the base URL from environment variables
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Configure default axios base URL
+axios.defaults.baseURL = API_URL;
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -40,7 +44,22 @@ export const AuthProvider = ({ children }) => {
         
         if (response.data.success) {
           console.log('User is authenticated:', response.data.user);
-          setCurrentUser(response.data.user);
+          
+          // Make sure userType is included
+          let userData = response.data.user;
+          
+          // If userType is not explicitly set, infer it from the available identifiers
+          if (!userData.userType) {
+            if (userData.nis) {
+              userData.userType = 'siswa';
+            } else if (userData.nik) {
+              userData.userType = 'orangtua';
+            } else if (userData.nuptk) {
+              userData.userType = 'guru';
+            }
+          }
+          
+          setCurrentUser(userData);
         } else {
           // Token invalid or expired
           console.log('Token invalid or expired');
@@ -64,7 +83,7 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Attempting login with:', { username });
       
-      const response = await axios.post('/auth/login', {
+      const response = await axios.post('/api/auth/login', {
         username,
         password
       });
@@ -75,12 +94,27 @@ export const AuthProvider = ({ children }) => {
         // Store token in localStorage
         localStorage.setItem('authToken', response.data.token);
         
+        // Make sure userType is included
+        let userData = response.data.user;
+        
+        // If userType is not explicitly set, infer it from the available identifiers
+        if (!userData.userType) {
+          if (userData.nis) {
+            userData.userType = 'siswa';
+          } else if (userData.nik) {
+            userData.userType = 'orangtua';
+          } else if (userData.nuptk) {
+            userData.userType = 'guru';
+          }
+          console.log('Inferred userType:', userData.userType);
+        }
+        
         // Set current user
-        setCurrentUser(response.data.user);
+        setCurrentUser(userData);
         
         return {
           success: true,
-          user: response.data.user
+          user: userData
         };
       } else {
         return {
@@ -109,7 +143,7 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const response = await axios.post(`${API_URL}/api/auth/register`, userData);
+      const response = await axios.post('/api/auth/register', userData);
       
       if (response.data.success) {
         return {
@@ -146,13 +180,32 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
   };
   
+  // Get user role
+  const getUserRole = () => {
+    if (!currentUser) return null;
+    
+    // If userType is explicitly set, use it
+    if (currentUser.userType) {
+      return currentUser.userType;
+    }
+    
+    // Otherwise infer from identifiers
+    if (currentUser.nis) return 'siswa';
+    if (currentUser.nik) return 'orangtua';
+    if (currentUser.nuptk) return 'guru';
+    
+    // Default fallback
+    return null;
+  };
+  
   // Auth context value
   const value = {
     currentUser,
     login,
     register,
     logout,
-    loading
+    loading,
+    getUserRole
   };
   
   return (

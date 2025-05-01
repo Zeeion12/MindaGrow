@@ -57,7 +57,7 @@ export default function App() {
       {/* Rute yang perlu login */}
       {isLoggedIn ? (
         <>
-          <Route path="/dashboard/Student" element={<StudentDashboard />} />
+          <Route path="./dashboard/Student" element={<StudentDashboard />} />
           <Route path="/kursus" element={<StudentDashboard />} />
           <Route path="/kelas" element={<StudentDashboard />} />
           <Route path="/game" element={<StudentDashboard />} />

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import axios from 'axios';
 
 const RegisterSiswa = () => {
+  const { register } = useAuth();
   const navigate = useNavigate();
-  const { register, currentUser, logout } = useAuth();
   
   const [formData, setFormData] = useState({
     namaLengkap: '',
@@ -16,18 +17,21 @@ const RegisterSiswa = () => {
     konfirmasiPassword: '',
     persetujuan: false
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [konfirmasiPasswordVisible, setKonfirmasiPasswordVisible] = useState(false);
-
-  useEffect(() => {
-    // Logout terlebih dahulu saat mengakses halaman register
-    // untuk mencegah redirect otomatis ke dashboard
-    logout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
+  
+  const togglePasswordVisibility = () => {
+    setPasswordVisible(!passwordVisible);
+  };
+  
+  const toggleKonfirmasiPasswordVisibility = () => {
+    setKonfirmasiPasswordVisible(!konfirmasiPasswordVisible);
+  };
+  
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
@@ -35,63 +39,104 @@ const RegisterSiswa = () => {
       [name]: type === 'checkbox' ? checked : value
     });
   };
-
-  const togglePasswordVisibility = () => {
-    setPasswordVisible(!passwordVisible);
-  };
-
-  const toggleKonfirmasiPasswordVisibility = () => {
-    setKonfirmasiPasswordVisible(!konfirmasiPasswordVisible);
-  };
-
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (formData.password !== formData.konfirmasiPassword) {
-      setError('Password dan konfirmasi password tidak sama');
-      return;
-    }
-    
-    if (!formData.persetujuan) {
-      setError('Anda harus menyetujui syarat dan ketentuan');
-      return;
-    }
-    
-    setLoading(true);
     setError('');
-
+    setDebugInfo(null);
+    
+    // Validate passwords match
+    if (formData.password !== formData.konfirmasiPassword) {
+      setError('Password dan konfirmasi password tidak cocok');
+      return;
+    }
+    
     try {
-      // Siapkan data untuk dikirim ke server
+      setLoading(true);
+      console.log('Mengirim data registrasi:', formData);
+      
+      // Add userType for siswa
       const userData = {
-        role: 'siswa',
-        namaLengkap: formData.namaLengkap,
-        nis: formData.nis,
-        noTelepon: formData.noTelepon,
-        surel: formData.surel, 
-        gender: formData.gender,
-        password: formData.password
+        ...formData,
+        userType: 'siswa'
       };
       
-      console.log('Mengirim data registrasi:', userData);
+      // Gunakan axios tanpa proxy Vite - langsung ke server API
+      const SERVER_URL = 'http://localhost:3000';
       
-      const result = await register(userData);
+      // Langkah 1: Verifikasi server berjalan
+      try {
+        const healthResponse = await axios.get(`${SERVER_URL}/api/health`, {
+          timeout: 5000
+        });
+        console.log('Server health check:', healthResponse.data);
+        setDebugInfo(prev => ({
+          ...prev,
+          serverHealth: 'OK',
+          serverTime: healthResponse.data.dbTime || healthResponse.data.timestamp
+        }));
+      } catch (healthError) {
+        console.error('Server health check failed:', healthError);
+        setDebugInfo(prev => ({
+          ...prev,
+          serverHealth: 'FAILED',
+          healthError: healthError.message
+        }));
+        throw new Error(`Server tidak tersedia: ${healthError.message}`);
+      }
       
-      if (result.success) {
-        // Redirect ke halaman login dengan message
+      // Langkah 2: Kirim registrasi langsung ke API
+      const response = await axios.post(`${SERVER_URL}/api/auth/register`, userData, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 detik
+      });
+      
+      console.log('Respons registrasi:', response.data);
+      setDebugInfo(prev => ({
+        ...prev,
+        registrationResponse: response.data
+      }));
+      
+      if (response.data.success) {
+        // Redirect to login page with success message
         navigate('/login', { 
-          state: { message: 'Registrasi berhasil! Silakan login dengan akun Anda.' } 
+          state: { message: 'Registrasi berhasil! Silahkan login.' } 
         });
       } else {
-        setError(result.message || 'Registrasi gagal. Silakan coba lagi.');
+        setError(response.data.message || 'Terjadi kesalahan saat registrasi');
       }
-    } catch (err) {
-      setError('Terjadi kesalahan saat melakukan registrasi.');
-      console.error('Registration error:', err);
+    } catch (error) {
+      console.error('Registration error:', error);
+      
+      setDebugInfo(prev => ({
+        ...prev,
+        error: {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data
+        }
+      }));
+      
+      if (error.code === 'ECONNABORTED') {
+        setError('Koneksi timeout. Server membutuhkan waktu terlalu lama untuk merespons.');
+      } else if (error.response) {
+        // Server merespons dengan status error
+        const status = error.response.status;
+        const message = error.response.data?.message || 'Terjadi kesalahan';
+        
+        setError(`Error ${status}: ${message}`);
+      } else if (error.request) {
+        setError('Tidak dapat terhubung ke server API. Pastikan server sedang berjalan.');
+      } else {
+        setError(`Error: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
-
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-10">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
@@ -102,6 +147,17 @@ const RegisterSiswa = () => {
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
+          </div>
+        )}
+
+        {debugInfo && (
+          <div className="bg-gray-100 border border-gray-300 text-gray-700 px-4 py-3 rounded mb-4 text-xs">
+            <details>
+              <summary className="cursor-pointer font-medium">Debug Info (untuk developer)</summary>
+              <pre className="mt-2 whitespace-pre-wrap">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </details>
           </div>
         )}
 

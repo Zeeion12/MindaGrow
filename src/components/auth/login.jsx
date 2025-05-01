@@ -1,105 +1,119 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaGoogle, FaEye, FaEyeSlash, FaUser, FaLock } from 'react-icons/fa';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { FaUser, FaLock, FaEye, FaEyeSlash, FaGoogle } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
   const { login, currentUser } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     rememberMe: false
   });
-  const [loading, setLoading] = useState(false);
+  
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   
+  // Set message from location state (e.g. from registration)
   useEffect(() => {
-    // Cek jika pengguna sudah login saat komponen dimuat
-    if (currentUser) {
-      // Redirect berdasarkan role
-      redirectToUserDashboard(currentUser);
-      return;
-    }
-    
-    // Tampilkan pesan dari state location (misalnya dari halaman register)
-    if (location.state && location.state.message) {
+    if (location.state?.message) {
       setMessage(location.state.message);
-      // Bersihkan state agar pesan tidak muncul lagi setelah refresh
-      window.history.replaceState({}, document.title);
     }
-  }, [currentUser, location, navigate]);
-
-  // Fungsi untuk mengarahkan pengguna ke dashboard yang sesuai
-  const redirectToUserDashboard = (user) => {
-    if (!user) return;
-    
-    console.log('Redirecting user with role:', user.role);
-    
-    switch(user.role) {
-      case 'siswa':
-        navigate('/dashboard/student', { replace: true });
-        break;
-      case 'guru':
-        navigate('/dashboard/teacher', { replace: true });
-        break;
-      case 'orangtua':
-        navigate('/dashboard/parent', { replace: true });
-        break;
-      default:
-        navigate('/dashboard', { replace: true });
+  }, [location]);
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (currentUser) {
+      redirectBasedOnUserType(currentUser);
     }
-  };
-
+  }, [currentUser]);
+  
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: type === 'checkbox' ? checked : value
     });
   };
-
+  
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
-
+  
+  // Function to determine redirect based on user type
+  const redirectBasedOnUserType = (user) => {
+    console.log('Redirecting based on user data:', user);
+    
+    // Extract user type from user data
+    const userType = user.userType || 
+                    (user.nis ? 'siswa' : 
+                     user.nik ? 'orangtua' : 
+                     user.nuptk ? 'guru' : null);
+    
+    console.log('Determined user type:', userType);
+    
+    if (!userType) {
+      console.warn('Could not determine user type from:', user);
+      // Default to dashboard if we can't determine type
+      navigate('/dashboard');
+      return;
+    }
+    
+    // Redirect based on user type
+    switch (userType) {
+      case 'siswa':
+        navigate('/dashboard/Student');
+        break;
+      case 'orangtua':
+        navigate('/orangtua/dashboard');
+        break;
+      case 'guru':
+        navigate('/guru/dashboard');
+        break;
+      default:
+        // Fallback to general dashboard
+        navigate('/dashboard');
+    }
+  };
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setMessage('');
     
     try {
-      console.log('Mencoba login dengan username:', formData.username);
+      setLoading(true);
+      console.log('Attempting login with:', { username: formData.username });
       
-      // Call the login function from AuthContext
       const result = await login(formData.username, formData.password);
       
+      console.log('Login response:', result);
+      
       if (result.success) {
-        console.log('Login berhasil, user:', result.user);
-        
-        // Redirect berdasarkan role langsung setelah login berhasil
-        redirectToUserDashboard(result.user);
+        // Login successful
+        redirectBasedOnUserType(result.user);
       } else {
-        setError(result.message || 'Username atau password salah');
+        setError(result.message || 'Login gagal');
       }
-    } catch (err) {
-      console.error("Error saat login:", err);
-      setError('Terjadi kesalahan saat login. Silakan coba lagi.');
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Terjadi kesalahan saat login');
     } finally {
       setLoading(false);
     }
   };
-
+  
   const handleGoogleLogin = () => {
-    // Implementasi login dengan Google
-    console.log("Login dengan Google");
-    setError("Fitur login dengan Google belum diimplementasi");
+    // Implement Google login functionality
+    console.log('Google login clicked');
+    setError('Google login belum diimplementasikan');
   };
-
+  
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left Side - Login Form */}
