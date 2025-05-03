@@ -13,7 +13,7 @@ function ScoreItem ({ namaKursus, subject, skor, color }) {
     return (
         <div className="flex justify-between items-start py-4">
             <div className="flex flex-col">
-                <h3 className="text-xl font-bold">{namaKursus}</h3>
+                <h3 className="text-xl font-bold truncate">{namaKursus}</h3>
                 <p className="text-gray-700">{subject}</p>
             </div>
             <div className={`w-20 h-20 ${bgColorClass} rounded-2xl flex flex-col items-center justify-center`}>
@@ -32,7 +32,9 @@ export default function CardSkor({ scores = [], title = "Skor kursus kamu" }) {
 
             {/* Kalo ga ada skor buat warnanya pake warna default */}
             {scores.length === 0 ? (
-                <ScoreItem namaKursus="Matriks dan Algoritma" subject="Matematika" skor={0} color="default" />
+                <div className="flex justify-center items-center h-32 bg-[#D9D9D9] rounded-2xl">
+                    <p className="text-gray-500 text-lg">Belum ada skor</p>
+                </div>
             ) : (
                 // Buat ngerender semua skor yang ada
                 scores.map((score, index) => (
@@ -45,6 +47,8 @@ export default function CardSkor({ scores = [], title = "Skor kursus kamu" }) {
                 />
                 ))
             )}
+
+            <p className="text-end text-biru-dasar text-[15px] hover:text-blue-900 mt-4">Lihat Selengkapnya...</p>
         </div>
     )
 }
