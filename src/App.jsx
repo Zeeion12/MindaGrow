@@ -48,7 +48,7 @@ export default function App() {
     <Routes>
       {/* Halaman Publik - Dapat diakses tanpa login */}
       <Route path="/" element={<MainPage />} />
-      <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} login={login} />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/role-selection" element={<RoleSelection />} />
       <Route path="/register/siswa" element={<RegisterSiswa register={register} />} />
       <Route path="/register/orangtua" element={<RegisterOrangtua register={register} />} />

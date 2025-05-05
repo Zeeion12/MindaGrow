@@ -18,21 +18,19 @@ const Login = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // Set message from location state (e.g. from registration)
+
   useEffect(() => {
     if (location.state?.message) {
       setMessage(location.state.message);
     }
   }, [location]);
-  
-  // Redirect if already logged in
+
   useEffect(() => {
     if (currentUser) {
       redirectBasedOnUserType(currentUser);
     }
   }, [currentUser]);
-  
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
@@ -40,31 +38,22 @@ const Login = () => {
       [name]: type === 'checkbox' ? checked : value
     });
   };
-  
+
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
-  
-  // Function to determine redirect based on user type
+
   const redirectBasedOnUserType = (user) => {
-    console.log('Redirecting based on user data:', user);
-    
-    // Extract user type from user data
-    const userType = user.userType || 
-                    (user.nis ? 'siswa' : 
-                     user.nik ? 'orangtua' : 
+    const userType = user.userType ||
+                    (user.nis ? 'siswa' :
+                     user.nik ? 'orangtua' :
                      user.nuptk ? 'guru' : null);
-    
-    console.log('Determined user type:', userType);
-    
+
     if (!userType) {
-      console.warn('Could not determine user type from:', user);
-      // Default to dashboard if we can't determine type
       navigate('/dashboard');
       return;
     }
-    
-    // Redirect based on user type
+
     switch (userType) {
       case 'siswa':
         navigate('/dashboard/Student');
@@ -76,68 +65,59 @@ const Login = () => {
         navigate('/guru/dashboard');
         break;
       default:
-        // Fallback to general dashboard
         navigate('/dashboard');
     }
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
-    
+
     try {
       setLoading(true);
-      console.log('Attempting login with:', { username: formData.username });
-      
       const result = await login(formData.username, formData.password);
-      
-      console.log('Login response:', result);
-      
+
       if (result.success) {
-        // Login successful
         redirectBasedOnUserType(result.user);
       } else {
         setError(result.message || 'Login gagal');
       }
     } catch (error) {
-      console.error('Login error:', error);
       setError('Terjadi kesalahan saat login');
     } finally {
       setLoading(false);
     }
   };
-  
+
   const handleGoogleLogin = () => {
-    // Implement Google login functionality
-    console.log('Google login clicked');
     setError('Google login belum diimplementasikan');
   };
-  
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left Side - Login Form */}
       <div className="w-1/2 bg-blue-50 flex items-center justify-center">
         <div className="w-4/5 max-w-xl px-10 py-8">
           <h1 className="text-3xl font-bold text-center mb-10">Login</h1>
-          
+
           {message && (
             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6 text-base">
               {message}
             </div>
           )}
-          
+
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 text-base">
               {error}
             </div>
           )}
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="username" className="block text-gray-700 mb-2 text-base">NIS/NIK/NUPTK</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-500">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500">
                   <FaUser className="text-lg" />
                 </div>
                 <input
@@ -152,7 +132,7 @@ const Login = () => {
                 />
               </div>
             </div>
-            
+
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label htmlFor="password" className="block text-gray-700 text-base">Password</label>
@@ -161,7 +141,7 @@ const Login = () => {
                 </Link>
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-500">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500">
                   <FaLock className="text-lg" />
                 </div>
                 <input
@@ -183,7 +163,7 @@ const Login = () => {
                 </button>
               </div>
             </div>
-            
+
             <div>
               <label className="flex items-center">
                 <input
@@ -196,7 +176,7 @@ const Login = () => {
                 <span className="ml-2 text-gray-700 text-base">Ingatkan saya</span>
               </label>
             </div>
-            
+
             <button
               type="submit"
               className="w-full bg-blue-500 text-white py-3 px-5 rounded-full hover:bg-blue-600 transition duration-200 font-semibold text-lg"
@@ -204,13 +184,13 @@ const Login = () => {
             >
               {loading ? 'Sedang memproses...' : 'Masuk'}
             </button>
-          
+
             <div className="flex items-center justify-center my-6">
               <div className="flex-grow border-t border-gray-300"></div>
               <span className="mx-4 text-gray-500 text-base">Atau</span>
               <div className="flex-grow border-t border-gray-300"></div>
             </div>
-            
+
             <button
               type="button"
               onClick={handleGoogleLogin}
@@ -219,7 +199,7 @@ const Login = () => {
               <FaGoogle className="text-blue-500 mr-3 text-xl" />
               Login dengan Google
             </button>
-          
+
             <div className="text-center mt-8">
               <p className="text-gray-600 text-base">
                 Belum punya akun? {' '}
@@ -231,7 +211,7 @@ const Login = () => {
           </form>
         </div>
       </div>
-      
+
       {/* Right Side - Image */}
       <div className="w-1/2 bg-red-500 overflow-hidden">
         <img

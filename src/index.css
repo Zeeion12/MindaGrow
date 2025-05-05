@@ -1,3 +1,7 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
 /* Font */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
@@ -7,17 +11,17 @@
   font-weight: 400;
 }
 
-@import "tailwindcss";
+@layer base {
+  :root {
+    --font-poppins: Poppins, "sans-serif";
+    --font-inter: Inter, "sans-serif";
+    --color-biru-dasar: #4778EC;
+    --color-putih-second: #E2E8F0;
+    --color-gold-first: #FBBF24;
 
-@theme {
-  --font-poppins: Poppins, "sans-serif";
-  --font-inter: Inter, "sans-serif";
-  --color-biru-dasar: #4778EC;
-  --color-putih-second: #E2E8F0;
-  --color-gold-first: #FBBF24;
-
-  /* Breakpoint */
-  --breakpoint-xs: 200px
+    /* Breakpoint */
+    --breakpoint-xs: 200px;
+  }
 }
 
 /* Hide Scrollbar */
@@ -30,9 +34,9 @@
 }
 
 html body {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    background-color: #E8EFF6;
-    scroll-behavior: smooth;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #E8EFF6;
+  scroll-behavior: smooth;
 }

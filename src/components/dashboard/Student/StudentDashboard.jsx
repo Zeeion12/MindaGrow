@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BiCrown, BiLogOut, BiUser, BiCog } from 'react-icons/bi';
 import { useAuth } from '../../../context/AuthContext';
-import SideBar from '../../layout/SideBar';
+import SideBar from '../../layout/layoutParts/SideBar';
 import LogoutConfirmationModal from '../../common/LogoutConfirmationModal';
 import axios from 'axios';
 
