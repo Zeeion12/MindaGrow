@@ -62,7 +62,7 @@ const RegisterSiswa = () => {
       };
       
       // Gunakan axios tanpa proxy Vite - langsung ke server API
-      const SERVER_URL = 'http://localhost:3000';
+      const SERVER_URL = 'http://localhost:5000';
       
       // Langkah 1: Verifikasi server berjalan
       try {

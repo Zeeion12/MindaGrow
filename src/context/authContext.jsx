@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import axios from 'axios';
 
 const AuthContext = createContext();
 
@@ -6,7 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
@@ -15,14 +16,13 @@ export const AuthProvider = ({ children }) => {
     }
     setLoading(false);
   }, []);
-    
-  // Login function
+
   const login = async (username, password) => {
     try {
-      const response = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/auth/login`, {
-        username,
-        password
-      });
+      const response = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/auth/login`,
+        { username, password }
+      );
 
       const user = response.data?.user;
 
@@ -48,12 +48,11 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message };
     }
   };
-  
-  // Register function
+
   const register = async (userData) => {
     try {
       const response = await axios.post('/api/auth/register', userData);
-      
+
       if (response.data.success) {
         return {
           success: true,
@@ -67,68 +66,41 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Registration error:', error);
-      
-      // Handle specific error responses
-      if (error.response && error.response.data) {
-        return {
-          success: false,
-          message: error.response.data.message || 'Registrasi gagal'
-        };
-      }
-      
+
       return {
         success: false,
-        message: 'Terjadi kesalahan saat registrasi'
+        message: error.response?.data?.message || 'Terjadi kesalahan saat registrasi'
       };
     }
   };
-  
+
   const logout = () => {
     setCurrentUser(null);
     setIsLoggedIn(false);
     localStorage.removeItem('user');
   };
-  
-  // Get user role
+
   const getUserRole = () => {
     if (!currentUser) return null;
-    
-    // If userType is explicitly set, use it
-    if (currentUser.userType) {
-      return currentUser.userType;
-    }
-    
-    // Otherwise infer from identifiers
+    if (currentUser.userType) return currentUser.userType;
     if (currentUser.nis) return 'siswa';
     if (currentUser.nik) return 'orangtua';
     if (currentUser.nuptk) return 'guru';
-    
-    // Default fallback
     return null;
   };
-  
-  // Auth context value
+
   const value = {
     currentUser,
+    isLoggedIn,
     login,
-    register,
     logout,
+    register,
+    getUserRole,
     loading,
-    getUserRole
   };
 
-  if (loading) return <div>Loading...</div>;
-  
   return (
-    <AuthContext.Provider
-      value={{
-        currentUser,
-        isLoggedIn,
-        login,
-        logout,
-        register,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

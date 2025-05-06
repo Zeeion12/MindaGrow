@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
 import { useAuth } from './context/AuthContext';
 import Chatbot from './Chatbot';
+import PrivateRoute from './router/PrivateRoute';
 
 // Import komponen autentikasi
 import Login from './components/auth/login';
@@ -57,7 +58,11 @@ export default function App() {
       {/* Rute yang perlu login */}
       {isLoggedIn ? (
         <>
-          <Route path="/dashboard/Student" element={<StudentDashboard />} />
+          <Route path="/dashboard/student" element={
+            <PrivateRoute>
+              <StudentDashboard />
+            </PrivateRoute>
+          } />
           <Route path="/kursus" element={<StudentDashboard />} />
           <Route path="/kelas" element={<StudentDashboard />} />
           <Route path="/game" element={<StudentDashboard />} />

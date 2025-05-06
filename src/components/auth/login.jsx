@@ -7,13 +7,13 @@ const Login = () => {
   const { login, currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     rememberMe: false
   });
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -33,6 +33,10 @@ const Login = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    // Validasi hanya angka untuk username (NIS/NIK/NUPTK)
+    if (name === 'username' && !/^\d*$/.test(value)) return;
+
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value
@@ -45,9 +49,9 @@ const Login = () => {
 
   const redirectBasedOnUserType = (user) => {
     const userType = user.userType ||
-                    (user.nis ? 'siswa' :
-                     user.nik ? 'orangtua' :
-                     user.nuptk ? 'guru' : null);
+      (user.nis ? 'siswa' :
+       user.nik ? 'orangtua' :
+       user.nuptk ? 'guru' : null);
 
     if (!userType) {
       navigate('/dashboard');
@@ -73,17 +77,25 @@ const Login = () => {
     e.preventDefault();
     setError('');
     setMessage('');
+    setLoading(true);
 
     try {
-      setLoading(true);
       const result = await login(formData.username, formData.password);
 
       if (result.success) {
+        const token = result.token || 'fake-token'; // sesuaikan jika ada token dari backend
+
+        if (formData.rememberMe) {
+          localStorage.setItem('authToken', token);
+        } else {
+          sessionStorage.setItem('authToken', token);
+        }
+
         redirectBasedOnUserType(result.user);
       } else {
         setError(result.message || 'Login gagal');
       }
-    } catch (error) {
+    } catch (err) {
       setError('Terjadi kesalahan saat login');
     } finally {
       setLoading(false);
@@ -145,7 +157,7 @@ const Login = () => {
                   <FaLock className="text-lg" />
                 </div>
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   id="password"
                   name="password"
                   className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
@@ -202,7 +214,7 @@ const Login = () => {
 
             <div className="text-center mt-8">
               <p className="text-gray-600 text-base">
-                Belum punya akun? {' '}
+                Belum punya akun?{' '}
                 <Link to="/role-selection" className="text-blue-500 font-medium hover:underline">
                   Register
                 </Link>
@@ -220,7 +232,7 @@ const Login = () => {
           className="w-full h-full object-cover"
           onError={(e) => {
             e.target.onerror = null;
-            e.target.src = "https://source.unsplash.com/random/1080x1920/?students,education";
+            e.target.src = 'https://source.unsplash.com/random/1080x1920/?students,education';
           }}
         />
       </div>
