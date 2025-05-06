@@ -228,10 +228,11 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    console.log('Received login request:', { username: req.body.username });
-    const { username, password } = req.body;
+    // Ubah dari username menjadi nis
+    console.log('Received login request:', { nis: req.body.nis });
+    const { nis, password } = req.body;
     
-    // Check all user tables for the username (which could be nis, nik, or nuptk)
+    // Check all user tables for the identifier (nis, nik, or nuptk)
     const queryChecks = [
       { table: 'siswa', idField: 'nis' },
       { table: 'orangtua', idField: 'nik' },
@@ -244,7 +245,7 @@ exports.login = async (req, res) => {
     
     for (const check of queryChecks) {
       const query = `SELECT * FROM ${check.table} WHERE ${check.idField} = $1`;
-      const result = await db.query(query, [username]);
+      const result = await db.query(query, [nis]);
       
       if (result.rows.length > 0) {
         user = result.rows[0];
@@ -260,7 +261,7 @@ exports.login = async (req, res) => {
       console.log('No user found by ID, checking by email');
       for (const check of queryChecks) {
         const query = `SELECT * FROM ${check.table} WHERE surel = $1`;
-        const result = await db.query(query, [username]);
+        const result = await db.query(query, [nis]);
         
         if (result.rows.length > 0) {
           user = result.rows[0];
@@ -273,10 +274,10 @@ exports.login = async (req, res) => {
     }
     
     if (!user) {
-      console.log('No user found with provided username/email');
+      console.log('No user found with provided nis/email');
       return res.status(401).json({
         success: false,
-        message: 'Username/email atau password salah',
+        message: 'NIS/NIK/NUPTK atau password salah',
       });
     }
     
@@ -288,7 +289,7 @@ exports.login = async (req, res) => {
       console.log('Invalid password');
       return res.status(401).json({
         success: false,
-        message: 'Username/email atau password salah',
+        message: 'NIS/NIK/NUPTK atau password salah',
       });
     }
     

@@ -1,155 +1,95 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
+const bodyParser = require('body-parser');
 const path = require('path');
-const dotenv = require('dotenv');
-const http = require('http');
 
-// Load .env file from the root project directory (one level up)
-const envPaths = [
-  path.resolve(__dirname, '../../.env'),
-  path.resolve(__dirname, '../.env'),
-  path.resolve(__dirname, './.env')
-];
+// Import routes
+const authRoutes = require('./routes/authRoutes');
 
-let envLoaded = false;
-for (const envPath of envPaths) {
-  try {
-    const result = dotenv.config({ path: envPath });
-    if (result.parsed) {
-      console.log(`Loaded .env from ${envPath}`);
-      envLoaded = true;
-      break;
-    }
-  } catch (error) {
-    // Skip if can't load from this path
-  }
-}
+// Import config
+const db = require('./config/db');  // Ubah dari dbConnection menjadi db
 
-if (!envLoaded) {
-  console.log('No .env file found. Using default values.');
-}
-
-// Initialize app
+// Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Konfigurasi server untuk mengatasi masalah ENOBUFS
-const serverOptions = {
-  maxHeaderSize: 16384, // 16KB header size
-  keepAliveTimeout: 5000, // 5 seconds keep-alive timeout
-  connectionsCheckingInterval: 30000 // 30 seconds interval to check for defunct connections
-};
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors({
-  origin: '*', // Allow all origins
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: ['http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
-// Handling large request bodies
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Logging middleware
-app.use(morgan('dev'));
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Static files
-app.use('/uploads', express.static(path.join(__dirname, process.env.UPLOAD_DIR || 'uploads')));
-
-// Import routes - make sure to require the module that exports the router
-const authRoutes = require('./routes/authRoutes');
-
-// Health check endpoint for debugging connection issues
+// Health check endpoint
 app.get('/api/health', (req, res) => {
-  // Also check database connection
-  try {
-    const db = require('./config/db');
-    
-    db.query('SELECT NOW()', (err, result) => {
-      if (err) {
-        return res.status(500).json({
-          status: 'error',
-          message: 'Database connection error',
-          error: err.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      res.status(200).json({
-        status: 'ok',
-        message: 'Server is running',
-        database: 'connected',
-        dbTime: result.rows[0].now,
-        timestamp: new Date().toISOString(),
-        env: {
-          nodeEnv: process.env.NODE_ENV || 'development',
-          port: PORT
-        }
-      });
-    });
-  } catch (error) {
-    res.status(200).json({
-      status: 'partial',
-      message: 'Server is running, but database connection failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Routes - make sure authRoutes is a router
-app.use('/api/auth', authRoutes);
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to MindaGrow API',
-    status: 'Server is running'
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date(),
+    server: 'MindaGrow API',
+    version: '1.0.0'
   });
 });
 
-// 404 handler
+// In your server.js, add this to serve the frontend
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// Add this at the bottom of your routes to handle SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// API Routes
+app.use('/api/auth', authRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Terjadi kesalahan pada server',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Middleware untuk logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// Handle 404 errors
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found',
-    path: req.originalUrl
+    message: 'Endpoint tidak ditemukan'
   });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Server error:', err.stack);
-  res.status(500).json({
-    success: false,
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
-});
-
-// Create HTTP server with options
-const server = http.createServer(serverOptions, app);
-
-// Configure event handlers for server
-server.on('error', (error) => {
-  console.error('Server error:', error);
-  
-  // Handle specific error types
-  if (error.code === 'ENOBUFS' || error.code === 'EMFILE') {
-    console.error('Network buffer/file descriptor issue. Restarting server...');
-    setTimeout(() => {
-      server.close(() => {
-        server.listen(PORT);
-      });
-    }, 1000);
+// Start the server
+const startServer = async () => {
+  try {
+    // Tidak perlu memanggil db sebagai fungsi, karena tampaknya
+    // db.js hanya mengekspor koneksi database, bukan fungsi
+    
+    // Start listening on specified port
+    app.listen(PORT, () => {
+      console.log(`Server berjalan pada http://localhost:${PORT}`);
+      console.log('Tekan CTRL+C untuk menghentikan server');
+    });
+  } catch (error) {
+    console.error('Gagal menjalankan server:', error);
+    process.exit(1);
   }
-});
+};
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Health check endpoint: http://localhost:${PORT}/api/health`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Run the server
+startServer();

@@ -1,16 +1,18 @@
-import FeaturedCard from "../components/layout/FeaturedCard"
-import ReviewCard from "../components/layout/ReviewCard";
+import FeaturedCard from "../components/layout/layoutParts/FeaturedCard"
+import ReviewCard from "../components/layout/layoutParts/ReviewCard";
 
 import { 
-    LuLoaderPinwheel,
     LuUser, 
     LuBot,
     LuGamepad2
 } from 'react-icons/lu';
 
+// Replace the problematic LuLoaderPinwheel with a different icon
+import { FaSpinner } from 'react-icons/fa';
+
 const iconCard = [
     { title: "Personalized Learning", icon: LuUser, color: "bg-biru-dasar", description: "MindaGrow memberikan pengalaman belajar yang disesuaikan dengan kebutuhan dan gaya belajar setiap anak." },
-    { title: "Interactive Learning", icon: LuLoaderPinwheel, color: "bg-biru-dasar", description: "MindaGrow menggunakan metode pembelajaran interaktif yang membuat anak lebih terlibat dan termotivasi." },
+    { title: "Interactive Learning", icon: FaSpinner, color: "bg-biru-dasar", description: "MindaGrow menggunakan metode pembelajaran interaktif yang membuat anak lebih terlibat dan termotivasi." },
     { title: "AI-Powered Chatbot", icon: LuBot, color: "bg-biru-dasar", description: "MindaGrow dilengkapi dengan chatbot berbasis AI yang siap membantu anak dalam menjawab pertanyaan dan memberikan penjelasan." },
     { title: "Gamification", icon: LuGamepad2, color: "bg-biru-dasar", description: "MindaGrow mengintegrasikan elemen permainan dalam proses belajar untuk meningkatkan minat dan motivasi anak." }
 ];
@@ -112,7 +114,5 @@ export default function Landing() {
                 </div>
             </section>
         </>
-        
     )
 }
-  

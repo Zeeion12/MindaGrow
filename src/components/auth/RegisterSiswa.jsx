@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
@@ -6,6 +6,10 @@ import axios from 'axios';
 const RegisterSiswa = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
+  
+  // API configuration
+  const API_URL = 'http://localhost:3000/api';
+  const [backendStatus, setBackendStatus] = useState({checked: false, available: false});
   
   const [formData, setFormData] = useState({
     namaLengkap: '',
@@ -22,7 +26,22 @@ const RegisterSiswa = () => {
   const [konfirmasiPasswordVisible, setKonfirmasiPasswordVisible] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [debugInfo, setDebugInfo] = useState(null);
+  
+  // Check backend availability on component mount
+  useEffect(() => {
+    const checkBackendStatus = async () => {
+      try {
+        await axios.get(`${API_URL}/health`, { timeout: 3000 });
+        setBackendStatus({checked: true, available: true});
+        console.log('Backend available');
+      } catch (err) {
+        console.log('Backend unavailable:', err.message);
+        setBackendStatus({checked: true, available: false});
+      }
+    };
+    
+    checkBackendStatus();
+  }, []);
   
   const togglePasswordVisibility = () => {
     setPasswordVisible(!passwordVisible);
@@ -43,7 +62,6 @@ const RegisterSiswa = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setDebugInfo(null);
     
     // Validate passwords match
     if (formData.password !== formData.konfirmasiPassword) {
@@ -55,38 +73,44 @@ const RegisterSiswa = () => {
       setLoading(true);
       console.log('Mengirim data registrasi:', formData);
       
-      // Add userType for siswa
+      // Add userType for siswa (menggunakan "siswa" bukan "Student")
       const userData = {
         ...formData,
-        userType: 'siswa'
+        userType: 'siswa'  // Ubah dari "Student" menjadi "siswa"
       };
       
-      // Gunakan axios tanpa proxy Vite - langsung ke server API
-      const SERVER_URL = 'http://localhost:5000';
-      
-      // Langkah 1: Verifikasi server berjalan
-      try {
-        const healthResponse = await axios.get(`${SERVER_URL}/api/health`, {
-          timeout: 5000
+      // If backend is unavailable, use local storage
+      if (!backendStatus.available) {
+        console.log('Using fallback registration (backend unavailable)');
+        
+        // Get existing users from localStorage
+        const existingUsers = JSON.parse(localStorage.getItem('mockUsers') || '[]');
+        
+        // Check if user with same NIS or email already exists
+        const existingUser = existingUsers.find(
+          user => user.nis === userData.nis || user.surel === userData.surel
+        );
+        
+        if (existingUser) {
+          throw new Error('NIS atau Email sudah terdaftar. Silahkan gunakan yang lain.');
+        }
+        
+        // Add new user to localStorage
+        existingUsers.push(userData);
+        localStorage.setItem('mockUsers', JSON.stringify(existingUsers));
+        
+        console.log('Mock registration successful:', userData);
+        
+        // Redirect to login page with success message
+        navigate('/login', { 
+          state: { message: 'Registrasi berhasil! Silahkan login dengan akun yang telah didaftarkan.' } 
         });
-        console.log('Server health check:', healthResponse.data);
-        setDebugInfo(prev => ({
-          ...prev,
-          serverHealth: 'OK',
-          serverTime: healthResponse.data.dbTime || healthResponse.data.timestamp
-        }));
-      } catch (healthError) {
-        console.error('Server health check failed:', healthError);
-        setDebugInfo(prev => ({
-          ...prev,
-          serverHealth: 'FAILED',
-          healthError: healthError.message
-        }));
-        throw new Error(`Server tidak tersedia: ${healthError.message}`);
+        
+        return;
       }
       
-      // Langkah 2: Kirim registrasi langsung ke API
-      const response = await axios.post(`${SERVER_URL}/api/auth/register`, userData, {
+      // Real API registration request when backend is available
+      const response = await axios.post(`${API_URL}/auth/register`, userData, {
         headers: {
           'Content-Type': 'application/json'
         },
@@ -94,10 +118,6 @@ const RegisterSiswa = () => {
       });
       
       console.log('Respons registrasi:', response.data);
-      setDebugInfo(prev => ({
-        ...prev,
-        registrationResponse: response.data
-      }));
       
       if (response.data.success) {
         // Redirect to login page with success message
@@ -110,25 +130,20 @@ const RegisterSiswa = () => {
     } catch (error) {
       console.error('Registration error:', error);
       
-      setDebugInfo(prev => ({
-        ...prev,
-        error: {
-          message: error.message,
-          code: error.code,
-          response: error.response?.data
-        }
-      }));
-      
-      if (error.code === 'ECONNABORTED') {
-        setError('Koneksi timeout. Server membutuhkan waktu terlalu lama untuk merespons.');
-      } else if (error.response) {
+      if (error.response) {
         // Server merespons dengan status error
         const status = error.response.status;
         const message = error.response.data?.message || 'Terjadi kesalahan';
         
-        setError(`Error ${status}: ${message}`);
+        if (status === 409) {
+          setError('NIS atau Email sudah terdaftar. Silahkan gunakan yang lain.');
+        } else {
+          setError(`Error ${status}: ${message}`);
+        }
+      } else if (error.code === 'ECONNABORTED') {
+        setError('Koneksi timeout. Server membutuhkan waktu terlalu lama untuk merespons.');
       } else if (error.request) {
-        setError('Tidak dapat terhubung ke server API. Pastikan server sedang berjalan.');
+        setError('Tidak dapat terhubung ke server API. Menggunakan mode offline.');
       } else {
         setError(`Error: ${error.message}`);
       }
@@ -142,22 +157,17 @@ const RegisterSiswa = () => {
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">REGISTER - Siswa</h1>
+          
+          {!backendStatus.available && backendStatus.checked && (
+            <div className="mt-2 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded text-sm">
+              Server API tidak tersedia. Registrasi akan disimpan secara lokal.
+            </div>
+          )}
         </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
-          </div>
-        )}
-
-        {debugInfo && (
-          <div className="bg-gray-100 border border-gray-300 text-gray-700 px-4 py-3 rounded mb-4 text-xs">
-            <details>
-              <summary className="cursor-pointer font-medium">Debug Info (untuk developer)</summary>
-              <pre className="mt-2 whitespace-pre-wrap">
-                {JSON.stringify(debugInfo, null, 2)}
-              </pre>
-            </details>
           </div>
         )}
 

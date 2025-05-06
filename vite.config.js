@@ -11,11 +11,12 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5174, // Adjust if needed
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // Ganti port ini sesuai dengan port server backend Anda
+        target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false,
+        secure: false
       }
     }
   }
