@@ -1,18 +1,31 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables
+const envPath = path.resolve(__dirname, '../.env');
+dotenv.config({ path: envPath });
+console.log(`Using .env from server directory: ${envPath}`);
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 
 // Import config
-const db = require('./config/db');  // Ubah dari dbConnection menjadi db
+const db = require('./config/db');
 
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Tampilkan konfigurasi database
+console.log('Database configuration:');
+console.log(`- User: ${process.env.DB_USER || 'postgres'}`);
+console.log(`- Host: ${process.env.DB_HOST || 'localhost'}`);
+console.log(`- Database: ${process.env.DB_NAME || 'mindagrow'}`);
+console.log(`- Port: ${process.env.DB_PORT || 5432}`);
+console.log(`- Password: [SET]`);
 
 // Middleware
 app.use(cors({
@@ -38,17 +51,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// In your server.js, add this to serve the frontend
+// API Routes
+app.use('/api/auth', authRoutes);
+
+// Serve frontend from dist folder
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
-// Add this at the bottom of your routes to handle SPA routing
+// Handle SPA routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
-
-// API Routes
-app.use('/api/auth', authRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -58,12 +71,6 @@ app.use((err, req, res, next) => {
     message: 'Terjadi kesalahan pada server',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
-});
-
-// Middleware untuk logging
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
 });
 
 // Handle 404 errors
@@ -77,8 +84,9 @@ app.use((req, res) => {
 // Start the server
 const startServer = async () => {
   try {
-    // Tidak perlu memanggil db sebagai fungsi, karena tampaknya
-    // db.js hanya mengekspor koneksi database, bukan fungsi
+    // Cek koneksi database
+    await db.query('SELECT NOW()');
+    console.log(`Database connected successfully at: ${new Date().toISOString()}`);
     
     // Start listening on specified port
     app.listen(PORT, () => {

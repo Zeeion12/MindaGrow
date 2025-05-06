@@ -73,10 +73,9 @@ const RegisterSiswa = () => {
       setLoading(true);
       console.log('Mengirim data registrasi:', formData);
       
-      // Add userType for siswa (menggunakan "siswa" bukan "Student")
       const userData = {
         ...formData,
-        userType: 'siswa'  // Ubah dari "Student" menjadi "siswa"
+        userType: 'siswa' 
       };
       
       // If backend is unavailable, use local storage

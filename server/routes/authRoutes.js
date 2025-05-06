@@ -10,7 +10,7 @@ router.post('/register', authController.register);
 router.post('/login', authController.login);
 
 // Check authentication status route (protected)
-router.get('/check-status', authMiddleware, authController.checkStatus);
+router.get('/verify', authMiddleware, authController.checkStatus);
 
 // Make sure to export the router
 module.exports = router;

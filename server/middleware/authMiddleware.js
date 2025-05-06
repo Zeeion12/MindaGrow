@@ -1,87 +1,80 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
-// Middleware function
-const authMiddleware = async (req, res, next) => {
+module.exports = async (req, res, next) => {
   try {
-    // Check for Authorization header
+    // Get token from Authorization header
     const authHeader = req.headers.authorization;
-    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
-        message: 'Tidak terautentikasi'
+        message: 'Tidak ada token, otorisasi ditolak'
       });
     }
     
-    // Extract token
     const token = authHeader.split(' ')[1];
     
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Get user info from database based on user type
-    let user;
-    let query;
-    let params;
-    
-    switch (decoded.userType) {
-      case 'siswa':
-        query = 'SELECT * FROM siswa WHERE nis = $1';
-        params = [decoded.id];
-        break;
-      case 'orangtua':
-        query = 'SELECT * FROM orangtua WHERE nik = $1';
-        params = [decoded.id];
-        break;
-      case 'guru':
-        query = 'SELECT * FROM guru WHERE nuptk = $1';
-        params = [decoded.id];
-        break;
-      default:
+    try {
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Get user from token
+      let user = null;
+      let userType = decoded.userType;
+      
+      // Determine which table to query based on user type
+      let table = '';
+      let idField = '';
+      
+      switch (userType) {
+        case 'siswa':
+          table = 'siswa';
+          idField = 'nis';
+          break;
+        case 'orangtua':
+          table = 'orangtua';
+          idField = 'nik';
+          break;
+        case 'guru':
+          table = 'guru';
+          idField = 'nuptk';
+          break;
+        default:
+          return res.status(401).json({
+            success: false,
+            message: 'Token tidak valid'
+          });
+      }
+      
+      // Query database for user
+      const query = `SELECT * FROM ${table} WHERE ${idField} = $1`;
+      const result = await db.query(query, [decoded.id]);
+      
+      if (result.rows.length === 0) {
         return res.status(401).json({
           success: false,
-          message: 'Tipe pengguna tidak valid'
+          message: 'Token tidak valid'
         });
-    }
-    
-    const result = await db.query(query, params);
-    
-    if (result.rows.length === 0) {
+      }
+      
+      user = result.rows[0];
+      delete user.password_hash; // Don't send password hash
+      
+      // Add user to request
+      req.user = { ...user, userType };
+      next();
+    } catch (error) {
+      console.error('Token verification error:', error);
       return res.status(401).json({
         success: false,
-        message: 'Pengguna tidak ditemukan'
+        message: 'Token tidak valid'
       });
     }
-    
-    user = result.rows[0];
-    
-    // Remove sensitive information
-    delete user.password_hash;
-    
-    // Add user data to request
-    req.user = {
-      ...user,
-      userType: decoded.userType
-    };
-    
-    // Proceed to the next middleware or route handler
-    next();
   } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token tidak valid atau telah kedaluwarsa'
-      });
-    }
-    
     console.error('Auth middleware error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Terjadi kesalahan saat memverifikasi autentikasi'
+      message: 'Server error'
     });
   }
 };
-
-// Export the middleware function
-module.exports = authMiddleware;
