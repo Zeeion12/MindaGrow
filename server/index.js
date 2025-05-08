@@ -55,7 +55,7 @@ app.post('/api/check-nik', async (req, res) => {
   const { nik } = req.body;
   
   try {
-    const result = await pool.query('SELECT * FROM orangtua WHERE nik = $1', [nik]);
+    const result = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
     if (result.rows.length > 0) {
       res.json({ exists: true });
     } else {
@@ -100,6 +100,15 @@ app.post('/api/register', async (req, res) => {
         [userId, nuptk, nama_lengkap, no_telepon]
       );
     } else if (role === 'orangtua') {
+      // Periksa dulu apakah NIK terdaftar di tabel siswa
+      const nikCheck = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
+      
+      if (nikCheck.rows.length === 0) {
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ message: 'NIK tidak terdaftar oleh siswa manapun' });
+      }
+      
+      // Jika NIK valid, lanjutkan proses registrasi
       await pool.query(
         'INSERT INTO orangtua (user_id, nik, nama_lengkap, no_telepon) VALUES ($1, $2, $3, $4)',
         [userId, nik, nama_lengkap, no_telepon]

@@ -38,6 +38,13 @@ const Register = () => {
       setIsLoading(true);
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/check-nik`, { nik });
       setNikExists(response.data.exists);
+
+      if (response.data.exists) {
+        // Jika NIK ada, hapus error nik jika ada
+        setErrors(prev => ({...prev, nik: null}));
+      } else {
+        setErrors(prev => ({...prev, nik: 'NIK belum terdaftar oleh siswa'}));
+      }
     } catch (error) {
       console.error('Error checking NIK:', error);
     } finally {
