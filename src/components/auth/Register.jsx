@@ -43,7 +43,7 @@ const Register = () => {
         // Jika NIK ada, hapus error nik jika ada
         setErrors(prev => ({...prev, nik: null}));
       } else {
-        setErrors(prev => ({...prev, nik: 'NIK belum terdaftar oleh siswa'}));
+        setErrors(prev => ({...prev, nik: null}));
       }
     } catch (error) {
       console.error('Error checking NIK:', error);
@@ -78,7 +78,7 @@ const Register = () => {
       if (!nuptk) newErrors.nuptk = 'NUPTK wajib diisi';
     } else if (role === 'orangtua') {
       if (!nik) newErrors.nik = 'NIK wajib diisi';
-      if (nikExists === false) newErrors.nik = 'NIK belum didaftarkan oleh siswa';
+      if (nikExists === false) newErrors.nik = '';
     }
     
     return newErrors;
@@ -244,10 +244,10 @@ const Register = () => {
                   </button>
                 </div>
                 {nikExists === true && (
-                  <p className="mt-2 text-sm text-green-600">NIK terdaftar oleh siswa</p>
+                  <p className="mt-2 text-sm text-green-600">NIK telah terdaftar oleh siswa</p>
                 )}
                 {nikExists === false && (
-                  <p className="mt-2 text-sm text-red-600">NIK belum terdaftar oleh siswa</p>
+                  <p className="mt-2 text-sm text-red-600">NIK belum didaftar oleh siswa</p>
                 )}
                 {errors.nik && (
                   <p className="mt-2 text-sm text-red-600">{errors.nik}</p>

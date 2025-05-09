@@ -22,6 +22,47 @@ const pool = new Pool({
     port: process.env.DB_PORT || 5432,
   });
 
+async function fixParentRoles() {
+  const client = await pool.connect();
+  
+  try {
+    // Mulai transaksi
+    await client.query('BEGIN');
+    
+    // Temukan semua NIK dari tabel orangtua
+    const parentNiksResult = await client.query('SELECT nik FROM orangtua');
+    
+    if (parentNiksResult.rows.length === 0) {
+      console.log('Tidak ada data orangtua ditemukan.');
+      return;
+    }
+    
+    // Untuk setiap NIK orangtua, periksa user_id dan update role di tabel users
+    for (const row of parentNiksResult.rows) {
+      const parentResult = await client.query('SELECT user_id FROM orangtua WHERE nik = $1', [row.nik]);
+      
+      if (parentResult.rows.length > 0) {
+        const userId = parentResult.rows[0].user_id;
+        
+        // Update role di tabel users menjadi 'orangtua'
+        await client.query('UPDATE users SET role = $1 WHERE id = $2', ['orangtua', userId]);
+      }
+    }
+    
+    // Commit transaksi
+    await client.query('COMMIT');
+    
+  } catch (error) {
+    // Rollback jika terjadi error
+    await client.query('ROLLBACK');
+    console.error('Error saat memperbaiki role orangtua:', error);
+  } finally {
+    // Lepaskan client
+    client.release();
+  }
+}
+
+
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
     console.error('Database connection error:', err.message);
@@ -55,7 +96,12 @@ app.post('/api/check-nik', async (req, res) => {
   const { nik } = req.body;
   
   try {
+    console.log('Checking NIK:', nik);
+    
+    // Perbaikan query - cari di tabel siswa, bukan orangtua
     const result = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
+    console.log('Query result:', result.rows);
+    
     if (result.rows.length > 0) {
       res.json({ exists: true });
     } else {
@@ -80,27 +126,33 @@ app.post('/api/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // Insert into users table
+    // Tentukan role yang benar berdasarkan input
+    let userRole = role;
+    if (nis) userRole = 'siswa';
+    if (nuptk) userRole = 'guru';
+    if (nik && !nis && !nuptk) userRole = 'orangtua';
+    
+    // Insert into users table with the correct role
     const userResult = await pool.query(
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id',
-      [email, hashedPassword, role]
+      [email, hashedPassword, userRole]
     );
     
     const userId = userResult.rows[0].id;
     
     // Insert into role-specific table
-    if (role === 'siswa') {
+    if (userRole === 'siswa') {
       await pool.query(
         'INSERT INTO siswa (user_id, nis, nama_lengkap, nik_orangtua, no_telepon) VALUES ($1, $2, $3, $4, $5)',
         [userId, nis, nama_lengkap, nik_orangtua, no_telepon]
       );
-    } else if (role === 'guru') {
+    } else if (userRole === 'guru') {
       await pool.query(
         'INSERT INTO guru (user_id, nuptk, nama_lengkap, no_telepon) VALUES ($1, $2, $3, $4)',
         [userId, nuptk, nama_lengkap, no_telepon]
       );
-    } else if (role === 'orangtua') {
-      // Periksa dulu apakah NIK terdaftar di tabel siswa
+    } else if (userRole === 'orangtua') {
+      // Untuk orangtua, periksa dulu apakah NIK terdaftar di tabel siswa
       const nikCheck = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
       
       if (nikCheck.rows.length === 0) {
@@ -108,7 +160,6 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ message: 'NIK tidak terdaftar oleh siswa manapun' });
       }
       
-      // Jika NIK valid, lanjutkan proses registrasi
       await pool.query(
         'INSERT INTO orangtua (user_id, nik, nama_lengkap, no_telepon) VALUES ($1, $2, $3, $4)',
         [userId, nik, nama_lengkap, no_telepon]
@@ -133,10 +184,12 @@ app.post('/api/register', async (req, res) => {
 
 // Login
 app.post('/api/login', async (req, res) => {
-  console.log('Login request received:', req.body);
   const { identifier, password, remember } = req.body;
   
   try {
+    // Tambahkan log untuk debug
+    console.log('Login attempt with identifier:', identifier);
+    
     // Check if the identifier is NIS, NIK, or NUPTK
     let user;
     let roleInfo;
@@ -149,9 +202,10 @@ app.post('/api/login', async (req, res) => {
     
     if (siswaResult.rows.length > 0) {
       user = siswaResult.rows[0];
+      console.log('User found in siswa table with role:', user.role);
       roleInfo = {
         nama_lengkap: user.nama_lengkap,
-        role: user.role,
+        role: 'siswa', // Pastikan role diset dengan benar
         nis: user.nis
       };
     } else {
@@ -163,9 +217,10 @@ app.post('/api/login', async (req, res) => {
       
       if (guruResult.rows.length > 0) {
         user = guruResult.rows[0];
+        console.log('User found in guru table with role:', user.role);
         roleInfo = {
           nama_lengkap: user.nama_lengkap,
-          role: user.role,
+          role: 'guru', // Pastikan role diset dengan benar
           nuptk: user.nuptk
         };
       } else {
@@ -177,9 +232,10 @@ app.post('/api/login', async (req, res) => {
         
         if (orangtuaResult.rows.length > 0) {
           user = orangtuaResult.rows[0];
+          console.log('User found in orangtua table with role:', user.role);
           roleInfo = {
             nama_lengkap: user.nama_lengkap,
-            role: user.role,
+            role: 'orangtua', // Pastikan role diset dengan benar
             nik: user.nik
           };
         }
@@ -206,7 +262,7 @@ app.post('/api/login', async (req, res) => {
     // Generate JWT token
     const expiresIn = remember ? '7d' : '1d';
     const token = jwt.sign(
-      { id: user.user_id, role: user.role, ...roleInfo },
+      { id: user.user_id, role: roleInfo.role, ...roleInfo },
       process.env.JWT_SECRET || 'your_jwt_secret_key',
       { expiresIn }
     );
@@ -218,6 +274,7 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 });
+
 
 // Protected route example
 app.get('/api/dashboard', authenticateToken, (req, res) => {
