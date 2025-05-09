@@ -3,6 +3,10 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
 require('dotenv').config();
 
 const app = express();
@@ -62,6 +66,197 @@ async function fixParentRoles() {
   }
 }
 
+async function updateProfilePictureColumn() {
+  const client = await pool.connect();
+  
+  try {
+    // Mulai transaksi
+    await client.query('BEGIN');
+    
+    // Ubah tipe kolom profile_picture menjadi BYTEA
+    await client.query(`
+      ALTER TABLE users 
+      ALTER COLUMN profile_picture TYPE BYTEA USING profile_picture::BYTEA;
+    `);
+    
+    // Commit transaksi
+    await client.query('COMMIT');
+    
+    console.log('Kolom profile_picture berhasil diubah menjadi tipe BYTEA');
+  } catch (error) {
+    // Rollback jika terjadi error
+    await client.query('ROLLBACK');
+    console.error('Error saat mengubah kolom profile_picture:', error);
+  } finally {
+    // Lepaskan client
+    client.release();
+  }
+}
+
+// Middleware for JWT authentication
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ message: 'Akses ditolak' });
+  
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Token tidak valid' });
+    req.user = user;
+    next();
+  });
+};
+
+async function addProfilePictureColumn() {
+  const client = await pool.connect();
+  
+  try {
+    // Mulai transaksi
+    await client.query('BEGIN');
+    
+    // Tambahkan kolom profile_picture ke tabel users
+    await client.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS profile_picture TEXT DEFAULT NULL;
+    `);
+    
+    // Commit transaksi
+    await client.query('COMMIT');
+    
+    console.log('Kolom profile_picture berhasil ditambahkan ke tabel users');
+  } catch (error) {
+    // Rollback jika terjadi error
+    await client.query('ROLLBACK');
+    console.error('Error saat menambahkan kolom profile_picture:', error);
+  } finally {
+    // Lepaskan client
+    client.release();
+  }
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, 'uploads');
+    
+    // Buat direktori jika belum ada
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate nama file unik dengan timestamp
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'profile-' + uniqueSuffix + ext);
+  }
+});
+
+// Filter untuk menerima hanya file gambar
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('File harus berupa gambar'), false);
+  }
+};
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 2 * 1024 * 1024 // 2MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('File harus berupa gambar'), false);
+    }
+  }
+});
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Endpoint untuk upload dan update foto profil
+app.post('/api/users/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Tidak ada file yang diupload' });
+    }
+    
+    // Baca file sebagai binary data
+    const fileBuffer = req.file.buffer; // Jika menggunakan multer memory storage
+    
+    // Jika menggunakan disk storage, baca file dari disk
+    // const fileBuffer = fs.readFileSync(req.file.path);
+    
+    // Convert buffer to base64 for easier storage and retrieval
+    const base64Image = `data:${req.file.mimetype};base64,${fileBuffer.toString('base64')}`;
+    
+    // Update profile_picture di database
+    const result = await pool.query(
+      'UPDATE users SET profile_picture = $1 WHERE id = $2 RETURNING id',
+      [base64Image, req.user.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+    
+    // Jika menggunakan disk storage, hapus file setelah disimpan di database
+    // if (req.file.path) {
+    //   fs.unlinkSync(req.file.path);
+    // }
+    
+    // Update user data in response
+    const userResult = await pool.query(
+      'SELECT id, email, role, profile_picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    let userData = null;
+    if (userResult.rows.length > 0) {
+      userData = userResult.rows[0];
+      
+      // Jika kita menyimpan role-specific info di tabel terpisah, gabungkan datanya
+      if (userData.role === 'siswa') {
+        const siswaResult = await pool.query(
+          'SELECT nama_lengkap, nis FROM siswa WHERE user_id = $1',
+          [userData.id]
+        );
+        if (siswaResult.rows.length > 0) {
+          userData = { ...userData, ...siswaResult.rows[0] };
+        }
+      } else if (userData.role === 'guru') {
+        const guruResult = await pool.query(
+          'SELECT nama_lengkap, nuptk FROM guru WHERE user_id = $1',
+          [userData.id]
+        );
+        if (guruResult.rows.length > 0) {
+          userData = { ...userData, ...guruResult.rows[0] };
+        }
+      } else if (userData.role === 'orangtua') {
+        const orangtuaResult = await pool.query(
+          'SELECT nama_lengkap, nik FROM orangtua WHERE user_id = $1',
+          [userData.id]
+        );
+        if (orangtuaResult.rows.length > 0) {
+          userData = { ...userData, ...orangtuaResult.rows[0] };
+        }
+      }
+    }
+    
+    res.json({ 
+      message: 'Foto profil berhasil diperbarui',
+      profile_picture: base64Image,
+      user: userData
+    });
+  } catch (error) {
+    console.error('Error updating profile picture:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
 
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
@@ -77,19 +272,6 @@ pool.query('SELECT NOW()', (err, res) => {
     console.log('Database connected successfully');
   }
 });
-// Middleware for JWT authentication
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) return res.status(401).json({ message: 'Akses ditolak' });
-  
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Token tidak valid' });
-    req.user = user;
-    next();
-  });
-};
 
 // Check NIK parent (for student registration)
 app.post('/api/check-nik', async (req, res) => {
@@ -276,12 +458,55 @@ app.post('/api/login', async (req, res) => {
 });
 
 
-// Protected route example
-app.get('/api/dashboard', authenticateToken, (req, res) => {
-  res.json({ 
-    message: 'Data berhasil diambil',
-    user: req.user 
-  });
+app.get('/api/dashboard', authenticateToken, async (req, res) => {
+  try {
+    // Ambil data user dari database
+    const userResult = await pool.query(
+      'SELECT id, email, role, profile_picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+    
+    let userData = userResult.rows[0];
+    
+    // Gabungkan dengan data dari tabel role-specific
+    if (userData.role === 'siswa') {
+      const siswaResult = await pool.query(
+        'SELECT nama_lengkap, nis FROM siswa WHERE user_id = $1',
+        [userData.id]
+      );
+      if (siswaResult.rows.length > 0) {
+        userData = { ...userData, ...siswaResult.rows[0] };
+      }
+    } else if (userData.role === 'guru') {
+      const guruResult = await pool.query(
+        'SELECT nama_lengkap, nuptk FROM guru WHERE user_id = $1',
+        [userData.id]
+      );
+      if (guruResult.rows.length > 0) {
+        userData = { ...userData, ...guruResult.rows[0] };
+      }
+    } else if (userData.role === 'orangtua') {
+      const orangtuaResult = await pool.query(
+        'SELECT nama_lengkap, nik FROM orangtua WHERE user_id = $1',
+        [userData.id]
+      );
+      if (orangtuaResult.rows.length > 0) {
+        userData = { ...userData, ...orangtuaResult.rows[0] };
+      }
+    }
+    
+    res.json({ 
+      message: 'Data berhasil diambil',
+      user: userData 
+    });
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

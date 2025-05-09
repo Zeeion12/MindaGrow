@@ -8,6 +8,7 @@ import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
 import DashboardLayout from './components/layout/DashboardLayout';
+import ProfileSettings from './pages/setting/ProfileSettings';
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -48,6 +49,7 @@ function App() {
               <DashboardOrangtua />
             </ProtectedRoute>
           } />
+          <Route path="/pengaturan" element={<ProfileSettings />} />
         </Route>
       </Routes>
     </AuthProvider>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import LogoutConfirmation from '../../LogoutConfirmation';
+import LogoutConfirmation from './../../LogoutConfirmation';
+import ProfilePicture from './../../ProfilePicture';
 
 const Header = () => {
   const { user, logout } = useAuth();
@@ -26,7 +27,9 @@ const Header = () => {
           Dashboard {user?.role === 'siswa' ? 'Siswa' : user?.role === 'guru' ? 'Guru' : 'Orang Tua'}
         </h1>
         <div className="flex items-center">
-          <span className="text-gray-700 mr-4">{user?.nama_lengkap}</span>
+          <div className="flex items-center mr-4">
+            <ProfilePicture user={user} size="sm" className="mr-2" />
+          </div>
           <button
             onClick={handleLogoutClick}
             className="text-gray-500 hover:text-gray-700 focus:outline-none"

@@ -14,32 +14,34 @@ export const AuthProvider = ({ children }) => {
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    setUser(null);
-  };
-  
-  useEffect(() => {
+  const fetchUserData = async () => {
     const token = localStorage.getItem('token');
     
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Verify token and get user data
-      axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/dashboard`)
-        .then(response => {
-          setUser(response.data.user);
-        })
-        .catch(() => {
-          logout(); // This is where the error is occurring
-        })
-        .finally(() => {
-          setLoading(false);
-        });
+      try {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
+        // Fetch user data including profile picture
+        const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/dashboard`);
+        
+        // Make sure we're getting the complete user data including profile_picture
+        console.log('Fetched user data:', response.data);
+        
+        setUser(response.data.user);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        handleLogout();
+      } finally {
+        setLoading(false);
+      }
     } else {
       setLoading(false);
     }
+  };
+  
+  // Load user data on initial mount
+  useEffect(() => {
+    fetchUserData();
   }, [navigate]);
   
   const login = async (identifier, password, remember) => {
@@ -60,6 +62,12 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       throw error.response?.data?.message || 'Login gagal';
     }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    delete axios.defaults.headers.common['Authorization'];
+    setUser(null);
   };
 
   const handleLogout = async () => {
@@ -84,13 +92,21 @@ export const AuthProvider = ({ children }) => {
       setLoggingOut(false);
     }
   };
+
+  const updateUser = async (userData) => {
+    setUser(userData);
+
+    await fetchUserData();
+  };
   
   const value = {
     user,
     loading,
     loggingOut,
     login,
-    logout: handleLogout
+    updateUser,
+    logout: handleLogout,
+    refreshUserData: fetchUserData
   };
   
   return (
