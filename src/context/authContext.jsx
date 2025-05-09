@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const AuthContext = createContext();
@@ -10,6 +11,8 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const navigate = useNavigate();
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -37,7 +40,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [navigate]);
   
   const login = async (identifier, password, remember) => {
     try {
@@ -58,12 +61,36 @@ export const AuthProvider = ({ children }) => {
       throw error.response?.data?.message || 'Login gagal';
     }
   };
+
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      
+      // Optional: Call backend to invalidate the token
+      // await axios.post('/api/logout');
+      
+      // Clear local storage and auth headers
+      localStorage.removeItem('token');
+      delete axios.defaults.headers.common['Authorization'];
+      
+      // Clear user state
+      setUser(null);
+      
+      // Navigate to login page
+      navigate('/login');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      setLoggingOut(false);
+    }
+  };
   
   const value = {
     user,
     loading,
+    loggingOut,
     login,
-    logout
+    logout: handleLogout
   };
   
   return (
@@ -72,3 +99,5 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+export default AuthContext;
