@@ -1,7 +1,7 @@
 import React from 'react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import { RiBarChartFill } from 'react-icons/ri';
-import Header from '../../layout/layoutParts/Header';
+import Header from '../layout/layoutParts/Header';
 
 const DashboardSiswa = () => {
   const { user, logout } = useAuth();

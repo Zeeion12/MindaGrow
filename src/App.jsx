@@ -4,9 +4,9 @@ import LandingPage from './pages/LandingPage';
 import RoleSelection from './components/auth/RoleSelection';
 import Register from './components/auth/Register';
 import Login from './components/auth/Login';
-import DashboardSiswa from './components/dashboard/Siswa/DashboardSiswa';
-import DashboardGuru from './components/dashboard/Guru/DashboardGuru';
-import DashboardOrangtua from './components/dashboard/Orangtua/DashboardOrangtua';
+import DashboardSiswa from './components/dashboard/DashboardSiswa';
+import DashboardGuru from './components/dashboard/DashboardGuru';
+import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
 import DashboardLayout from './components/layout/DashboardLayout';
 import { AuthProvider, useAuth } from './context/AuthContext'
 

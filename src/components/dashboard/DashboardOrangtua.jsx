@@ -1,6 +1,6 @@
 import React from 'react';
-import { useAuth } from '../../../context/AuthContext';
-import Sidebar from '../../layout/layoutParts/SideBar';
+import { useAuth } from '../../context/AuthContext';
+import Sidebar from '../layout/layoutParts/SideBar';
 
 const DashboardOrangtua = () => {
   const { user, logout } = useAuth();
