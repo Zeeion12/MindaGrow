@@ -24,9 +24,6 @@ export const AuthProvider = ({ children }) => {
         // Fetch user data including profile picture
         const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/dashboard`);
         
-        // Make sure we're getting the complete user data including profile_picture
-        console.log('Fetched user data:', response.data);
-        
         setUser(response.data.user);
       } catch (error) {
         console.error('Error fetching user data:', error);

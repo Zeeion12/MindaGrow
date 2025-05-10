@@ -8,6 +8,11 @@ import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
 import DashboardLayout from './components/layout/DashboardLayout';
+// Import komponen kursus
+import CourseList from './pages/courses/CourseList';
+import CourseDetail from './pages/courses/CourseDetail';
+import CourseLearn from './pages/courses/CourseLearn';
+
 import ProfileSettings from './pages/setting/ProfileSettings';
 import { AuthProvider, useAuth } from './context/AuthContext'
 
@@ -34,6 +39,8 @@ function App() {
         <Route path="/register/:role" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<DashboardLayout />}>
+
+          {/*Route khusus dashboard*/}
           <Route path="/dashboard/siswa" element={
             <ProtectedRoute allowedRoles={['siswa']}>
               <DashboardSiswa />
@@ -49,6 +56,30 @@ function App() {
               <DashboardOrangtua />
             </ProtectedRoute>
           } />
+
+          {/*Route khusus kursus*/}
+          <Route path="/kursus" element={
+            <ProtectedRoute allowedRoles={['siswa', 'guru', 'orangtua']}>
+              <CourseList />
+            </ProtectedRoute>
+          } />
+          <Route path="/kursus/:courseId" element={
+            <ProtectedRoute allowedRoles={['siswa', 'guru', 'orangtua']}>
+              <CourseDetail />
+            </ProtectedRoute>
+          } />
+          <Route path="/kursus/:courseId/learn" element={
+            <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
+              <CourseLearn />
+            </ProtectedRoute>
+          } />
+          <Route path="/kursus/:courseId/learn/:lessonId" element={
+            <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
+              <CourseLearn />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus pengaturan*/}
           <Route path="/pengaturan" element={<ProfileSettings />} />
         </Route>
       </Routes>
