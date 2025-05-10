@@ -1,68 +1,41 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 
 // Icons - Anda bisa menggunakan icon dari library seperti react-icons atau buat sendiri
 import { 
+  // Umum icons
   RiDashboardLine, 
+  RiSettings4Line,
+  RiBellLine,
+  RiCoinLine,
+
+  // Siswa icons
+  RiGraduationCapLine,
   RiTeamLine, 
   RiGamepadLine,
-  RiSettings4Line,
-  RiGraduationCapLine,
-  RiBellLine,
-  RiCoinLine
+
+  // Guru icons
+  RiUser3Line,
+  RiBookletLine,
+  RiFileList3Line,
+  
+  // Orangtua icons
+  RiUserHeartLine,
+  RiMessage3Line,
+  RiParentLine
+
 } from 'react-icons/ri';
 
 // Logo
 import logoImg from '../../../assets/Logo.png'; // Ganti dengan path logo Anda
 
-const Sidebar = () => {
+const Sidebar = ({ onToggle }) => {
   const [expanded, setExpanded] = useState(false);
+  const { user } = useAuth();
   const location = useLocation();
 
-  // Menu items
-  const menuItems = [
-    {
-      path: '/dashboard/siswa',
-      name: 'Dashboard',
-      icon: <RiDashboardLine size={24} />,
-      exact: true
-    },
-    {
-      path: '/kursus',
-      name: 'Kursus',
-      icon: <RiGraduationCapLine size={24} />
-    },
-    {
-      path: '/kelas',
-      name: 'Kelas saya',
-      icon: <RiTeamLine size={24} />
-    },
-    {
-      path: '/game',
-      name: 'Game',
-      icon: <RiGamepadLine size={24} />
-    },
-    {
-      path: '/notifikasi',
-      name: 'Notifikasi',
-      icon: <RiBellLine size={24} />
-    },
-    {
-      path: '/pengaturan',
-      name: 'Pengaturan',
-      icon: <RiSettings4Line size={24} />
-    }
-  ];
-
-  // Sidebar icons for collapsed mode
-  const sidebarIcons = [
-    { icon: <RiDashboardLine size={24} />, path: '/dashboard' },
-    { icon: <RiGraduationCapLine size={24} />, path: '/kursus' },
-    { icon: <RiTeamLine size={24} />, path: '/kelas' },
-    { icon: <RiGamepadLine size={24} />, path: '/game' },
-    { icon: <RiBellLine size={24} />, path: '/notifikasi' },
-    { icon: <RiSettings4Line size={24} />, path: '/pengaturan' }
-  ];
+  const userRole = user?.role || 'siswa';
 
   const toggleSidebar = () => {
     const newExpandedState = !expanded;
@@ -73,11 +46,134 @@ const Sidebar = () => {
     }
   };
 
-  // Check if a menu item is active
   const isActive = (path) => {
-    return location.pathname === path;
+    return location.pathname.startsWith(path);
   };
 
+  const getMenuItems = () => {
+    // Menu untuk Siswa
+    if (userRole === 'siswa') {
+      return [
+        {
+          path: '/dashboard/siswa',
+          name: 'Dashboard',
+          icon: <RiDashboardLine size={24} />,
+        },
+        {
+          path: '/kursus',
+          name: 'Kursus',
+          icon: <RiGraduationCapLine size={24} />
+        },
+        {
+          path: '/kelas',
+          name: 'Kelas saya',
+          icon: <RiTeamLine size={24} />
+        },
+        {
+          path: '/game',
+          name: 'Game',
+          icon: <RiGamepadLine size={24} />
+        },
+        {
+          path: '/notifikasi',
+          name: 'Notifikasi',
+          icon: <RiBellLine size={24} />
+        },
+        {
+          path: '/pengaturan',
+          name: 'Pengaturan',
+          icon: <RiSettings4Line size={24} />
+        }
+      ];
+    }
+
+    if (userRole === 'guru') {
+      return [
+        {
+          path: '/dashboard/guru',
+          name: 'Dashboard',
+          icon: <RiDashboardLine size={24} />,
+        },
+        {
+          path: '/kelas-diajar',
+          name: 'Kelas yang Diajar',
+          icon: <RiUser3Line size={24} />
+        },
+        {
+          path: '/buat-kursus',
+          name: 'Buat Kursus',
+          icon: <RiBookletLine size={24} />
+        },
+        {
+          path: '/manajemen-kelas',
+          name: 'Manajemen Kelas',
+          icon: <RiFileList3Line size={24} />
+        },
+        {
+          path: '/notifikasi',
+          name: 'Notifikasi',
+          icon: <RiBellLine size={24} />
+        },
+        {
+          path: '/pengaturan',
+          name: 'Pengaturan',
+          icon: <RiSettings4Line size={24} />
+        }
+      ];
+    }
+
+    if (userRole === 'orangtua') {
+      return [
+        {
+          path: '/dashboard/orangtua',
+          name: 'Dashboard',
+          icon: <RiDashboardLine size={24} />,
+        },
+        {
+          path: '/pemantauan-anak',
+          name: 'Pemantauan Anak',
+          icon: <RiUserHeartLine size={24} />
+        },
+        {
+          path: '/chat-guru',
+          name: 'Chat dengan Guru',
+          icon: <RiMessage3Line size={24} />
+        },
+        {
+          path: '/laporan-anak',
+          name: 'Laporan Perkembangan',
+          icon: <RiParentLine size={24} />
+        },
+        {
+          path: '/notifikasi',
+          name: 'Notifikasi',
+          icon: <RiBellLine size={24} />
+        },
+        {
+          path: '/pengaturan',
+          name: 'Pengaturan',
+          icon: <RiSettings4Line size={24} />
+        }
+      ];
+    }
+    
+    // Fallback jika role tidak dikenali
+    return [
+      {
+        path: '/dashboard',
+        name: 'Dashboard',
+        icon: <RiDashboardLine size={24} />,
+      },
+      {
+        path: '/pengaturan',
+        name: 'Pengaturan',
+        icon: <RiSettings4Line size={24} />
+      }
+    ];
+  };
+  
+  const menuItems = getMenuItems();
+  
   return (
     <div 
       className={`h-screen bg-blue-500 fixed left-0 top-0 transition-all duration-300 ease-in-out z-10 ${

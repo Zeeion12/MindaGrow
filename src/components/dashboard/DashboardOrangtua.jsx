@@ -1,219 +1,281 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import Sidebar from '../layout/layoutParts/SideBar';
+import Header from '../layout/layoutParts/Header';
+import { 
+  RiUserHeartLine, 
+  RiMessage3Line, 
+  RiParentLine,
+  RiCheckboxCircleLine, 
+  RiTimeLine,
+  RiArrowRightSLine,
+  RiLineChartLine,
+  RiCalendarCheckLine,
+  RiBarChart2Line,
+  RiMedalLine
+} from 'react-icons/ri';
 
 const DashboardOrangtua = () => {
-  const { user, logout } = useAuth();
-  
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [children, setChildren] = useState([]);
+  const [selectedChild, setSelectedChild] = useState(null);
+  const [childStats, setChildStats] = useState({
+    completedCourses: 0,
+    activeCourses: 0,
+    averageScore: 0,
+    lastActivity: '',
+    totalMinutes: 0
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Dalam implementasi nyata, ini akan menjadi panggilan API
+        // Dummy data untuk demo
+        const dummyChildren = [
+          { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523252' },
+          { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523253' }
+        ];
+        
+        setChildren(dummyChildren);
+        
+        // Set anak pertama sebagai default
+        if (dummyChildren.length > 0) {
+          const firstChild = dummyChildren[0];
+          setSelectedChild(firstChild);
+          
+          // Dummy stats untuk anak yang dipilih
+          setChildStats({
+            completedCourses: 5,
+            activeCourses: 3,
+            averageScore: 85,
+            lastActivity: '2 jam lalu',
+            totalMinutes: 1280
+          });
+          
+          // Dummy data untuk aktivitas terbaru
+          setRecentActivities([
+            { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
+            { id: 2, type: 'assignment_complete', course: 'Matematika - Aljabar', description: 'Mengumpulkan tugas Persamaan Kuadrat', score: 85, date: '1 hari lalu' },
+            { id: 3, type: 'quiz_complete', course: 'Biologi', description: 'Menyelesaikan quiz Sistem Reproduksi', score: 78, date: '3 hari lalu' },
+            { id: 4, type: 'course_started', course: 'Fisika - Hukum Newton', description: 'Memulai kursus baru', date: '3 hari lalu' },
+          ]);
+          
+          // Dummy data untuk acara mendatang
+          setUpcomingEvents([
+            { id: 1, title: 'Ujian Matematika', date: 'Senin, 12 Mei 2025', course: 'Matematika - Aljabar' },
+            { id: 2, title: 'Deadline Tugas Biologi', date: 'Rabu, 14 Mei 2025', course: 'Biologi - Reproduksi Manusia' },
+            { id: 3, title: 'Quiz Fisika', date: 'Jumat, 16 Mei 2025', course: 'Fisika - Hukum Newton' }
+          ]);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const handleChildSelect = (child) => {
+    setSelectedChild(child);
+    // Dalam implementasi nyata, kita akan melakukan fetch data berdasarkan anak yang dipilih
+  };
+
+  const navigateToSection = (path) => {
+    navigate(path);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen w-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <Sidebar />
+    <div className="bg-gray-50 min-h-screen ml-20">
+      <Header title="Dashboard Orangtua" />
       
-      {/* Main Content */}
-      <div className="flex-1 pl-16 lg:pl-60"> {/* Adjust padding based on sidebar width */}
-        <header className="bg-white shadow">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-800">
-              Dashboard Orang Tua
-            </h1>
-            <div className="flex items-center">
-              <span className="text-gray-700 mr-4">{user?.nama_lengkap}</span>
-              <button
-                onClick={logout}
-                className="text-gray-500 hover:text-gray-700 focus:outline-none"
+      <div className="px-6 py-4">
+        {/* Pilihan Anak */}
+        <div className="bg-white p-4 rounded-lg shadow mb-6">
+          <h2 className="text-lg font-semibold mb-3">Anak Saya</h2>
+          <div className="flex space-x-4">
+            {children.map(child => (
+              <div 
+                key={child.id}
+                onClick={() => handleChildSelect(child)}
+                className={`flex items-center p-3 rounded-lg cursor-pointer transition-all
+                  ${selectedChild?.id === child.id 
+                    ? 'bg-blue-100 ring-2 ring-blue-500' 
+                    : 'bg-gray-50 hover:bg-gray-100'}`}
               >
-                Keluar
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Selamat datang, {user?.nama_lengkap}!</h2>
-            <p className="text-gray-600">
-              Ini adalah dashboard untuk orang tua. Pantau perkembangan anak Anda, lihat laporan kemajuan, dan tetap terhubung dengan guru di sini.
-            </p>
-          </div>
-          
-          {/* Child Info */}
-          <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-            <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 className="text-lg font-medium leading-6 text-gray-900">
-                Informasi Anak
-              </h3>
-            </div>
-            <div className="px-4 py-4 sm:px-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-blue-600 text-xl font-semibold">MS</span>
+                <div className="w-10 h-10 rounded-full bg-gray-300 mr-3 overflow-hidden">
+                  <img src="/api/placeholder/50/50" alt={child.name} className="w-full h-full object-cover" />
                 </div>
-                <div className="ml-4">
-                  <h4 className="text-lg font-semibold text-gray-900">Muhamad Dimas</h4>
-                  <p className="text-sm text-gray-500">Kelas 5A • NIS: 23523252</p>
-                  <div className="mt-1 flex items-center">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                      Matematika
-                    </span>
-                    <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                      Bahasa Indonesia
-                    </span>
-                    <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                      IPA
-                    </span>
-                  </div>
+                <div>
+                  <p className="font-medium">{child.name}</p>
+                  <p className="text-xs text-gray-500">Kelas {child.class}</p>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
-          
-          {/* Dashboard Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            {/* Progress Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">Kemajuan Belajar</h3>
-                <div className="mt-2">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">Matematika</span>
-                    <span className="text-sm font-medium text-gray-700">85%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
-                    <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: '85%' }}></div>
-                  </div>
-                  
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">Bahasa Indonesia</span>
-                    <span className="text-sm font-medium text-gray-700">75%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
-                    <div className="bg-green-500 h-2.5 rounded-full" style={{ width: '75%' }}></div>
-                  </div>
-                  
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">IPA</span>
-                    <span className="text-sm font-medium text-gray-700">92%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div className="bg-yellow-500 h-2.5 rounded-full" style={{ width: '92%' }}></div>
-                  </div>
+        </div>
+        
+        {selectedChild && (
+          <>
+            {/* Statistik Anak */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
+              <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
+                <div className="bg-blue-100 p-3 rounded-full mb-2">
+                  <RiCheckboxCircleLine size={24} className="text-blue-600" />
                 </div>
+                <p className="text-gray-500 text-sm">Kursus Selesai</p>
+                <p className="text-2xl font-bold">{childStats.completedCourses}</p>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
+                <div className="bg-green-100 p-3 rounded-full mb-2">
+                  <RiLineChartLine size={24} className="text-green-600" />
+                </div>
+                <p className="text-gray-500 text-sm">Kursus Aktif</p>
+                <p className="text-2xl font-bold">{childStats.activeCourses}</p>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
+                <div className="bg-yellow-100 p-3 rounded-full mb-2">
+                  <RiMedalLine size={24} className="text-yellow-600" />
+                </div>
+                <p className="text-gray-500 text-sm">Rata-rata Nilai</p>
+                <p className="text-2xl font-bold">{childStats.averageScore}</p>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
+                <div className="bg-purple-100 p-3 rounded-full mb-2">
+                  <RiTimeLine size={24} className="text-purple-600" />
+                </div>
+                <p className="text-gray-500 text-sm">Total Waktu Belajar</p>
+                <p className="text-2xl font-bold">{childStats.totalMinutes} <span className="text-sm">menit</span></p>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
+                <div className="bg-red-100 p-3 rounded-full mb-2">
+                  <RiCalendarCheckLine size={24} className="text-red-600" />
+                </div>
+                <p className="text-gray-500 text-sm">Aktivitas Terakhir</p>
+                <p className="text-lg font-medium">{childStats.lastActivity}</p>
               </div>
             </div>
-
-            {/* Attendance Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">Kehadiran</h3>
-                <div className="flex items-center">
-                  <div className="relative w-24 h-24">
-                    <svg className="w-24 h-24" viewBox="0 0 36 36">
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="#e5e7eb"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="#4f46e5"
-                        strokeWidth="2"
-                        strokeDasharray="95, 100"
-                      />
-                    </svg>
-                    <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-                      <span className="text-xl font-bold text-gray-900">95%</span>
-                    </div>
+            
+            {/* Menu Akses Cepat */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
+                onClick={() => navigateToSection('/pemantauan-anak')}
+              >
+                <div className="flex items-center justify-between text-white">
+                  <div>
+                    <RiUserHeartLine size={36} className="mb-3" />
+                    <h3 className="text-xl font-semibold">Pemantauan Anak</h3>
+                    <p className="text-blue-100 mt-1">Pantau kemajuan belajar {selectedChild.name}</p>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm text-gray-500 mb-1">Total Kehadiran: 38/40 hari</p>
-                    <p className="text-sm text-gray-500">Sakit: 1 hari</p>
-                    <p className="text-sm text-gray-500">Izin: 1 hari</p>
+                  <RiArrowRightSLine size={24} />
+                </div>
+              </div>
+              
+              <div 
+                className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
+                onClick={() => navigateToSection('/chat-guru')}
+              >
+                <div className="flex items-center justify-between text-white">
+                  <div>
+                    <RiMessage3Line size={36} className="mb-3" />
+                    <h3 className="text-xl font-semibold">Chat dengan Guru</h3>
+                    <p className="text-green-100 mt-1">Diskusikan kemajuan belajar dengan guru</p>
                   </div>
+                  <RiArrowRightSLine size={24} />
+                </div>
+              </div>
+              
+              <div 
+                className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
+                onClick={() => navigateToSection('/laporan-anak')}
+              >
+                <div className="flex items-center justify-between text-white">
+                  <div>
+                    <RiParentLine size={36} className="mb-3" />
+                    <h3 className="text-xl font-semibold">Laporan Perkembangan</h3>
+                    <p className="text-yellow-100 mt-1">Lihat laporan perkembangan lengkap</p>
+                  </div>
+                  <RiArrowRightSLine size={24} />
                 </div>
               </div>
             </div>
 
-            {/* Task Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">Tugas Terbaru</h3>
-                <ul className="divide-y divide-gray-200">
-                  <li className="py-2">
-                    <div className="flex justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-blue-600">Matematika: Persamaan Kuadrat</p>
-                        <p className="text-xs text-gray-500">Deadline: 10 Mei 2025</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Aktivitas Terbaru */}
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                  <h2 className="text-lg font-semibold">Aktivitas Terbaru</h2>
+                  <Link to="/pemantauan-anak" className="text-blue-500 text-sm hover:underline">
+                    Lihat Semua
+                  </Link>
+                </div>
+                <div className="p-4">
+                  <div className="space-y-4">
+                    {recentActivities.map(activity => (
+                      <div key={activity.id} className="flex items-start">
+                        <div className="bg-blue-100 p-2 rounded-full mr-3">
+                          {activity.type === 'course_progress' && <RiLineChartLine className="text-blue-600" />}
+                          {activity.type === 'assignment_complete' && <RiCheckboxCircleLine className="text-green-600" />}
+                          {activity.type === 'quiz_complete' && <RiBarChart2Line className="text-purple-600" />}
+                          {activity.type === 'course_started' && <RiCalendarCheckLine className="text-yellow-600" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm">
+                            <span className="font-medium">{activity.course}</span> - {activity.description}
+                            {activity.score && <span className="font-medium text-green-600"> - Nilai: {activity.score}</span>}
+                          </p>
+                          <p className="text-xs text-gray-500">{activity.date}</p>
+                        </div>
                       </div>
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                        Selesai
-                      </span>
-                    </div>
-                  </li>
-                  <li className="py-2">
-                    <div className="flex justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-blue-600">Bahasa Indonesia: Esai Narasi</p>
-                        <p className="text-xs text-gray-500">Deadline: 15 Mei 2025</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Acara Mendatang */}
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-4 border-b border-gray-100">
+                  <h2 className="text-lg font-semibold">Acara Mendatang</h2>
+                </div>
+                <div className="p-4">
+                  <div className="space-y-4">
+                    {upcomingEvents.map(event => (
+                      <div key={event.id} className="bg-gray-50 p-3 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium">{event.title}</h3>
+                          <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{event.course}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">{event.date}</p>
                       </div>
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        Ongoing
-                      </span>
-                    </div>
-                  </li>
-                  <li className="py-2">
-                    <div className="flex justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-blue-600">IPA: Eksperimen Sains</p>
-                        <p className="text-xs text-gray-500">Deadline: 20 Mei 2025</p>
-                      </div>
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                        Belum Mulai
-                      </span>
-                    </div>
-                  </li>
-                </ul>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Teacher Messages */}
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-              <h3 className="text-lg font-medium leading-6 text-gray-900">
-                Pesan dari Guru
-              </h3>
-            </div>
-            <ul className="divide-y divide-gray-200">
-              <li className="px-4 py-4 sm:px-6 hover:bg-gray-50">
-                <div className="flex">
-                  <div className="flex-shrink-0 h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
-                    <span className="text-green-600 font-semibold">BP</span>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">Budi Pratama (Guru Matematika)</p>
-                    <p className="text-sm text-gray-500">Dimas menunjukkan kemajuan yang baik dalam pelajaran persamaan kuadrat. Ia aktif bertanya dan membantu teman-temannya.</p>
-                    <p className="mt-1 text-xs text-gray-400">5 Mei 2025, 13:45</p>
-                  </div>
-                </div>
-              </li>
-              <li className="px-4 py-4 sm:px-6 hover:bg-gray-50">
-                <div className="flex">
-                  <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold">RS</span>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">Rini Sulistyo (Guru Bahasa Indonesia)</p>
-                    <p className="text-sm text-gray-500">Tolong ingatkan Dimas untuk mengumpulkan tugas esai narasinya sebelum tanggal 15 Mei. Ia memiliki potensi yang bagus dalam menulis.</p>
-                    <p className="mt-1 text-xs text-gray-400">4 Mei 2025, 10:20</p>
-                  </div>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </main>
+          </>
+        )}
       </div>
     </div>
   );

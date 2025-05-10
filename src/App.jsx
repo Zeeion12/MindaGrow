@@ -6,12 +6,17 @@ import Register from './components/auth/Register';
 import Login from './components/auth/Login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardGuru from './components/dashboard/DashboardGuru';
-import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
 import DashboardLayout from './components/layout/DashboardLayout';
 // Import komponen kursus
 import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
 import CourseLearn from './pages/courses/CourseLearn';
+
+// Import OrangTua
+import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
+import PemantauanAnakPage from './pages/Orangtua/PemantauanAnak';
+import ChatGuruPage from './pages/Orangtua/ChatGuru';
+import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
 
 import ProfileSettings from './pages/setting/ProfileSettings';
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -38,6 +43,7 @@ function App() {
         <Route path="/role-selection" element={<RoleSelection />} />
         <Route path="/register/:role" element={<Register />} />
         <Route path="/login" element={<Login />} />
+        
         <Route path="/" element={<DashboardLayout />}>
 
           {/*Route khusus dashboard*/}
@@ -49,11 +55,6 @@ function App() {
           <Route path="/dashboard/guru" element={
             <ProtectedRoute allowedRoles={['guru']}>
               <DashboardGuru />
-            </ProtectedRoute>
-          } />
-          <Route path="/dashboard/orangtua" element={
-            <ProtectedRoute allowedRoles={['orangtua']}>
-              <DashboardOrangtua />
             </ProtectedRoute>
           } />
 
@@ -76,6 +77,28 @@ function App() {
           <Route path="/kursus/:courseId/learn/:lessonId" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
               <CourseLearn />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus Orangtua*/}
+          <Route path="/dashboard/orangtua" element={
+            <ProtectedRoute allowedRoles={['orangtua']}>
+              <DashboardOrangtua />
+            </ProtectedRoute>
+          } />
+          <Route path="/pemantauan-anak" element={
+            <ProtectedRoute allowedRoles={['orangtua']}>
+              <PemantauanAnakPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/chat-guru" element={
+            <ProtectedRoute allowedRoles={['orangtua']}>
+              <ChatGuruPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/laporan-anak" element={
+            <ProtectedRoute allowedRoles={['orangtua']}>
+              <LaporanPerkembanganPage />
             </ProtectedRoute>
           } />
 
