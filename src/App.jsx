@@ -5,12 +5,16 @@ import RoleSelection from './components/auth/RoleSelection';
 import Register from './components/auth/Register';
 import Login from './components/auth/Login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
-import DashboardGuru from './components/dashboard/DashboardGuru';
 import DashboardLayout from './components/layout/DashboardLayout';
 // Import komponen kursus
 import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
 import CourseLearn from './pages/courses/CourseLearn';
+
+// Import Guru
+import DashboardGuru from './components/dashboard/DashboardGuru';
+import BuatKursusPage from './pages/Guru/BuatKursus';
+import ManajemenKelasPage from './pages/Guru/ManajemenKelas';
 
 // Import OrangTua
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
@@ -52,11 +56,6 @@ function App() {
               <DashboardSiswa />
             </ProtectedRoute>
           } />
-          <Route path="/dashboard/guru" element={
-            <ProtectedRoute allowedRoles={['guru']}>
-              <DashboardGuru />
-            </ProtectedRoute>
-          } />
 
           {/*Route khusus kursus*/}
           <Route path="/kursus" element={
@@ -77,6 +76,23 @@ function App() {
           <Route path="/kursus/:courseId/learn/:lessonId" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
               <CourseLearn />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus Guru*/}
+          <Route path="/dashboard/guru" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <DashboardGuru />
+            </ProtectedRoute>
+          } />
+          <Route path="/buat-kursus" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <BuatKursusPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/manajemen-kelas" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <ManajemenKelasPage />
             </ProtectedRoute>
           } />
 

@@ -1,347 +1,613 @@
 const { Pool } = require('pg');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const slugify = require('slugify');
+
+// PostgreSQL connection
 const pool = new Pool({
-  // your PostgreSQL connection config
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: 'mindagrow',
+  password: process.env.DB_PASSWORD || '',
+  port: process.env.DB_PORT || 5432,
 });
 
-// Get all courses
-exports.getAllCourses = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT c.*, ct.name as category_name, 
-        u.nama_lengkap as teacher_name,
-        COUNT(DISTINCT e.id) as enrolled_students
-      FROM courses c
-      LEFT JOIN categories ct ON c.category_id = ct.id
-      LEFT JOIN users u ON c.teacher_id = u.id
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      WHERE c.is_published = true
-      GROUP BY c.id, ct.name, u.nama_lengkap
-      ORDER BY c.created_at DESC
-    `);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching courses:', error);
-    res.status(500).json({ message: 'Server error' });
+// Konfigurasi penyimpanan untuk banner kursus
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('File harus berupa gambar'), false);
+    }
   }
+}).single('banner_image');
+
+// Middleware untuk upload banner kursus
+const uploadBanner = (req, res, next) => {
+  upload(req, res, function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `Error upload: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ message: err.message });
+    }
+    // Lanjut ke controller jika tidak ada error
+    next();
+  });
 };
 
-// Get popular courses
-exports.getPopularCourses = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT c.*, ct.name as category_name, 
-        u.nama_lengkap as teacher_name,
-        COUNT(DISTINCT e.id) as enrolled_students
-      FROM courses c
-      LEFT JOIN categories ct ON c.category_id = ct.id
-      LEFT JOIN users u ON c.teacher_id = u.id
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      WHERE c.is_published = true
-      GROUP BY c.id, ct.name, u.nama_lengkap
-      ORDER BY enrolled_students DESC, c.created_at DESC
-      LIMIT 4
-    `);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching popular courses:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// Get new courses
-exports.getNewCourses = async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT c.*, ct.name as category_name, 
-        u.nama_lengkap as teacher_name
-      FROM courses c
-      LEFT JOIN categories ct ON c.category_id = ct.id
-      LEFT JOIN users u ON c.teacher_id = u.id
-      WHERE c.is_published = true
-      ORDER BY c.created_at DESC
-      LIMIT 5
-    `);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching new courses:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// Get single course
-exports.getCourse = async (req, res) => {
-  const { id } = req.params;
+/**
+ * Membuat kursus baru
+ */
+const createCourse = async (req, res) => {
+  const client = await pool.connect();
   
   try {
-    // Get course details with teacher info
-    const courseResult = await pool.query(`
-      SELECT c.*, ct.name as category_name, 
-        u.nama_lengkap as teacher_name,
-        tp.bio as teacher_bio, tp.expertise as teacher_expertise,
-        tp.education as teacher_education, tp.experience as teacher_experience,
-        tp.total_courses, tp.total_students, tp.average_rating,
-        COUNT(DISTINCT e.id) as enrolled_students,
-        AVG(cr.rating) as average_rating,
-        COUNT(DISTINCT cr.id) as total_ratings
-      FROM courses c
-      LEFT JOIN categories ct ON c.category_id = ct.id
-      LEFT JOIN users u ON c.teacher_id = u.id
-      LEFT JOIN teacher_profiles tp ON u.id = tp.user_id
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      LEFT JOIN course_ratings cr ON c.id = cr.course_id
-      WHERE c.id = $1
-      GROUP BY c.id, ct.name, u.nama_lengkap, tp.bio, tp.expertise, 
-        tp.education, tp.experience, tp.total_courses, tp.total_students, tp.average_rating
-    `, [id]);
+    await client.query('BEGIN');
     
-    if (courseResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Course not found' });
+    const {
+      title,
+      slug,
+      description,
+      short_description,
+      category_id,
+      level,
+      is_featured,
+      is_published,
+      estimated_duration
+    } = req.body;
+    
+    // Teacher ID dari token
+    const teacher_id = req.user.id;
+    
+    // Validasi input
+    if (!title || !description || !short_description || !category_id || !level || !estimated_duration) {
+      return res.status(400).json({ message: 'Semua field wajib diisi' });
     }
     
-    const course = courseResult.rows[0];
+    // Generate slug jika tidak disediakan
+    let courseSlug = slug;
+    if (!courseSlug) {
+      courseSlug = slugify(title, { lower: true, strict: true });
+    }
     
-    // Get modules and lessons
-    const modulesResult = await pool.query(`
-      SELECT m.*, 
-        json_agg(json_build_object(
-          'id', l.id,
-          'title', l.title,
-          'duration', l.duration,
-          'position', l.position
-        ) ORDER BY l.position) as lessons
-      FROM modules m
-      LEFT JOIN lessons l ON m.id = l.module_id
-      WHERE m.course_id = $1
-      GROUP BY m.id
-      ORDER BY m.position
-    `, [id]);
+    // Cek apakah slug sudah ada
+    const slugCheck = await client.query('SELECT id FROM courses WHERE slug = $1', [courseSlug]);
+    if (slugCheck.rows.length > 0) {
+      // Tambahkan random string ke slug
+      const randomString = Math.random().toString(36).substring(2, 8);
+      courseSlug = `${courseSlug}-${randomString}`;
+    }
     
-    course.modules = modulesResult.rows;
+    // Proses banner image jika ada
+    let bannerImageData = null;
+    if (req.file) {
+      // Convert buffer to base64
+      bannerImageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
     
-    res.json(course);
+    // Insert ke tabel courses
+    const insertQuery = `
+      INSERT INTO courses (
+        title, slug, description, short_description, banner_image,
+        category_id, teacher_id, level, is_featured, is_published, estimated_duration
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `;
+    
+    const values = [
+      title,
+      courseSlug,
+      description,
+      short_description,
+      bannerImageData,
+      category_id,
+      teacher_id,
+      level,
+      is_featured || false,
+      is_published || false,
+      estimated_duration
+    ];
+    
+    const result = await client.query(insertQuery, values);
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      message: 'Kursus berhasil dibuat',
+      course: result.rows[0]
+    });
+    
   } catch (error) {
-    console.error('Error fetching course details:', error);
-    res.status(500).json({ message: 'Server error' });
+    await client.query('ROLLBACK');
+    console.error('Error creating course:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      res.status(400).json({ message: 'Slug kursus sudah digunakan' });
+    } else {
+      res.status(500).json({ message: 'Terjadi kesalahan server' });
+    }
+  } finally {
+    client.release();
   }
 };
 
-// Get course for learning page
-exports.getCourseForLearning = async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id; // From auth middleware
+/**
+ * Mengupdate kursus
+ */
+const updateCourse = async (req, res) => {
+  const client = await pool.connect();
   
   try {
-    // Check if user is enrolled
-    const enrollmentResult = await pool.query(
-      'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-      [userId, id]
+    await client.query('BEGIN');
+    
+    const { id } = req.params;
+    const {
+      title,
+      slug,
+      description,
+      short_description,
+      category_id,
+      level,
+      is_featured,
+      is_published,
+      estimated_duration
+    } = req.body;
+    
+    // Validasi input
+    if (!title || !description || !short_description || !category_id || !level || !estimated_duration) {
+      return res.status(400).json({ message: 'Semua field wajib diisi' });
+    }
+    
+    // Teacher ID dari token
+    const teacher_id = req.user.id;
+    
+    // Cek apakah kursus ada dan dimiliki oleh guru yang sedang login
+    const courseCheck = await client.query(
+      'SELECT * FROM courses WHERE id = $1 AND teacher_id = $2',
+      [id, teacher_id]
     );
     
-    if (enrollmentResult.rows.length === 0) {
-      // Automatically enroll user
-      await pool.query(
-        'INSERT INTO enrollments (user_id, course_id) VALUES ($1, $2)',
-        [userId, id]
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Kursus tidak ditemukan atau Anda tidak memiliki akses' });
+    }
+    
+    // Generate slug jika tidak disediakan atau berubah
+    let courseSlug = slug;
+    if (!courseSlug || courseSlug !== courseCheck.rows[0].slug) {
+      courseSlug = slugify(title, { lower: true, strict: true });
+      
+      // Cek apakah slug baru sudah ada
+      const slugCheck = await client.query(
+        'SELECT id FROM courses WHERE slug = $1 AND id <> $2',
+        [courseSlug, id]
       );
+      
+      if (slugCheck.rows.length > 0) {
+        // Tambahkan random string ke slug
+        const randomString = Math.random().toString(36).substring(2, 8);
+        courseSlug = `${courseSlug}-${randomString}`;
+      }
     }
     
-    // Get course details
-    const courseResult = await pool.query(
-      'SELECT * FROM courses WHERE id = $1',
-      [id]
-    );
-    
-    if (courseResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Course not found' });
+    // Proses banner image jika ada
+    let bannerImageData = courseCheck.rows[0].banner_image;
+    if (req.file) {
+      // Convert buffer to base64
+      bannerImageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     }
     
-    const course = courseResult.rows[0];
+    // Update kursus
+    const updateQuery = `
+      UPDATE courses
+      SET 
+        title = $1,
+        slug = $2,
+        description = $3,
+        short_description = $4,
+        banner_image = $5,
+        category_id = $6,
+        level = $7,
+        is_featured = $8,
+        is_published = $9,
+        estimated_duration = $10,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $11 AND teacher_id = $12
+      RETURNING *
+    `;
     
-    // Get modules with lessons
-    const modulesResult = await pool.query(`
-      SELECT m.*, 
-        json_agg(json_build_object(
-          'id', l.id,
-          'title', l.title,
-          'duration', l.duration,
-          'position', l.position,
-          'completed', CASE WHEN lp.status = 'completed' THEN true ELSE false END
-        ) ORDER BY l.position) as lessons
-      FROM modules m
-      LEFT JOIN lessons l ON m.id = l.module_id
-      LEFT JOIN enrollments e ON e.course_id = m.course_id AND e.user_id = $1
-      LEFT JOIN lesson_progress lp ON lp.enrollment_id = e.id AND lp.lesson_id = l.id
-      WHERE m.course_id = $2
-      GROUP BY m.id
-      ORDER BY m.position
-    `, [userId, id]);
+    const values = [
+      title,
+      courseSlug,
+      description,
+      short_description,
+      bannerImageData,
+      category_id,
+      level,
+      is_featured || false,
+      is_published || false,
+      estimated_duration,
+      id,
+      teacher_id
+    ];
+    
+    const result = await client.query(updateQuery, values);
+    
+    await client.query('COMMIT');
     
     res.json({
-      course,
-      modules: modulesResult.rows
+      message: 'Kursus berhasil diperbarui',
+      course: result.rows[0]
     });
+    
   } catch (error) {
-    console.error('Error fetching course for learning:', error);
-    res.status(500).json({ message: 'Server error' });
+    await client.query('ROLLBACK');
+    console.error('Error updating course:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      res.status(400).json({ message: 'Slug kursus sudah digunakan' });
+    } else {
+      res.status(500).json({ message: 'Terjadi kesalahan server' });
+    }
+  } finally {
+    client.release();
   }
 };
 
-// Get all categories
-exports.getAllCategories = async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM categories ORDER BY name');
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// Enroll in a course
-exports.enrollCourse = async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id; // From auth middleware
+/**
+ * Menghapus kursus
+ */
+const deleteCourse = async (req, res) => {
+  const client = await pool.connect();
   
   try {
-    // Check if already enrolled
-    const checkResult = await pool.query(
-      'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-      [userId, id]
+    await client.query('BEGIN');
+    
+    const { id } = req.params;
+    const teacher_id = req.user.id;
+    
+    // Cek apakah kursus ada dan dimiliki oleh guru yang sedang login
+    const courseCheck = await client.query(
+      'SELECT * FROM courses WHERE id = $1 AND teacher_id = $2',
+      [id, teacher_id]
     );
     
-    if (checkResult.rows.length > 0) {
-      return res.json({ message: 'Already enrolled', enrollment: checkResult.rows[0] });
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Kursus tidak ditemukan atau Anda tidak memiliki akses' });
     }
     
-    // Create new enrollment
-    const result = await pool.query(
-      'INSERT INTO enrollments (user_id, course_id) VALUES ($1, $2) RETURNING *',
-      [userId, id]
-    );
+    // Hapus kursus
+    await client.query('DELETE FROM courses WHERE id = $1', [id]);
     
-    // Create lesson progress records for all lessons in the course
-    const lessonsResult = await pool.query(`
-      SELECT l.id 
-      FROM lessons l
-      JOIN modules m ON l.module_id = m.id
-      WHERE m.course_id = $1
-    `, [id]);
+    await client.query('COMMIT');
     
-    const enrollmentId = result.rows[0].id;
+    res.json({ message: 'Kursus berhasil dihapus' });
     
-    for (const lesson of lessonsResult.rows) {
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting course:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Mendapatkan semua kursus (untuk guru tertentu)
+ */
+const getTeacherCourses = async (req, res) => {
+  try {
+    const teacher_id = req.user.id;
+    
+    // Query untuk mendapatkan semua kursus milik guru
+    const query = `
+      SELECT c.*, cat.name as category_name
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      WHERE c.teacher_id = $1
+      ORDER BY c.created_at DESC
+    `;
+    
+    const result = await pool.query(query, [teacher_id]);
+    
+    res.json({
+      message: 'Data kursus berhasil diambil',
+      courses: result.rows
+    });
+    
+  } catch (error) {
+    console.error('Error fetching teacher courses:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+};
+
+/**
+ * Mendapatkan detail kursus
+ */
+const getCourseDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Query untuk mendapatkan detail kursus
+    const query = `
+      SELECT c.*, cat.name as category_name, 
+             u.id as teacher_user_id,
+             g.nama_lengkap as teacher_name
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN guru g ON u.id = g.user_id
+      WHERE c.id = $1
+    `;
+    
+    const result = await pool.query(query, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Kursus tidak ditemukan' });
+    }
+    
+    // Jika user adalah siswa, catat course view
+    if (req.user.role === 'siswa') {
       await pool.query(
-        'INSERT INTO lesson_progress (enrollment_id, lesson_id) VALUES ($1, $2)',
-        [enrollmentId, lesson.id]
+        'INSERT INTO course_views (course_id, student_id, viewed_at) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING',
+        [id, req.user.id]
       );
     }
     
-    // Update user streak
-    await updateUserStreak(userId);
+    res.json({
+      message: 'Detail kursus berhasil diambil',
+      course: result.rows[0]
+    });
     
-    // Log activity
-    await pool.query(
-      'INSERT INTO activity_logs (user_id, activity_type, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
-      [userId, 'course_start', 'course', id]
-    );
-    
-    res.status(201).json({ message: 'Successfully enrolled', enrollment: result.rows[0] });
   } catch (error) {
-    console.error('Error enrolling in course:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching course detail:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 };
 
-// Get course progress
-exports.getCourseProgress = async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id; // From auth middleware
-  
+/**
+ * Mendapatkan kursus berdasarkan slug
+ */
+const getCourseBySlug = async (req, res) => {
   try {
-    // Get enrollment
-    const enrollmentResult = await pool.query(
-      'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-      [userId, id]
-    );
+    const { slug } = req.params;
     
-    if (enrollmentResult.rows.length === 0) {
-      return res.json({ progress: 0 });
+    // Query untuk mendapatkan detail kursus berdasarkan slug
+    const query = `
+      SELECT c.*, cat.name as category_name, 
+             u.id as teacher_user_id,
+             g.nama_lengkap as teacher_name
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN guru g ON u.id = g.user_id
+      WHERE c.slug = $1
+    `;
+    
+    const result = await pool.query(query, [slug]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Kursus tidak ditemukan' });
     }
     
-    const enrollmentId = enrollmentResult.rows[0].id;
-    
-    // Count total lessons
-    const totalLessonsResult = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM lessons l
-      JOIN modules m ON l.module_id = m.id
-      WHERE m.course_id = $1
-    `, [id]);
-    
-    const totalLessons = parseInt(totalLessonsResult.rows[0].total);
-    
-    if (totalLessons === 0) {
-      return res.json({ progress: 100 }); // No lessons means course is complete
+    // Jika user adalah siswa, catat course view
+    if (req.user && req.user.role === 'siswa') {
+      await pool.query(
+        'INSERT INTO course_views (course_id, student_id, viewed_at) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING',
+        [result.rows[0].id, req.user.id]
+      );
     }
     
-    // Count completed lessons
-    const completedLessonsResult = await pool.query(`
-      SELECT COUNT(*) as completed
-      FROM lesson_progress lp
-      JOIN lessons l ON lp.lesson_id = l.id
-      JOIN modules m ON l.module_id = m.id
-      WHERE m.course_id = $1 AND lp.enrollment_id = $2 AND lp.status = 'completed'
-    `, [id, enrollmentId]);
+    res.json({
+      message: 'Detail kursus berhasil diambil',
+      course: result.rows[0]
+    });
     
-    const completedLessons = parseInt(completedLessonsResult.rows[0].completed);
-    
-    // Calculate progress percentage
-    const progress = Math.round((completedLessons / totalLessons) * 100);
-    
-    res.json({ progress });
   } catch (error) {
-    console.error('Error getting course progress:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching course by slug:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 };
 
-// Check if user is enrolled in a course
-exports.checkEnrollment = async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id; // From auth middleware
-  
+/**
+ * Mendapatkan semua kursus yang tersedia (published) untuk siswa
+ */
+const getAvailableCourses = async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-      [userId, id]
-    );
+    const { category, level, search, sort } = req.query;
     
-    res.json({ is_enrolled: result.rows.length > 0 });
+    // Buat query dasar
+    let query = `
+      SELECT c.*, cat.name as category_name, 
+             g.nama_lengkap as teacher_name,
+             (SELECT COUNT(*) FROM enrollments WHERE course_id = c.id) as student_count
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN guru g ON u.id = g.user_id
+      WHERE c.is_published = true
+    `;
+    
+    const queryParams = [];
+    let paramIndex = 1;
+    
+    // Tambahkan filter kategori jika ada
+    if (category) {
+      query += ` AND c.category_id = $${paramIndex}`;
+      queryParams.push(category);
+      paramIndex++;
+    }
+    
+    // Tambahkan filter level jika ada
+    if (level) {
+      query += ` AND c.level = $${paramIndex}`;
+      queryParams.push(level);
+      paramIndex++;
+    }
+    
+    // Tambahkan pencarian jika ada
+    if (search) {
+      query += ` AND (c.title ILIKE $${paramIndex} OR c.description ILIKE $${paramIndex} OR c.short_description ILIKE $${paramIndex})`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
+    }
+    
+    // Tambahkan sort
+    if (sort === 'newest') {
+      query += ` ORDER BY c.created_at DESC`;
+    } else if (sort === 'oldest') {
+      query += ` ORDER BY c.created_at ASC`;
+    } else if (sort === 'popular') {
+      query += ` ORDER BY student_count DESC`;
+    } else if (sort === 'title') {
+      query += ` ORDER BY c.title ASC`;
+    } else {
+      query += ` ORDER BY c.is_featured DESC, c.created_at DESC`;
+    }
+    
+    const result = await pool.query(query, queryParams);
+    
+    res.json({
+      message: 'Data kursus berhasil diambil',
+      courses: result.rows
+    });
+    
   } catch (error) {
-    console.error('Error checking enrollment:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching available courses:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 };
 
-// Get user's progress on all courses
-exports.getUserProgress = async (req, res) => {
-  const userId = req.user.id; // From auth middleware
-  
+/**
+ * Mendapatkan kursus yang diikuti oleh siswa
+ */
+const getEnrolledCourses = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT e.course_id, e.progress, c.title as course_title, ct.name as category_name
+    const student_id = req.user.id;
+    
+    const query = `
+      SELECT c.*, cat.name as category_name,
+             g.nama_lengkap as teacher_name,
+             e.enrolled_at,
+             e.last_accessed_at,
+             (
+               SELECT COUNT(*) FROM lesson_progress lp
+               JOIN lessons l ON lp.lesson_id = l.id
+               JOIN modules m ON l.module_id = m.id
+               WHERE m.course_id = c.id AND lp.student_id = $1 AND lp.completed = true
+             ) as completed_lessons,
+             (
+               SELECT COUNT(*) FROM lessons l
+               JOIN modules m ON l.module_id = m.id
+               WHERE m.course_id = c.id
+             ) as total_lessons
       FROM enrollments e
       JOIN courses c ON e.course_id = c.id
-      LEFT JOIN categories ct ON c.category_id = ct.id
-      WHERE e.user_id = $1
-    `, [userId]);
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN users u ON c.teacher_id = u.id
+      LEFT JOIN guru g ON u.id = g.user_id
+      WHERE e.student_id = $1
+      ORDER BY e.last_accessed_at DESC
+    `;
     
-    res.json(result.rows);
+    const result = await pool.query(query, [student_id]);
+    
+    res.json({
+      message: 'Data kursus berhasil diambil',
+      courses: result.rows
+    });
+    
   } catch (error) {
-    console.error('Error getting user progress:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching enrolled courses:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
+};
+
+/**
+ * Mendaftarkan siswa ke kursus
+ */
+const enrollCourse = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { course_id } = req.body;
+    const student_id = req.user.id;
+    
+    // Periksa apakah kursus ada dan dipublikasikan
+    const courseCheck = await client.query(
+      'SELECT * FROM courses WHERE id = $1 AND is_published = true',
+      [course_id]
+    );
+    
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Kursus tidak ditemukan atau tidak tersedia' });
+    }
+    
+    // Periksa apakah siswa sudah terdaftar di kursus ini
+    const enrollmentCheck = await client.query(
+      'SELECT * FROM enrollments WHERE course_id = $1 AND student_id = $2',
+      [course_id, student_id]
+    );
+    
+    if (enrollmentCheck.rows.length > 0) {
+      return res.status(400).json({ message: 'Anda sudah terdaftar di kursus ini' });
+    }
+    
+    // Daftarkan siswa ke kursus
+    await client.query(
+      'INSERT INTO enrollments (course_id, student_id, enrolled_at, last_accessed_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+      [course_id, student_id]
+    );
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({ message: 'Berhasil mendaftar ke kursus' });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error enrolling course:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Mendapatkan semua kategori
+ */
+const getCategories = async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM categories ORDER BY name ASC');
+    
+    res.json({
+      message: 'Data kategori berhasil diambil',
+      categories: result.rows
+    });
+    
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+};
+
+module.exports = {
+  uploadBanner,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+  getTeacherCourses,
+  getCourseDetail,
+  getCourseBySlug,
+  getAvailableCourses,
+  getEnrolledCourses,
+  enrollCourse,
+  getCategories
 };
