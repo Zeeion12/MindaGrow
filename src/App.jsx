@@ -22,6 +22,9 @@ import PemantauanAnakPage from './pages/Orangtua/PemantauanAnak';
 import ChatGuruPage from './pages/Orangtua/ChatGuru';
 import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
 
+//Import Admin
+import DashboardAdmin from './components/dashboard/DashboardAdmin';
+
 import ProfileSettings from './pages/setting/ProfileSettings';
 import { AuthProvider, useAuth } from './context/AuthContext'
 
@@ -115,6 +118,13 @@ function App() {
           <Route path="/laporan-anak" element={
             <ProtectedRoute allowedRoles={['orangtua']}>
               <LaporanPerkembanganPage />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus Admin*/}
+          <Route path="/dashboard/admin" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <DashboardAdmin />
             </ProtectedRoute>
           } />
 
