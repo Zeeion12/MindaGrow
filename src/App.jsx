@@ -11,6 +11,9 @@ import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
 import CourseLearn from './pages/courses/CourseLearn';
 
+// Import Kelas
+import ClassMainUI from './pages/Kelas/ClassMainUI';
+
 // Import Guru
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import BuatKursusPage from './pages/Guru/BuatKursus';
@@ -79,6 +82,13 @@ function App() {
           <Route path="/kursus/:courseId/learn/:lessonId" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
               <CourseLearn />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus Kelas*/}
+          <Route path="/kelas" element={
+            <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
+              <ClassMainUI />
             </ProtectedRoute>
           } />
 
