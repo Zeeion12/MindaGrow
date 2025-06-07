@@ -509,6 +509,262 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
+// Database initialization
+const initDB = async () => {
+  try {
+    // Tabel users sudah ada, kita hanya perlu memastikan struktur sesuai
+    console.log('Checking database structure...');
+    
+    // Cek apakah ada admin user
+    const adminExists = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      ['admin@platform.com']
+    );
+
+    if (adminExists.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (email, password, role) VALUES ($1, $2, $3)',
+        ['admin@platform.com', hashedPassword, 'admin']
+      );
+      console.log('Admin user created: admin@platform.com / admin123');
+    }
+
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+};
+
+// Middleware untuk admin only
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  next();
+};
+
+// Helper function untuk mendapatkan detail user berdasarkan role
+const getUserDetails = async (userId, role) => {
+  let query, tableName;
+  
+  switch(role) {
+    case 'guru':
+      tableName = 'guru';
+      query = `
+        SELECT 
+          g.nuptk,
+          g.nama_lengkap,
+          g.no_telepon
+        FROM guru g
+        WHERE g.user_id = $1
+      `;
+      break;
+    case 'orangtua':
+      tableName = 'orangtua';
+      query = `
+        SELECT 
+          o.nik,
+          o.nama_lengkap,
+          o.no_telepon
+        FROM orangtua o
+        WHERE o.user_id = $1
+      `;
+      break;
+    case 'siswa':
+      tableName = 'siswa';
+      query = `
+        SELECT 
+          s.nis,
+          s.nama_lengkap,
+          s.nik_orangtua,
+          s.no_telepon
+        FROM siswa s
+        WHERE s.user_id = $1
+      `;
+      break;
+    default:
+      return null;
+  }
+
+  try {
+    const result = await pool.query(query, [userId]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error(`Error getting ${tableName} details:`, error);
+    return null;
+  }
+};
+
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        u.id, 
+        u.email, 
+        u.role, 
+        u.last_login, 
+        u.created_at,
+        CASE 
+          WHEN u.role = 'guru' THEN g.nama_lengkap
+          WHEN u.role = 'orangtua' THEN o.nama_lengkap
+          WHEN u.role = 'siswa' THEN s.nama_lengkap
+          ELSE 'N/A'
+        END as nama_lengkap,
+        CASE 
+          WHEN u.role = 'guru' THEN g.nuptk
+          WHEN u.role = 'orangtua' THEN o.nik
+          WHEN u.role = 'siswa' THEN s.nis
+          ELSE NULL
+        END as identifier,
+        CASE 
+          WHEN u.role = 'guru' THEN g.no_telepon
+          WHEN u.role = 'orangtua' THEN o.no_telepon
+          WHEN u.role = 'siswa' THEN s.no_telepon
+          ELSE NULL
+        END as no_telepon
+      FROM users u
+      LEFT JOIN guru g ON u.id = g.user_id AND u.role = 'guru'
+      LEFT JOIN orangtua o ON u.id = o.user_id AND u.role = 'orangtua'
+      LEFT JOIN siswa s ON u.id = s.user_id AND u.role = 'siswa'
+      WHERE u.role != 'admin'
+      ORDER BY u.created_at DESC
+    `);
+
+    res.json({ users: result.rows });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin: Get user statistics
+app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Total users (excluding admin)
+    const totalUsersResult = await pool.query(
+      "SELECT COUNT(*) as count FROM users WHERE role != 'admin'"
+    );
+
+    // Today's logins
+    const todayLoginsResult = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM users 
+      WHERE DATE(last_login) = CURRENT_DATE 
+      AND role != 'admin'
+    `);
+
+    // This week's logins
+    const weekLoginsResult = await pool.query(`
+      SELECT COUNT(*) as count 
+      FROM users 
+      WHERE last_login >= CURRENT_DATE - INTERVAL '7 days'
+      AND role != 'admin'
+    `);
+
+    // Users by role
+    const roleStatsResult = await pool.query(`
+      SELECT 
+        role, 
+        COUNT(*) as count 
+      FROM users 
+      WHERE role != 'admin'
+      GROUP BY role
+    `);
+
+    res.json({
+      totalUsers: parseInt(totalUsersResult.rows[0].count),
+      todayLogins: parseInt(todayLoginsResult.rows[0].count),
+      weekLogins: parseInt(weekLoginsResult.rows[0].count),
+      roleStats: roleStatsResult.rows
+    });
+
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin: Get user detail by ID
+app.get('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const userResult = await pool.query(
+      'SELECT id, email, role, last_login, created_at FROM users WHERE id = $1 AND role != $2',
+      [id, 'admin']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    const userDetails = await getUserDetails(user.id, user.role);
+
+    res.json({ 
+      user: {
+        ...user,
+        details: userDetails
+      }
+    });
+
+  } catch (error) {
+    console.error('Get user detail error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin: Delete user
+app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { id } = req.params;
+
+    // Get user role first
+    const userResult = await client.query(
+      'SELECT role FROM users WHERE id = $1 AND role != $2',
+      [id, 'admin']
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const userRole = userResult.rows[0].role;
+
+    // Delete from role-specific table first
+    switch(userRole) {
+      case 'guru':
+        await client.query('DELETE FROM guru WHERE user_id = $1', [id]);
+        break;
+      case 'orangtua':
+        await client.query('DELETE FROM orangtua WHERE user_id = $1', [id]);
+        break;
+      case 'siswa':
+        await client.query('DELETE FROM siswa WHERE user_id = $1', [id]);
+        break;
+    }
+
+    // Delete from users table
+    await client.query('DELETE FROM users WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'User deleted successfully' });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
