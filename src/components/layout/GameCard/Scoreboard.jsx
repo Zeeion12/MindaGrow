@@ -50,11 +50,11 @@ export default function Scoreboard() {
     }
 
     return(
-        <div className="max-w-md bg-white rounded-3xl shadow-lg p-6 font-sans border-2 border-[#4778EC]/20">
-            <h1 className="text-2xl font-bold text-center mb-15 text-[#4778EC]">Top Skor Mingguan</h1>
+        <div className="w-full bg-white rounded-3xl shadow-lg p-6 font-sans border-2 border-[#4778EC]/20">
+            <h1 className="text-2xl font-bold text-center mb-8 text-[#4778EC]">Top Skor Mingguan</h1>
 
             {/* Bagian podium */}
-            <div className="relative flex items-end justify-center h-52 mb-4 gap-2">
+            <div className="relative flex items-end justify-center min-h-[200px] sm:min-h-[250px] mb-4 gap-2">
                 {podiumPlayers.map((player) => {
 
                     // Buat ngatur urutan (2-1-3)
@@ -63,12 +63,6 @@ export default function Scoreboard() {
 
                     return (
                         <div key={player.id} className="flex flex-col items-center" style={{ order }}>
-                            {/* Mahkota buat yang nomor 1 */}
-                            {player.position === 1 && (
-                                <div className="absolute -top-5 transform translate-y-[-100%]">
-                                    <span className="text-4xl">👑</span>
-                                </div>
-                            )}
 
                             {/* Player avatar */}
                             <div className="relative mb-2">
@@ -93,8 +87,8 @@ export default function Scoreboard() {
             </div>
 
             {/* Untuk player rangking 4 - 10 */}
-            <div className="mt-6">
-                <div className="h-40 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#4778EC] scrollbar-track-[#4778EC]/10">
+            <div className="mt-4">
+                <div className="max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#4778EC]">
                     {otherPlayers.map((player) => (
                         <div key={player.id} className="bg-gradient-to-r from-[#4778EC] to-[#4778EC]/90 rounded-lg p-3 flex items-center mb-2 shadow-sm">
                             <span className="text-white font-bold mr-4 text-lg">{player.position}</span>

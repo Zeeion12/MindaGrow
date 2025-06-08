@@ -1,6 +1,6 @@
 export default function Expcard({progress, level}) {
     return (
-        <div className="flex gap-10 items-center">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-10 items-center p-4">
             <div className="bg-[#DCEEFF] rounded-full p-2 shadow-md w-25 h-25 border-2 border-[#3F8CF4] flex items-center justify-center">
                 <div className="bg-white rounded-full w-18 h-18 border-2 border-[#3F8CF4] p-3 text-center">
                     <p className="text-4xl text-[#3F8CF4]">XP</p>

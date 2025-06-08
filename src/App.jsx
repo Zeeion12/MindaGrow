@@ -14,6 +14,9 @@ import CourseLearn from './pages/courses/CourseLearn';
 // Import Kelas
 import ClassMainUI from './pages/Kelas/ClassMainUI';
 
+// Import komponen game
+import GameMainUI from './pages/games/GameMainUI';
+
 // Import Guru
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import BuatKursusPage from './pages/Guru/BuatKursus';
@@ -89,6 +92,13 @@ function App() {
           <Route path="/kelas" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
               <ClassMainUI />
+            </ProtectedRoute>
+          } />
+
+          {/* Route khusus game */}
+          <Route path="/game" element={
+            <ProtectedRoute allowedRoles={['siswa']}>
+              <GameMainUI />
             </ProtectedRoute>
           } />
 
