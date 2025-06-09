@@ -17,6 +17,9 @@ import ClassMainUI from './pages/Kelas/ClassMainUI';
 // Import komponen game
 import GameMainUI from './pages/games/GameMainUI';
 
+// Import notif
+import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
+
 // Import Guru
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import BuatKursusPage from './pages/Guru/BuatKursus';
@@ -99,6 +102,13 @@ function App() {
           <Route path="/game" element={
             <ProtectedRoute allowedRoles={['siswa']}>
               <GameMainUI />
+            </ProtectedRoute>
+          } />
+
+          {/* Import khusu Notif */}
+          <Route path="/notifikasi" element={
+            <ProtectedRoute allowedRoles={['siswa']}>
+              <NotifikasiSiswa />
             </ProtectedRoute>
           } />
 
