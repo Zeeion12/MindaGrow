@@ -13,6 +13,7 @@ import CourseLearn from './pages/courses/CourseLearn';
 
 // Import Kelas
 import ClassMainUI from './pages/Kelas/ClassMainUI';
+import ClassDetailUI from './pages/kelas/ClassDetailUI';
 
 // Import komponen game
 import GameMainUI from './pages/games/GameMainUI';
@@ -95,6 +96,11 @@ function App() {
           <Route path="/kelas" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
               <ClassMainUI />
+            </ProtectedRoute>
+          } />
+          <Route path="/kelas/:id" element={
+            <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
+              <ClassDetailUI />
             </ProtectedRoute>
           } />
 
