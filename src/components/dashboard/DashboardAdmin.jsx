@@ -1,286 +1,325 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserCheck, Clock, Search, Filter, MoreVertical, Eye, Edit, Trash2 } from 'lucide-react';
+import { Users, UserCheck, Calendar, TrendingUp, Eye, Trash2, RefreshCw } from 'lucide-react';
 
-const DashboardAdmin = () => {
+const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
   const [stats, setStats] = useState({
     totalUsers: 0,
     todayLogins: 0,
-    recentLogins: 0
+    weekLogins: 0,
+    roleStats: []
   });
+  const [loading, setLoading] = useState(true);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserDetail, setShowUserDetail] = useState(false);
+  const [filter, setFilter] = useState('all');
 
-  // API calls to backend
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('/api/admin/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        return data.users.map(user => ({
-          id: user.id,
-          name: user.nama_lengkap || user.email,
-          email: user.email,
-          role: user.role,
-          lastLogin: user.last_login ? new Date(user.last_login) : null,
-          registeredAt: new Date(user.created_at),
-          identifier: user.identifier, // NUPTK/NIK/NIS
-          no_telepon: user.no_telepon,
-          status: 'active' // Default active, bisa ditambahkan field status di DB
-        }));
-      } else {
-        console.error('Failed to fetch users');
-        return [];
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      return [];
-    }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('/api/admin/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          totalUsers: data.totalUsers,
-          todayLogins: data.todayLogins,
-          recentLogins: data.weekLogins
-        };
-      } else {
-        console.error('Failed to fetch stats');
-        return { totalUsers: 0, todayLogins: 0, recentLogins: 0 };
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      return { totalUsers: 0, todayLogins: 0, recentLogins: 0 };
-    }
-  };
+  // Simulasi token admin (dalam implementasi nyata, ini akan dari localStorage atau context)
+  const adminToken = 'your-admin-jwt-token';
 
   useEffect(() => {
-    const loadData = async () => {
-      const [usersData, statsData] = await Promise.all([
-        fetchUsers(),
-        fetchStats()
-      ]);
-      
-      setUsers(usersData);
-      setFilteredUsers(usersData);
-      setStats(statsData);
-    };
-
-    loadData();
+    fetchDashboardData();
   }, []);
 
-  useEffect(() => {
-    let filtered = users;
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      // Fetch users
+      const usersResponse = await fetch('/api/admin/users', {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        setUsers(usersData.users);
+      }
 
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(user =>
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      // Fetch stats
+      const statsResponse = await fetch('/api/admin/stats', {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Filter by role
-    if (filterRole !== 'all') {
-      filtered = filtered.filter(user => user.role === filterRole);
+  const handleViewUser = async (userId) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setSelectedUser(userData.user);
+        setShowUserDetail(true);
+      }
+    } catch (error) {
+      console.error('Error fetching user detail:', error);
     }
+  };
 
-    // Filter by status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(user => user.status === filterStatus);
+  const handleDeleteUser = async (userId, userName) => {
+    if (window.confirm(`Apakah Anda yakin ingin menghapus user ${userName}?`)) {
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${adminToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          alert('User berhasil dihapus');
+          fetchDashboardData(); // Refresh data
+        } else {
+          alert('Gagal menghapus user');
+        }
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        alert('Terjadi kesalahan saat menghapus user');
+      }
     }
+  };
 
-    setFilteredUsers(filtered);
-  }, [searchTerm, filterRole, filterStatus, users]);
-
-  const formatDate = (date) => {
-    if (!date) return 'Belum pernah login';
-    
-    const now = new Date();
-    const diff = now - date;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (hours < 1) return 'Baru saja';
-    if (hours < 24) return `${hours} jam yang lalu`;
-    if (days === 1) return 'Kemarin';
-    if (days < 7) return `${days} hari yang lalu`;
-    
-    return date.toLocaleDateString('id-ID', {
-      day: 'numeric',
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Belum pernah login';
+    const date = new Date(dateString);
+    return date.toLocaleString('id-ID', {
+      year: 'numeric',
       month: 'short',
-      year: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
-  const getRoleBadge = (role) => {
-    const colors = {
-      siswa: 'bg-blue-100 text-blue-800',
-      guru: 'bg-green-100 text-green-800',
-      orangtua: 'bg-purple-100 text-purple-800'
-    };
-    
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[role]}`}>
-        {role.charAt(0).toUpperCase() + role.slice(1)}
-      </span>
-    );
+  const getRoleColor = (role) => {
+    switch (role) {
+      case 'siswa': return 'bg-blue-100 text-blue-800';
+      case 'guru': return 'bg-green-100 text-green-800';
+      case 'orangtua': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  const getStatusBadge = (status) => {
+  const filteredUsers = users.filter(user => {
+    if (filter === 'all') return true;
+    if (filter === 'today') {
+      if (!user.last_login) return false;
+      const today = new Date().toDateString();
+      const loginDate = new Date(user.last_login).toDateString();
+      return today === loginDate;
+    }
+    if (filter === 'never') return !user.last_login;
+    return user.role === filter;
+  });
+
+  if (loading) {
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-        status === 'active' 
-          ? 'bg-green-100 text-green-800' 
-          : 'bg-gray-100 text-gray-800'
-      }`}>
-        {status === 'active' ? 'Aktif' : 'Tidak Aktif'}
-      </span>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <RefreshCw className="animate-spin" size={24} />
+          <span>Loading dashboard...</span>
+        </div>
+      </div>
     );
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Admin</h1>
-          <p className="text-gray-600">Kelola pengguna platform personalisasi siswa</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="text-gray-600">Platform Personalisasi Siswa</p>
+            </div>
+            <button
+              onClick={fetchDashboardData}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <RefreshCw size={16} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Pengguna</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalUsers}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Users className="text-blue-600" size={24} />
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="w-6 h-6 text-blue-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <UserCheck className="text-green-600" size={24} />
+              </div>
+              <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Login Hari Ini</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.todayLogins}</p>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <UserCheck className="w-6 h-6 text-green-600" />
+                <p className="text-2xl font-bold text-gray-900">{stats.todayLogins}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Login Minggu Ini</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.recentLogins}</p>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Calendar className="text-purple-600" size={24} />
               </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Clock className="w-6 h-6 text-purple-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Login Minggu Ini</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.weekLogins}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <TrendingUp className="text-orange-600" size={24} />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Aktif Rate</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.totalUsers > 0 ? Math.round((stats.weekLogins / stats.totalUsers) * 100) : 0}%
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Filters and Search */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
-          <div className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Cari nama atau email..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+        {/* Role Statistics */}
+        <div className="bg-white rounded-lg shadow mb-8 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Statistik Per Role</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {stats.roleStats.map((roleStat) => (
+              <div key={roleStat.role} className="text-center p-4 border rounded-lg">
+                <p className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getRoleColor(roleStat.role)}`}>
+                  {roleStat.role.charAt(0).toUpperCase() + roleStat.role.slice(1)}
+                </p>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{roleStat.count}</p>
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Role Filter */}
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <select
-                  className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
-                  value={filterRole}
-                  onChange={(e) => setFilterRole(e.target.value)}
-                >
-                  <option value="all">Semua Role</option>
-                  <option value="siswa">Siswa</option>
-                  <option value="guru">Guru</option>
-                  <option value="orangtua">Orang Tua</option>
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div>
-                <select
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                >
-                  <option value="all">Semua Status</option>
-                  <option value="active">Aktif</option>
-                  <option value="inactive">Tidak Aktif</option>
-                </select>
-              </div>
-            </div>
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow mb-6 p-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Semua Users ({users.length})
+            </button>
+            <button
+              onClick={() => setFilter('today')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Login Hari Ini ({users.filter(u => {
+                if (!u.last_login) return false;
+                const today = new Date().toDateString();
+                const loginDate = new Date(u.last_login).toDateString();
+                return today === loginDate;
+              }).length})
+            </button>
+            <button
+              onClick={() => setFilter('never')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'never' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Belum Pernah Login ({users.filter(u => !u.last_login).length})
+            </button>
+            <button
+              onClick={() => setFilter('siswa')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'siswa' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Siswa ({users.filter(u => u.role === 'siswa').length})
+            </button>
+            <button
+              onClick={() => setFilter('guru')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'guru' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Guru ({users.filter(u => u.role === 'guru').length})
+            </button>
+            <button
+              onClick={() => setFilter('orangtua')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filter === 'orangtua' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Orangtua ({users.filter(u => u.role === 'orangtua').length})
+            </button>
           </div>
         </div>
 
         {/* Users Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Data Pengguna</h2>
-            <p className="text-gray-600 mt-1">Daftar semua pengguna yang terdaftar di platform</p>
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Daftar Users ({filteredUsers.length})
+            </h2>
           </div>
-
+          
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pengguna
+                    Nama
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ID/Nomor
+                    Identifier
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Terakhir Login
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Terdaftar
+                    Email
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Aksi
                   </th>
                 </tr>
@@ -289,56 +328,39 @@ const DashboardAdmin = () => {
                 {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium">
-                            {user.name.charAt(0).toUpperCase()}
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                          {user.no_telepon && (
-                            <div className="text-xs text-gray-400">{user.no_telepon}</div>
-                          )}
-                        </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {user.nama_lengkap || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getRoleBadge(user.role)}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
+                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.identifier ? (
-                        <div>
-                          <span className="font-medium">
-                            {user.role === 'guru' ? 'NUPTK: ' : 
-                             user.role === 'siswa' ? 'NIS: ' : 
-                             user.role === 'orangtua' ? 'NIK: ' : ''}
-                          </span>
-                          {user.identifier}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">Belum diisi</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(user.lastLogin)}
+                      {user.identifier || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.registeredAt.toLocaleDateString('id-ID')}
+                      {formatDate(user.last_login)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button className="text-blue-600 hover:text-blue-800 p-1 rounded-full hover:bg-blue-100">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button className="text-green-600 hover:text-green-800 p-1 rounded-full hover:bg-green-100">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-100">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleViewUser(user.id)}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                        title="Lihat Detail"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.nama_lengkap)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Hapus User"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -351,14 +373,61 @@ const DashboardAdmin = () => {
               <Users className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">Tidak ada data</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Tidak ada pengguna yang sesuai dengan filter yang dipilih.
+                Tidak ada user yang sesuai dengan filter yang dipilih.
               </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* User Detail Modal */}
+      {showUserDetail && selectedUser && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Detail User</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Nama Lengkap</label>
+                  <p className="text-sm text-gray-900">{selectedUser.details?.nama_lengkap || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Email</label>
+                  <p className="text-sm text-gray-900">{selectedUser.email}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Role</label>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(selectedUser.role)}`}>
+                    {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
+                  </span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">No. Telepon</label>
+                  <p className="text-sm text-gray-900">{selectedUser.details?.no_telepon || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Terakhir Login</label>
+                  <p className="text-sm text-gray-900">{formatDate(selectedUser.last_login)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Terdaftar</label>
+                  <p className="text-sm text-gray-900">{formatDate(selectedUser.created_at)}</p>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowUserDetail(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default DashboardAdmin;
+export default AdminDashboard;

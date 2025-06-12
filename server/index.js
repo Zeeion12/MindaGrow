@@ -100,7 +100,7 @@ const authenticateToken = (req, res, next) => {
   
   if (!token) return res.status(401).json({ message: 'Akses ditolak' });
   
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, user) => {
     if (err) return res.status(403).json({ message: 'Token tidak valid' });
     req.user = user;
     next();
@@ -457,6 +457,62 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Admin Login - Endpoint khusus untuk admin
+app.post('/api/admin/login', async (req, res) => {
+  const { email, password, remember } = req.body;
+  
+  try {
+    console.log('Admin login attempt with email:', email);
+    
+    // Cari admin di tabel users
+    const adminResult = await pool.query(
+      'SELECT id, email, password, role FROM users WHERE email = $1 AND role = $2',
+      [email, 'admin']
+    );
+    
+    if (adminResult.rows.length === 0) {
+      return res.status(400).json({ message: 'Email atau password tidak valid' });
+    }
+    
+    const admin = adminResult.rows[0];
+    
+    // Validate password
+    const validPassword = await bcrypt.compare(password, admin.password);
+    
+    if (!validPassword) {
+      return res.status(400).json({ message: 'Email atau password tidak valid' });
+    }
+    
+    // Update last login
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [admin.id]);
+    
+    // Generate JWT token
+    const expiresIn = remember ? '7d' : '1d';
+    const token = jwt.sign(
+      { 
+        id: admin.id, 
+        role: admin.role,
+        email: admin.email 
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      { expiresIn }
+    );
+    
+    console.log('Admin login successful');
+    res.json({ 
+      token, 
+      user: {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role
+      }
+    });
+  } catch (error) {
+    console.error('Error in admin login:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
+
 
 app.get('/api/dashboard', authenticateToken, async (req, res) => {
   try {
@@ -670,6 +726,7 @@ app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) =>
       FROM users 
       WHERE role != 'admin'
       GROUP BY role
+      ORDER BY role
     `);
 
     res.json({
@@ -762,6 +819,37 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
     res.status(500).json({ message: 'Internal server error' });
   } finally {
     client.release();
+  }
+});
+
+app.get('/api/admin/activities', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        u.id,
+        u.email,
+        u.role,
+        u.last_login,
+        u.created_at,
+        CASE 
+          WHEN u.role = 'guru' THEN g.nama_lengkap
+          WHEN u.role = 'orangtua' THEN o.nama_lengkap
+          WHEN u.role = 'siswa' THEN s.nama_lengkap
+          ELSE 'N/A'
+        END as nama_lengkap
+      FROM users u
+      LEFT JOIN guru g ON u.id = g.user_id AND u.role = 'guru'
+      LEFT JOIN orangtua o ON u.id = o.user_id AND u.role = 'orangtua'
+      LEFT JOIN siswa s ON u.id = s.user_id AND u.role = 'siswa'
+      WHERE u.role != 'admin' AND u.last_login IS NOT NULL
+      ORDER BY u.last_login DESC
+      LIMIT 10
+    `);
+
+    res.json({ activities: result.rows });
+  } catch (error) {
+    console.error('Get activities error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
