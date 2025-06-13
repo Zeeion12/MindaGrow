@@ -17,6 +17,7 @@ import ClassDetailUI from './pages/kelas/ClassDetailUI';
 
 // Import komponen game
 import GameMainUI from './pages/games/GameMainUI';
+import GameContainer from './pages/games/GameContainer';
 
 // Import notif
 import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
@@ -40,15 +41,15 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return <div>Loading...</div>;
   }
-  
+
   if (!user || !allowedRoles.includes(user.role)) {
     return <Navigate to="/login" />;
   }
-  
+
   return children;
 };
 
@@ -60,7 +61,7 @@ function App() {
         <Route path="/role-selection" element={<RoleSelection />} />
         <Route path="/register/:role" element={<Register />} />
         <Route path="/login" element={<Login />} />
-        
+
         <Route path="/" element={<DashboardLayout />}>
 
           {/*Route khusus dashboard*/}
@@ -108,6 +109,12 @@ function App() {
           <Route path="/game" element={
             <ProtectedRoute allowedRoles={['siswa']}>
               <GameMainUI />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/game/:gameId" element={
+            <ProtectedRoute allowedRoles={['siswa']}>
+              <GameContainer />
             </ProtectedRoute>
           } />
 

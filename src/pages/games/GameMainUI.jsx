@@ -14,20 +14,22 @@ const gameData = [
         title: "Tebak Pola (Pattern Puzzle)",
         progress: "25",
         image: game1Image,
+        gameId: "patternpuzzle"
     },
     {
         id: 2,
         title: "Yes or No",
         progress: "20",
         image: game2Image,
+        gameId: "yesorno"
     },
     {
         id: 3,
         title: "Maze Challenge",
         progress: "35",
         image: game3Image,
+        gameId: "mazechallenge"
     },
-    
 ]
 
 export default function GameMainUI () {
@@ -57,6 +59,7 @@ export default function GameMainUI () {
                                 subject={game.subject}
                                 progress={game.progress}
                                 image={game.image}
+                                gameId={game.gameId}
                             />
                         ))}
                     </div>
