@@ -17,18 +17,18 @@ const subjectScores = [
 const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
         return (
-        <div className="bg-white p-2 border border-slate-200 shadow-lg rounded-lg text-xs">
-            <p className="font-medium text-slate-800">{payload[0].payload.subject}</p>
-            <p className=" text-slate-600">
-                Skor: <span className="font-medium">{payload[0].value}</span>
-            </p>
-        </div>
+            <div className="bg-white p-2 border border-slate-200 shadow-lg rounded-lg text-xs">
+                <p className="font-medium text-slate-800">{payload[0].payload.subject}</p>
+                <p className=" text-slate-600">
+                    Skor: <span className="font-medium">{payload[0].value}</span>
+                </p>
+            </div>
         )
     }
     return null
 }
 
-export default function ScoreChatSiswa(){
+export default function ScoreChatSiswa() {
     const [view, setView] = useState("chart")
 
     // Fungsi untuk menentukan warna berdasarkan skor
@@ -42,7 +42,7 @@ export default function ScoreChatSiswa(){
     // Fungsi untuk mengunduh data sebagai CSV
     const downloadCSV = () => {
         const csvContent =
-        "Mata Pelajaran,Rata-Rata Skor\n" + subjectScores.map((item) => `${item.subject},${item.score}`).join("\n")
+            "Mata Pelajaran,Rata-Rata Skor\n" + subjectScores.map((item) => `${item.subject},${item.score}`).join("\n")
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
         const url = URL.createObjectURL(blob)
@@ -57,10 +57,10 @@ export default function ScoreChatSiswa(){
     return (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-biru-dasar to-yellow-50 border-b p-6">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-400 border-b p-6">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl text-slate-800 font-bold">Rata-Rata Skor Tugas Anda</h2>
+                        <h2 className="text-2xl text-red-50 font-bold">Rata-Rata Skor Tugas Anda</h2>
                         <p className="text-white mt-1">Data rata-rata skor untuk 7 mata pelajaran dalam satu bulan</p>
                     </div>
 
@@ -117,11 +117,11 @@ export default function ScoreChatSiswa(){
                                         tickLine={false}
                                         axisLine={{ stroke: "#e2e8f0" }}
                                         label={{
-                                        value: "Skor",
-                                        angle: -90,
-                                        position: "insideLeft",
-                                        offset: -5,
-                                        style: { fill: "#64748b", fontSize: 10 },
+                                            value: "Skor",
+                                            angle: -90,
+                                            position: "insideLeft",
+                                            offset: -5,
+                                            style: { fill: "#64748b", fontSize: 10 },
                                         }}
                                     />
                                     <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(236, 240, 244, 0.5)" }} />

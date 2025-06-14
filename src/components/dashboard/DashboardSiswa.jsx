@@ -2,14 +2,16 @@ import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { RiBarChartFill } from 'react-icons/ri';
 import Header from '../layout/layoutParts/Header';
+import LearnDurationChart from '../layout/Chartcard/LearnDurationChart'
+import ScoreChartSiswa from '../layout/Chartcard/ScoreChartSiswa'
 
 const DashboardSiswa = () => {
   const { user, logout } = useAuth();
-  
+
   return (
     <div className="h-screen flex flex-col">
-      <Header/>
-      
+      <Header />
+
       <main className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Welcome Card */}
@@ -19,7 +21,7 @@ const DashboardSiswa = () => {
               Ini adalah dashboard personalisasi untuk siswa. Anda dapat melihat kemajuan belajar, tugas, dan aktivitas lainnya di sini.
             </p>
           </div>
-          
+
           {/* Progress Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             {/* Kemajuan Belajar Card */}
@@ -37,7 +39,7 @@ const DashboardSiswa = () => {
                 <div className="bg-blue-500 h-2 rounded-full" style={{ width: '72%' }}></div>
               </div>
             </div>
-            
+
             {/* Points Card */}
             <div className="bg-white shadow rounded-lg p-6">
               <div className="flex items-center mb-4">
@@ -58,7 +60,7 @@ const DashboardSiswa = () => {
                 +25 hari ini
               </div>
             </div>
-            
+
             {/* Tasks Card */}
             <div className="bg-white shadow rounded-lg p-6">
               <div className="flex items-center mb-4">
@@ -78,7 +80,7 @@ const DashboardSiswa = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Activities Section */}
           <div className="bg-white shadow rounded-lg overflow-hidden">
             <div className="px-4 py-5 border-b border-gray-200">
@@ -97,6 +99,16 @@ const DashboardSiswa = () => {
                 <a href="#" className="text-blue-600 font-medium">Game: Petualangan Angka</a>
                 <p className="text-gray-600 mt-1">Anda mencapai level 5 dan mendapatkan 50 poin</p>
               </div>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="w-full min-h-[400px]">
+              <LearnDurationChart />
+            </div>
+            <div className="w-full min-h-[400px]">
+              <ScoreChartSiswa />
             </div>
           </div>
         </div>

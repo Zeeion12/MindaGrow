@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
+import CourseAchivement from '../../components/layout/Chartcard/CourseAchivement';
 
 const CourseList = () => {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ const CourseList = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch all required data in parallel
         const [coursesRes, popularRes, newCoursesRes, categoriesRes, progressRes, streakRes] = await Promise.all([
           axios.get('/api/courses'),
@@ -28,19 +29,19 @@ const CourseList = () => {
           axios.get('/api/users/me/progress'),
           axios.get('/api/users/me/streak')
         ]);
-        
+
         setCourses(coursesRes.data);
         setPopularCourses(popularRes.data);
         setNewCourses(newCoursesRes.data);
         setCategories(categoriesRes.data);
-        
+
         // Convert progress to a more usable format
         const progressMap = {};
         progressRes.data.forEach(item => {
           progressMap[item.course_id] = item.progress;
         });
         setUserProgress(progressMap);
-        
+
         // Set streak days
         setStreakDays(streakRes.data.current_streak || 0);
       } catch (error) {
@@ -49,18 +50,18 @@ const CourseList = () => {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, []);
-  
+
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
   };
-  
-  const filteredCourses = courses.filter(course => 
+
+  const filteredCourses = courses.filter(course =>
     course.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -68,7 +69,7 @@ const CourseList = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="container mx-auto px-4 py-6">
@@ -81,7 +82,7 @@ const CourseList = () => {
               </h1>
               <p className="text-gray-600">Baru saja</p>
             </div>
-            
+
             {/* Fire Streak */}
             {streakDays > 0 && (
               <div className="bg-yellow-400 rounded-lg p-4 text-center mt-4 md:mt-0">
@@ -92,7 +93,7 @@ const CourseList = () => {
             )}
           </div>
         </div>
-        
+
         {/* Currently Enrolled Courses */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {courses.filter(course => userProgress[course.id] !== undefined && userProgress[course.id] < 100)
@@ -100,9 +101,9 @@ const CourseList = () => {
             .map(course => (
               <Link to={`/courses/${course.id}`} key={course.id} className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 <div className="aspect-w-16 aspect-h-9 bg-gray-200">
-                  <img 
-                    src={course.banner_image} 
-                    alt={course.title} 
+                  <img
+                    src={course.banner_image}
+                    alt={course.title}
                     className="object-cover w-full h-full"
                   />
                 </div>
@@ -110,30 +111,27 @@ const CourseList = () => {
                   <h3 className="font-medium text-gray-900 mb-1">{course.title}</h3>
                   <div className="text-sm text-gray-600 mb-2">{course.category}</div>
                   <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full" 
+                    <div
+                      className="bg-blue-500 h-2 rounded-full"
                       style={{ width: `${userProgress[course.id]}%` }}
                     ></div>
                   </div>
                   <div className="text-right text-sm text-gray-600">{userProgress[course.id]}%</div>
                 </div>
               </Link>
-          ))}
+            ))}
         </div>
-        
+
         {/* Performance Charts Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {/* Course Progress Chart */}
           <div className="bg-white rounded-lg p-4 shadow-sm col-span-1 md:col-span-1">
             <h3 className="font-medium text-gray-800 mb-4">Pencapaian kursus</h3>
-            <div className="h-64 flex items-center justify-center">
-              {/* Chart will go here - simplified for this example */}
-              <div className="w-full h-56 bg-gray-100 flex items-center justify-center">
-                <span className="text-gray-400">Grafik Pencapaian</span>
-              </div>
+            <div className="h-64 overflow-y-auto no-scrollbar">
+              <CourseAchivement />
             </div>
           </div>
-          
+
           {/* Course Scores */}
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <h3 className="font-medium text-gray-800 mb-4">Skor kursus kamu</h3>
@@ -155,13 +153,13 @@ const CourseList = () => {
                       {course.score || Math.floor(Math.random() * 100)}
                     </div>
                   </div>
-              ))}
+                ))}
               <div className="text-right">
                 <a href="#" className="text-blue-500 text-sm hover:underline">Lihat lebih lanjut...</a>
               </div>
             </div>
           </div>
-          
+
           {/* Streak Card */}
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <div className="bg-yellow-400 rounded-lg p-6 flex flex-col items-center justify-center h-full">
@@ -171,7 +169,7 @@ const CourseList = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Search Bar */}
         <div className="relative mb-8">
           <input
@@ -187,7 +185,7 @@ const CourseList = () => {
             </svg>
           </div>
         </div>
-        
+
         {/* Popular Courses */}
         <section className="mb-10">
           <h2 className="text-xl font-bold mb-4">Paling populer</h2>
@@ -195,9 +193,9 @@ const CourseList = () => {
             {popularCourses.map(course => (
               <Link to={`/courses/${course.id}`} key={course.id} className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 <div className="aspect-w-16 aspect-h-9 bg-gray-200">
-                  <img 
-                    src={course.banner_image} 
-                    alt={course.title} 
+                  <img
+                    src={course.banner_image}
+                    alt={course.title}
                     className="object-cover w-full h-full"
                   />
                 </div>
@@ -208,7 +206,7 @@ const CourseList = () => {
             ))}
           </div>
         </section>
-        
+
         {/* New Courses */}
         <section className="mb-10">
           <h2 className="text-xl font-bold mb-4">Kursus baru</h2>
@@ -232,7 +230,7 @@ const CourseList = () => {
             ))}
           </div>
         </section>
-        
+
         {/* Categories */}
         <section>
           <h2 className="text-xl font-bold mb-4">Kategori</h2>
@@ -266,10 +264,10 @@ const getScoreColor = (score) => {
 
 const getCategoryColor = (categoryId) => {
   const colors = [
-    'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 
+    'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500',
     'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-teal-500'
   ];
-  
+
   return colors[categoryId % colors.length];
 };
 

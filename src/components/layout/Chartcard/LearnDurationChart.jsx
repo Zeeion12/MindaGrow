@@ -86,15 +86,15 @@ export default function LearnDurationChart() {
         document.body.removeChild(link)
     }
 
-    return(
+    return (
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 ">
-            
+
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-biru-dasar to-yellow-50 border-b p-4">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-400 border-b p-4">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                     <div>
-                        <h2 className="text-xl text-slate-800 font-bold">Total Durasi Belajar</h2>
-                        <p className="text-slate-600 text-sm mt-1">Waktu belajar siswa per bulan sepanjang tahun</p>
+                        <h2 className="text-xl text-red-50 font-bold">Total Durasi Belajar</h2>
+                        <p className="text-white text-sm mt-1">Waktu belajar siswa per bulan sepanjang tahun</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <select
@@ -155,7 +155,7 @@ export default function LearnDurationChart() {
                             <div>
                                 <p className="text-xs text-purple-700 font-medium">Bulan Terbanyak</p>
                                 <p className="text-lg font-bold text-purple-800">
-                                {maxDurationMonth.month} ({formatDuration(maxDurationMonth.duration)})
+                                    {maxDurationMonth.month} ({formatDuration(maxDurationMonth.duration)})
                                 </p>
                             </div>
                         </div>
@@ -209,9 +209,9 @@ export default function LearnDurationChart() {
                                     height={36}
                                     formatter={(value) => {
                                         return (
-                                        <span className="text-xs font-medium">
-                                            {value === "duration" ? "Total Durasi (menit)" : "Rata-rata Harian (menit)"}
-                                        </span>
+                                            <span className="text-xs font-medium">
+                                                {value === "duration" ? "Total Durasi (menit)" : "Rata-rata Harian (menit)"}
+                                            </span>
                                         )
                                     }}
                                 />
