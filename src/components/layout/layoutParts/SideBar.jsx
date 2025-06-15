@@ -3,23 +3,23 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 
 // Icons - Anda bisa menggunakan icon dari library seperti react-icons atau buat sendiri
-import { 
+import {
   // Umum icons
-  RiDashboardLine, 
+  RiDashboardLine,
   RiSettings4Line,
   RiBellLine,
   RiCoinLine,
 
   // Siswa icons
   RiGraduationCapLine,
-  RiTeamLine, 
+  RiTeamLine,
   RiGamepadLine,
 
   // Guru icons
   RiUser3Line,
   RiBookletLine,
   RiFileList3Line,
-  
+
   // Orangtua icons
   RiUserHeartLine,
   RiMessage3Line,
@@ -156,7 +156,7 @@ const Sidebar = ({ onToggle }) => {
         }
       ];
     }
-    
+
     // Fallback jika role tidak dikenali
     return [
       {
@@ -171,17 +171,16 @@ const Sidebar = ({ onToggle }) => {
       }
     ];
   };
-  
+
   const menuItems = getMenuItems();
-  
+
   return (
-    <div 
-      className={`h-screen bg-blue-500 fixed left-0 top-0 transition-all duration-300 ease-in-out z-10 ${
-        expanded ? 'w-64' : 'w-20'
-      } flex flex-col items-center py-4`}
+    <div
+      className={`h-screen bg-blue-500 fixed left-0 top-0 transition-all duration-300 ease-in-out z-10 ${expanded ? 'w-64' : 'w-20'
+        } flex flex-col items-center py-4`}
     >
       {/* Logo - Toggles sidebar on click */}
-      <div 
+      <div
         className="flex justify-center items-center mb-6 cursor-pointer"
         onClick={toggleSidebar}
       >
@@ -197,11 +196,10 @@ const Sidebar = ({ onToggle }) => {
           <Link
             key={index}
             to={item.path}
-            className={`w-full py-3 mb-2 rounded-md flex items-center transition-colors ${
-              isActive(item.path)
-                ? 'bg-yellow-400 text-blue-800'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            } ${expanded ? 'px-4 justify-start' : 'px-0 justify-center'}`}
+            className={`w-full py-3 mb-2 rounded-md flex items-center transition-colors ${isActive(item.path)
+              ? 'bg-yellow-400 text-blue-800'
+              : 'bg-white text-gray-700 hover:bg-gray-100'
+              } ${expanded ? 'px-4 justify-start' : 'px-0 justify-center'}`}
           >
             <span>{item.icon}</span>
             {expanded && (
@@ -212,16 +210,18 @@ const Sidebar = ({ onToggle }) => {
       </div>
 
       {/* Pro Upgrade Button */}
-      <div className={`mt-auto mb-4 px-3 w-full`}>
-        <div className={`bg-yellow-400 text-blue-800 rounded-md p-2 flex ${expanded ? 'flex-col items-center' : 'justify-center'}`}>
-          <div className="bg-white p-2 rounded-full mb-1">
-            <RiCoinLine size={20} className="text-yellow-400" />
+      <Link to="pengaturan/premium">
+        <div className={`mt-auto mb-4 px-3 w-full cursor-pointer`}>
+          <div className={`bg-yellow-400 text-blue-800 rounded-md p-2 flex ${expanded ? 'flex-col items-center' : 'justify-center'}`}>
+            <div className="bg-white p-2 rounded-full mb-1">
+              <RiCoinLine size={20} className="text-yellow-400" />
+            </div>
+            {expanded && (
+              <span className="text-sm font-medium text-center">Tingkatkan Pro untuk fitur lebih</span>
+            )}
           </div>
-          {expanded && (
-            <span className="text-sm font-medium text-center">Tingkatkan Pro untuk fitur lebih</span>
-          )}
         </div>
-      </div>
+      </Link>
     </div>
   );
 };

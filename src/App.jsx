@@ -11,15 +11,15 @@ import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
 import CourseLearn from './pages/courses/CourseLearn';
 
-// Import Kelas
-import ClassMainUI from './pages/Kelas/ClassMainUI';
+// Import komponen Kelas
+import ClassMainUI from './pages/kelas/ClassMainUI';
 import ClassDetailUI from './pages/kelas/ClassDetailUI';
 
 // Import komponen game
 import GameMainUI from './pages/games/GameMainUI';
 import GameContainer from './pages/games/GameContainer';
 
-// Import notif
+// Import komponen notifikasi siswa
 import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
 
 // Import Guru
@@ -33,10 +33,8 @@ import PemantauanAnakPage from './pages/Orangtua/PemantauanAnak';
 import ChatGuruPage from './pages/Orangtua/ChatGuru';
 import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
 
-//Import Admin
-import DashboardAdmin from './components/dashboard/DashboardAdmin';
-
 import ProfileSettings from './pages/setting/ProfileSettings';
+import UpdatePremium from './pages/setting/UpdatePremium';
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -118,7 +116,7 @@ function App() {
             </ProtectedRoute>
           } />
 
-          {/* Import khusu Notif */}
+          {/*Route khusus Noitf Siswa*/}
           <Route path="/notifikasi" element={
             <ProtectedRoute allowedRoles={['siswa']}>
               <NotifikasiSiswa />
@@ -164,15 +162,9 @@ function App() {
             </ProtectedRoute>
           } />
 
-          {/*Route khusus Admin*/}
-          <Route path="/dashboard/admin" element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <DashboardAdmin />
-            </ProtectedRoute>
-          } />
-
           {/*Route khusus pengaturan*/}
           <Route path="/pengaturan" element={<ProfileSettings />} />
+          <Route path="/pengaturan/premium" element={<UpdatePremium />} />
         </Route>
       </Routes>
     </AuthProvider>
