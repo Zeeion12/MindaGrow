@@ -37,6 +37,9 @@ import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
 import { AuthProvider, useAuth } from './context/AuthContext'
 
+// Import Admin
+import AdminDashboard from './components/dashboard/DashboardAdmin';
+
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
 
@@ -166,6 +169,9 @@ function App() {
           <Route path="/pengaturan" element={<ProfileSettings />} />
           <Route path="/pengaturan/premium" element={<UpdatePremium />} />
         </Route>
+
+          {/*Route khusus admin*/}
+          <Route path="/dashboard/admin" element={<AdminDashboard />} />
       </Routes>
     </AuthProvider>
   );

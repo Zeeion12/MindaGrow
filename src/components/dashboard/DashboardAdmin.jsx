@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserCheck, Clock, Activity, LogOut, Eye, Trash2 } from 'lucide-react';
+import { Users, UserCheck, Clock, Activity, LogOut, Eye, Trash2, Plus, X } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
@@ -14,9 +14,25 @@ const AdminDashboard = () => {
   const [selectedView, setSelectedView] = useState('overview');
   const [userDetails, setUserDetails] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form state untuk tambah user
+  const [userForm, setUserForm] = useState({
+    email: '',
+    password: '',
+    role: 'siswa',
+    nama_lengkap: '',
+    no_telepon: '',
+    // Role-specific fields
+    nis: '',
+    nuptk: '',
+    nik: '',
+    nik_orangtua: ''
+  });
 
   // Simulate authentication token (in real app, get from localStorage/context)
-  const token = localStorage.getItem('adminToken') || 'sample-admin-token';
+  const token = localStorage.getItem('token') || localStorage.getItem('adminToken') || 'sample-admin-token';
 
   useEffect(() => {
     fetchDashboardData();
@@ -178,6 +194,7 @@ const AdminDashboard = () => {
       if (response.ok) {
         setUsers(users.filter(user => user.id !== userId));
         alert('User berhasil dihapus');
+        fetchDashboardData(); // Refresh data
       }
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -185,9 +202,94 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setUserForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const resetForm = () => {
+    setUserForm({
+      email: '',
+      password: '',
+      role: 'siswa',
+      nama_lengkap: '',
+      no_telepon: '',
+      nis: '',
+      nuptk: '',
+      nik: '',
+      nik_orangtua: ''
+    });
+  };
+
+  const validateForm = () => {
+    const { email, password, role, nama_lengkap, no_telepon } = userForm;
+    
+    if (!email || !password || !nama_lengkap || !no_telepon) {
+      alert('Email, password, nama lengkap, dan nomor telepon wajib diisi');
+      return false;
+    }
+
+    // Role-specific validation
+    if (role === 'siswa' && (!userForm.nis || !userForm.nik_orangtua)) {
+      alert('NIS dan NIK Orang Tua wajib diisi untuk siswa');
+      return false;
+    }
+
+    if (role === 'guru' && !userForm.nuptk) {
+      alert('NUPTK wajib diisi untuk guru');
+      return false;
+    }
+
+    if (role === 'orangtua' && !userForm.nik) {
+      alert('NIK wajib diisi untuk orang tua');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+    
+    try {
+      setIsSubmitting(true);
+      
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userForm),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('User berhasil ditambahkan!');
+        setShowAddUserModal(false);
+        resetForm();
+        fetchDashboardData(); // Refresh data
+      } else {
+        alert(result.message || 'Gagal menambahkan user');
+      }
+    } catch (error) {
+      console.error('Error adding user:', error);
+      alert('Terjadi kesalahan saat menambahkan user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
-    window.location.reload();
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -208,13 +310,22 @@ const AdminDashboard = () => {
               <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
               <p className="text-sm text-gray-600">Platform Personalisasi Siswa</p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setShowAddUserModal(true)}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Tambah User
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -333,10 +444,19 @@ const AdminDashboard = () => {
         {/* Users Table */}
         {(selectedView === 'users' || selectedView === 'overview') && (
           <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-900">
                 {selectedView === 'overview' ? 'User Terdaftar' : 'Semua User'}
               </h3>
+              {selectedView === 'users' && (
+                <button
+                  onClick={() => setShowAddUserModal(true)}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Tambah User
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -386,12 +506,14 @@ const AdminDashboard = () => {
                           <button
                             onClick={() => handleViewUser(user.id)}
                             className="text-blue-600 hover:text-blue-900"
+                            title="Lihat Detail"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="text-red-600 hover:text-red-900"
+                            title="Hapus User"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -462,48 +584,227 @@ const AdminDashboard = () => {
         )}
       </div>
 
+      {/* Add User Modal */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-8 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Tambah User Baru</h3>
+              <button
+                onClick={() => setShowAddUserModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Basic Information */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={userForm.email}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={userForm.password}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                  <select
+                    name="role"
+                    value={userForm.role}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="siswa">Siswa</option>
+                    <option value="guru">Guru</option>
+                    <option value="orangtua">Orang Tua</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap *</label>
+                  <input
+                    type="text"
+                    name="nama_lengkap"
+                    value={userForm.nama_lengkap}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">No. Telepon *</label>
+                  <input
+                    type="tel"
+                    name="no_telepon"
+                    value={userForm.no_telepon}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                {/* Role-specific fields */}
+                {userForm.role === 'siswa' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">NIS *</label>
+                      <input
+                        type="text"
+                        name="nis"
+                        value={userForm.nis}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">NIK Orang Tua *</label>
+                      <input
+                        type="text"
+                        name="nik_orangtua"
+                        value={userForm.nik_orangtua}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                        maxLength="16"
+                        placeholder="16 digit NIK orang tua"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {userForm.role === 'guru' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">NUPTK *</label>
+                    <input
+                      type="text"
+                      name="nuptk"
+                      value={userForm.nuptk}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                )}
+
+                {userForm.role === 'orangtua' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">NIK *</label>
+                    <input
+                      type="text"
+                      name="nik"
+                      value={userForm.nik}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                      maxLength="16"
+                      placeholder="16 digit NIK"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-4 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    resetForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Menyimpan...
+                    </div>
+                  ) : (
+                    'Tambah User'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* User Detail Modal */}
       {showUserModal && userDetails && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Detail User</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Nama</label>
-                  <p className="text-sm text-gray-900">{userDetails.nama_lengkap || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <p className="text-sm text-gray-900">{userDetails.email}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Role</label>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(userDetails.role)}`}>
-                    {getRoleLabel(userDetails.role)}
-                  </span>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Identifier</label>
-                  <p className="text-sm text-gray-900">{userDetails.identifier || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Terakhir Login</label>
-                  <p className="text-sm text-gray-900">{formatDate(userDetails.last_login)}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Tanggal Daftar</label>
-                  <p className="text-sm text-gray-900">{formatDate(userDetails.created_at)}</p>
-                </div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Detail User</h3>
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Nama</label>
+                <p className="text-sm text-gray-900">{userDetails.nama_lengkap || 'N/A'}</p>
               </div>
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
-                >
-                  Tutup
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <p className="text-sm text-gray-900">{userDetails.email}</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Role</label>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(userDetails.role)}`}>
+                  {getRoleLabel(userDetails.role)}
+                </span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Identifier</label>
+                <p className="text-sm text-gray-900">{userDetails.identifier || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Terakhir Login</label>
+                <p className="text-sm text-gray-900">{formatDate(userDetails.last_login)}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tanggal Daftar</label>
+                <p className="text-sm text-gray-900">{formatDate(userDetails.created_at)}</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
