@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserCheck, Calendar, TrendingUp, Eye, Trash2, RefreshCw } from 'lucide-react';
+import { Users, UserCheck, Clock, Activity, LogOut, Eye, Trash2 } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
@@ -9,103 +9,120 @@ const AdminDashboard = () => {
     weekLogins: 0,
     roleStats: []
   });
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [showUserDetail, setShowUserDetail] = useState(false);
-  const [filter, setFilter] = useState('all');
+  const [selectedView, setSelectedView] = useState('overview');
+  const [userDetails, setUserDetails] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
 
-  // Simulasi token admin (dalam implementasi nyata, ini akan dari localStorage atau context)
-  const adminToken = 'your-admin-jwt-token';
+  // Simulate authentication token (in real app, get from localStorage/context)
+  const token = localStorage.getItem('adminToken') || 'sample-admin-token';
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
-    setLoading(true);
     try {
-      // Fetch users
-      const usersResponse = await fetch('/api/admin/users', {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      setLoading(true);
       
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json();
-        setUsers(usersData.users);
+      // Fetch all data in parallel
+      const [usersRes, statsRes, activitiesRes] = await Promise.all([
+        fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/admin/stats', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/admin/activities', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setUsers(usersData.users || []);
       }
 
-      // Fetch stats
-      const statsResponse = await fetch('/api/admin/stats', {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
         setStats(statsData);
       }
+
+      if (activitiesRes.ok) {
+        const activitiesData = await activitiesRes.json();
+        setActivities(activitiesData.activities || []);
+      }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // For demo purposes, using sample data
+      setSampleData();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewUser = async (userId) => {
-    try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const userData = await response.json();
-        setSelectedUser(userData.user);
-        setShowUserDetail(true);
+  const setSampleData = () => {
+    const sampleUsers = [
+      {
+        id: 1,
+        nama_lengkap: 'Budi Santoso',
+        email: 'budi@email.com',
+        role: 'siswa',
+        identifier: '12345',
+        last_login: '2025-06-15T08:30:00',
+        created_at: '2025-06-10T10:00:00'
+      },
+      {
+        id: 2,
+        nama_lengkap: 'Siti Rahayu',
+        email: 'siti@email.com',
+        role: 'guru',
+        identifier: 'NUPTK123',
+        last_login: '2025-06-15T09:15:00',
+        created_at: '2025-06-08T14:30:00'
+      },
+      {
+        id: 3,
+        nama_lengkap: 'Ahmad Wijaya',
+        email: 'ahmad@email.com',
+        role: 'orangtua',
+        identifier: '1234567890123456',
+        last_login: '2025-06-14T19:45:00',
+        created_at: '2025-06-05T16:20:00'
       }
-    } catch (error) {
-      console.error('Error fetching user detail:', error);
-    }
-  };
+    ];
 
-  const handleDeleteUser = async (userId, userName) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus user ${userName}?`)) {
-      try {
-        const response = await fetch(`/api/admin/users/${userId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${adminToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          alert('User berhasil dihapus');
-          fetchDashboardData(); // Refresh data
-        } else {
-          alert('Gagal menghapus user');
-        }
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Terjadi kesalahan saat menghapus user');
-      }
-    }
+    setUsers(sampleUsers);
+    setStats({
+      totalUsers: 3,
+      todayLogins: 2,
+      weekLogins: 3,
+      roleStats: [
+        { role: 'siswa', count: 1 },
+        { role: 'guru', count: 1 },
+        { role: 'orangtua', count: 1 }
+      ]
+    });
+    setActivities(sampleUsers);
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Belum pernah login';
     const date = new Date(dateString);
-    return date.toLocaleString('id-ID', {
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return 'Hari ini';
+    if (diffDays === 2) return 'Kemarin';
+    if (diffDays <= 7) return `${diffDays - 1} hari yang lalu`;
+    
+    return date.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
-      month: 'short',
-      day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -120,25 +137,63 @@ const AdminDashboard = () => {
     }
   };
 
-  const filteredUsers = users.filter(user => {
-    if (filter === 'all') return true;
-    if (filter === 'today') {
-      if (!user.last_login) return false;
-      const today = new Date().toDateString();
-      const loginDate = new Date(user.last_login).toDateString();
-      return today === loginDate;
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'siswa': return 'Siswa';
+      case 'guru': return 'Guru';
+      case 'orangtua': return 'Orang Tua';
+      default: return role;
     }
-    if (filter === 'never') return !user.last_login;
-    return user.role === filter;
-  });
+  };
+
+  const handleViewUser = async (userId) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setUserDetails(userData.user);
+        setShowUserModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+      // For demo, show sample data
+      const user = users.find(u => u.id === userId);
+      setUserDetails(user);
+      setShowUserModal(true);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus user ini?')) return;
+    
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        setUsers(users.filter(user => user.id !== userId));
+        alert('User berhasil dihapus');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Gagal menghapus user');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken');
+    window.location.reload();
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <RefreshCw className="animate-spin" size={24} />
-          <span>Loading dashboard...</span>
-        </div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -146,277 +201,304 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-gray-600">Platform Personalisasi Siswa</p>
+              <p className="text-sm text-gray-600">Platform Personalisasi Siswa</p>
             </div>
             <button
-              onClick={fetchDashboardData}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={handleLogout}
+              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
-              <RefreshCw size={16} />
-              <span>Refresh</span>
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
             </button>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Navigation Tabs */}
+        <div className="mb-8">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setSelectedView('overview')}
+              className={`pb-2 px-1 border-b-2 font-medium text-sm ${
+                selectedView === 'overview'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setSelectedView('users')}
+              className={`pb-2 px-1 border-b-2 font-medium text-sm ${
+                selectedView === 'users'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Semua User
+            </button>
+            <button
+              onClick={() => setSelectedView('activities')}
+              className={`pb-2 px-1 border-b-2 font-medium text-sm ${
+                selectedView === 'activities'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Aktivitas Login
+            </button>
+          </nav>
+        </div>
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="text-blue-600" size={24} />
+        {selectedView === 'overview' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Users className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total User</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                  </div>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <UserCheck className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Login Hari Ini</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.todayLogins}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Clock className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Login Minggu Ini</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.weekLogins}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Activity className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">User Aktif</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {users.filter(u => u.last_login).length}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <UserCheck className="text-green-600" size={24} />
+            {/* Role Distribution */}
+            <div className="bg-white rounded-lg shadow mb-8">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Distribusi Role User</h3>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Login Hari Ini</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.todayLogins}</p>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {stats.roleStats.map((stat) => (
+                    <div key={stat.role} className="text-center p-4 bg-gray-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-900">{stat.count}</p>
+                      <p className="text-sm text-gray-600 capitalize">{getRoleLabel(stat.role)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Calendar className="text-purple-600" size={24} />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Login Minggu Ini</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.weekLogins}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <TrendingUp className="text-orange-600" size={24} />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Aktif Rate</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalUsers > 0 ? Math.round((stats.weekLogins / stats.totalUsers) * 100) : 0}%
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Role Statistics */}
-        <div className="bg-white rounded-lg shadow mb-8 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Statistik Per Role</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {stats.roleStats.map((roleStat) => (
-              <div key={roleStat.role} className="text-center p-4 border rounded-lg">
-                <p className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getRoleColor(roleStat.role)}`}>
-                  {roleStat.role.charAt(0).toUpperCase() + roleStat.role.slice(1)}
-                </p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{roleStat.count}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow mb-6 p-4">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Semua Users ({users.length})
-            </button>
-            <button
-              onClick={() => setFilter('today')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Login Hari Ini ({users.filter(u => {
-                if (!u.last_login) return false;
-                const today = new Date().toDateString();
-                const loginDate = new Date(u.last_login).toDateString();
-                return today === loginDate;
-              }).length})
-            </button>
-            <button
-              onClick={() => setFilter('never')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'never' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Belum Pernah Login ({users.filter(u => !u.last_login).length})
-            </button>
-            <button
-              onClick={() => setFilter('siswa')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'siswa' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Siswa ({users.filter(u => u.role === 'siswa').length})
-            </button>
-            <button
-              onClick={() => setFilter('guru')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'guru' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Guru ({users.filter(u => u.role === 'guru').length})
-            </button>
-            <button
-              onClick={() => setFilter('orangtua')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === 'orangtua' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Orangtua ({users.filter(u => u.role === 'orangtua').length})
-            </button>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Users Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Daftar Users ({filteredUsers.length})
-            </h2>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nama
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Identifier
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Terakhir Login
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.nama_lengkap || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
-                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.identifier || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(user.last_login)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleViewUser(user.id)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
-                        title="Lihat Detail"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id, user.nama_lengkap)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Hapus User"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Tidak ada data</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Tidak ada user yang sesuai dengan filter yang dipilih.
-              </p>
+        {(selectedView === 'users' || selectedView === 'overview') && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                {selectedView === 'overview' ? 'User Terdaftar' : 'Semua User'}
+              </h3>
             </div>
-          )}
-        </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Identifier
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Terakhir Login
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {users.slice(0, selectedView === 'overview' ? 5 : users.length).map((user) => (
+                    <tr key={user.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.nama_lengkap || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
+                          {getRoleLabel(user.role)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {user.identifier || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(user.last_login)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleViewUser(user.id)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Activities Table */}
+        {selectedView === 'activities' && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Aktivitas Login Terbaru</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nama
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Waktu Login
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {activities.map((activity) => (
+                    <tr key={activity.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {activity.nama_lengkap || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-500">{activity.email}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(activity.role)}`}>
+                          {getRoleLabel(activity.role)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(activity.last_login)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          Aktif
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* User Detail Modal */}
-      {showUserDetail && selectedUser && (
+      {showUserModal && userDetails && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Detail User</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Nama Lengkap</label>
-                  <p className="text-sm text-gray-900">{selectedUser.details?.nama_lengkap || 'N/A'}</p>
+                  <label className="block text-sm font-medium text-gray-700">Nama</label>
+                  <p className="text-sm text-gray-900">{userDetails.nama_lengkap || 'N/A'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Email</label>
-                  <p className="text-sm text-gray-900">{selectedUser.email}</p>
+                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                  <p className="text-sm text-gray-900">{userDetails.email}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Role</label>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(selectedUser.role)}`}>
-                    {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
+                  <label className="block text-sm font-medium text-gray-700">Role</label>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(userDetails.role)}`}>
+                    {getRoleLabel(userDetails.role)}
                   </span>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">No. Telepon</label>
-                  <p className="text-sm text-gray-900">{selectedUser.details?.no_telepon || 'N/A'}</p>
+                  <label className="block text-sm font-medium text-gray-700">Identifier</label>
+                  <p className="text-sm text-gray-900">{userDetails.identifier || 'N/A'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Terakhir Login</label>
-                  <p className="text-sm text-gray-900">{formatDate(selectedUser.last_login)}</p>
+                  <label className="block text-sm font-medium text-gray-700">Terakhir Login</label>
+                  <p className="text-sm text-gray-900">{formatDate(userDetails.last_login)}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Terdaftar</label>
-                  <p className="text-sm text-gray-900">{formatDate(selectedUser.created_at)}</p>
+                  <label className="block text-sm font-medium text-gray-700">Tanggal Daftar</label>
+                  <p className="text-sm text-gray-900">{formatDate(userDetails.created_at)}</p>
                 </div>
               </div>
               <div className="mt-6 flex justify-end">
                 <button
-                  onClick={() => setShowUserDetail(false)}
+                  onClick={() => setShowUserModal(false)}
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
                 >
                   Tutup
