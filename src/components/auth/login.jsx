@@ -18,7 +18,7 @@ const Login = () => {
     e.preventDefault();
     
     if (!identifier || !password) {
-      setError('Email/NIS/NIK/NUPTK dan password wajib diisi');
+      setError('Email dan password wajib diisi');
       return;
     }
     
@@ -75,7 +75,7 @@ const Login = () => {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
-                Email/NIS/NIK/NUPTK {/* UPDATED LABEL */}
+                {identifier.includes('@') ? 'Email Admin' : 'NIS/NIK/NUPTK'}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -102,6 +102,7 @@ const Login = () => {
                   className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
+              {/* TAMBAHAN: Helper text */}
               {/* Helper text - hanya untuk mode admin */}
               {identifier.includes('@') && (
                 <p className="mt-1 text-xs text-gray-500">
@@ -176,8 +177,8 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                  identifier.includes('@') 
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                  identifier.includes('admin@')
                     ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
                     : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
                 }`}
@@ -192,7 +193,7 @@ const Login = () => {
                   </div>
                 ) : (
                   <>
-                    {identifier.includes('@') ? 'Masuk sebagai Admin' : 'Masuk'}
+                    {identifier.includes('admin@') ? 'Masuk sebagai Admin' : 'Masuk'}
                   </>
                 )}
               </button>
