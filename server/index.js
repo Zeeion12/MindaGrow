@@ -654,6 +654,11 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
     
     let userData = userResult.rows[0];
     
+    // Konversi path profile picture menjadi full URL jika perlu
+    if (userData.profile_picture && !userData.profile_picture.startsWith('http') && !userData.profile_picture.startsWith('data:')) {
+      userData.profile_picture = `${req.protocol}://${req.get('host')}/${userData.profile_picture}`;
+    }
+    
     // Gabungkan dengan data dari tabel role-specific
     if (userData.role === 'siswa') {
       const siswaResult = await pool.query(
@@ -696,20 +701,39 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
 // ===============================
 
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(__dirname, 'uploads', 'profile-pictures');
+      
+      // Buat direktori jika belum ada
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      // Buat nama file unik dengan timestamp dan user ID
+      const fileExtension = path.extname(file.originalname);
+      const fileName = `profile_${req.user.id}_${Date.now()}${fileExtension}`;
+      cb(null, fileName);
+    }
+  }),
   limits: {
     fileSize: 2 * 1024 * 1024 // 2MB
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    // Hanya izinkan file gambar
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('File harus berupa gambar'), false);
+      cb(new Error('File harus berupa gambar (JPEG, PNG, GIF, atau WebP)'), false);
     }
   }
 });
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/profile-pictures', express.static(path.join(__dirname, 'uploads', 'profile-pictures')));
 
 // Endpoint untuk upload dan update foto profil
 app.post('/api/users/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
@@ -718,13 +742,31 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
       return res.status(400).json({ message: 'Tidak ada file yang diupload' });
     }
     
-    const fileBuffer = req.file.buffer;
-    const base64Image = `data:${req.file.mimetype};base64,${fileBuffer.toString('base64')}`;
+    // Dapatkan data user lama untuk menghapus foto lama jika ada
+    const oldUserResult = await pool.query(
+      'SELECT profile_picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
     
-    // Update profile_picture di database
+    // Hapus foto lama jika ada
+    if (oldUserResult.rows.length > 0 && oldUserResult.rows[0].profile_picture) {
+      const oldPicturePath = oldUserResult.rows[0].profile_picture;
+      if (oldPicturePath && !oldPicturePath.startsWith('data:')) {
+        // Jika bukan base64, berarti file path
+        const fullOldPath = path.join(__dirname, oldPicturePath);
+        if (fs.existsSync(fullOldPath)) {
+          fs.unlinkSync(fullOldPath);
+        }
+      }
+    }
+    
+    // Simpan path relatif ke database (bukan full path)
+    const relativePath = `uploads/profile-pictures/${req.file.filename}`;
+    
+    // Update profile_picture di database dengan path file
     const result = await pool.query(
       'UPDATE users SET profile_picture = $1 WHERE id = $2 RETURNING id',
-      [base64Image, req.user.id]
+      [relativePath, req.user.id]
     );
     
     if (result.rows.length === 0) {
@@ -740,6 +782,11 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
     let userData = null;
     if (userResult.rows.length > 0) {
       userData = userResult.rows[0];
+      
+      // Ubah path menjadi full URL untuk response
+      if (userData.profile_picture && !userData.profile_picture.startsWith('http')) {
+        userData.profile_picture = `${req.protocol}://${req.get('host')}/${userData.profile_picture}`;
+      }
       
       if (userData.role === 'siswa') {
         const siswaResult = await pool.query(
@@ -770,11 +817,56 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
     
     res.json({ 
       message: 'Foto profil berhasil diperbarui',
-      profile_picture: base64Image,
+      profile_picture: `${req.protocol}://${req.get('host')}/${relativePath}`,
       user: userData
     });
   } catch (error) {
     console.error('Error updating profile picture:', error);
+    
+    // Hapus file yang sudah diupload jika terjadi error
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting uploaded file:', unlinkError);
+      }
+    }
+    
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
+
+app.delete('/api/users/profile-picture', authenticateToken, async (req, res) => {
+  try {
+    // Dapatkan data user untuk menghapus file foto
+    const userResult = await pool.query(
+      'SELECT profile_picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+    
+    const currentPicture = userResult.rows[0].profile_picture;
+    
+    // Hapus file foto jika ada
+    if (currentPicture && !currentPicture.startsWith('data:')) {
+      const filePath = path.join(__dirname, currentPicture);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    
+    // Update database, set profile_picture ke NULL
+    await pool.query(
+      'UPDATE users SET profile_picture = NULL WHERE id = $1',
+      [req.user.id]
+    );
+    
+    res.json({ message: 'Foto profil berhasil dihapus' });
+  } catch (error) {
+    console.error('Error deleting profile picture:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 });
