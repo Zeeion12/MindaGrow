@@ -4,6 +4,7 @@ import { RiBarChartFill } from 'react-icons/ri';
 import Header from '../layout/layoutParts/Header';
 import LearnDurationChart from '../layout/Chartcard/LearnDurationChart'
 import ScoreChartSiswa from '../layout/Chartcard/ScoreChartSiswa'
+import ScoreUjian from '../layout/Chartcard/ScoreUjian';
 
 const DashboardSiswa = () => {
   const { user, logout } = useAuth();
@@ -110,6 +111,10 @@ const DashboardSiswa = () => {
             <div className="w-full min-h-[400px]">
               <ScoreChartSiswa />
             </div>
+          </div>
+
+          <div className="mt-8 w-full min-h-[400px]">
+            <ScoreUjian />
           </div>
         </div>
       </main>
