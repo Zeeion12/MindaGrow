@@ -6,6 +6,11 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
+const Joi = require('joi');
+
+const TwoFactorService = require('./services/TwoFactorService'); 
 
 require('dotenv').config();
 
@@ -45,6 +50,39 @@ const requireAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Admin access required' });
   }
+  next();
+};
+
+// Rate limiting middleware untuk 2FA (BARU)
+const loginAttempts = new Map();
+
+const rateLimitLogin = (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 5;
+
+  if (!loginAttempts.has(ip)) {
+    loginAttempts.set(ip, { count: 1, resetTime: now + windowMs });
+    return next();
+  }
+
+  const attempts = loginAttempts.get(ip);
+  
+  if (now > attempts.resetTime) {
+    loginAttempts.set(ip, { count: 1, resetTime: now + windowMs });
+    return next();
+  }
+
+  if (attempts.count >= maxAttempts) {
+    return res.status(429).json({ 
+      success: false, 
+      message: 'Too many login attempts. Please try again later.' 
+    });
+  }
+
+  attempts.count++;
+  loginAttempts.set(ip, attempts);
   next();
 };
 
@@ -104,6 +142,78 @@ const getUserDetails = async (userId, role) => {
 const initDB = async () => {
   try {
     console.log('Checking database structure...');
+
+  try {
+      await pool.query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS two_factor_secret VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS backup_codes TEXT,
+        ADD COLUMN IF NOT EXISTS last_2fa_verify TIMESTAMP
+      `);
+    } catch (error) {
+      console.log('2FA columns might already exist:', error.message);
+    }
+
+    // Buat tabel untuk temporary 2FA tokens
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS temp_2fa_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        temp_token VARCHAR(255) NOT NULL,
+        secret VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_temp_2fa_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Buat enum type untuk attempt_type jika belum ada
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE attempt_type_enum AS ENUM ('login', '2fa_verify');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    // Buat tabel untuk login attempts tracking
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_attempts (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        ip_address INET NOT NULL,
+        attempt_type attempt_type_enum NOT NULL,
+        success BOOLEAN DEFAULT FALSE,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Buat tabel untuk active sessions
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        session_token VARCHAR(255) NOT NULL,
+        refresh_token VARCHAR(255),
+        ip_address INET NOT NULL,
+        user_agent TEXT,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT unique_session_token UNIQUE (session_token)
+      )
+    `);
+
+    // Tambahkan indexes
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_2fa_enabled ON users(is_2fa_enabled);
+      CREATE INDEX IF NOT EXISTS idx_login_attempts_email_created ON login_attempts(email, created_at);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active ON user_sessions(user_id, is_active);
+    `);
     
     // Cek apakah ada admin user
     const adminExists = await pool.query(
@@ -119,13 +229,49 @@ const initDB = async () => {
       );
       console.log('Admin user created: admin@platform.com / admin123');
     } else {
-      console.log('Admin user already exists');
     }
 
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);
   }
+};
+
+// HELPER FUNCTIONS UNTUK 2FA (BARU)
+// ===============================
+
+const generateTempToken = async (userId) => {
+  const tempToken = require('crypto').randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  // PERBAIKAN: Hanya insert user_id, temp_token, dan expires_at
+  // Secret akan di-set nanti saat setup 2FA
+  await pool.query(
+    'INSERT INTO temp_2fa_tokens (user_id, temp_token, expires_at) VALUES ($1, $2, $3)',
+    [userId, tempToken, expiresAt]
+  );
+
+  return tempToken;
+};
+
+const logLoginAttempt = async (email, ipAddress, attemptType, success, errorMessage = null) => {
+  try {
+    await pool.query(
+      'INSERT INTO login_attempts (email, ip_address, attempt_type, success, error_message) VALUES ($1, $2, $3, $4, $5)',
+      [email, ipAddress, attemptType, success, errorMessage]
+    );
+  } catch (error) {
+    console.error('Error logging login attempt:', error);
+  }
+};
+
+const saveSession = async (userId, accessToken, refreshToken, req) => {
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  await pool.query(
+    'INSERT INTO user_sessions (user_id, session_token, refresh_token, ip_address, user_agent, expires_at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [userId, accessToken, refreshToken, req.ip, req.get('User-Agent'), expiresAt]
+  );
 };
 
 // Check database connection
@@ -158,7 +304,7 @@ app.post('/api/admin/login', async (req, res) => {
     
     // Cari admin di tabel users
     const adminResult = await pool.query(
-      'SELECT id, email, password, role FROM users WHERE email = $1 AND role = $2',
+      'SELECT id, email, password, role, is_2fa_enabled FROM users WHERE email = $1 AND role = $2',
       [email, 'admin']
     );
     
@@ -174,32 +320,34 @@ app.post('/api/admin/login', async (req, res) => {
     if (!validPassword) {
       return res.status(400).json({ message: 'Email atau password tidak valid' });
     }
+
+    // BARU: Cek 2FA untuk admin
+    if (admin.is_2fa_enabled) {
+      return res.json({
+        success: true,
+        message: 'Credentials valid. 2FA verification required.',
+        requires2FA: true,
+        userId: admin.id,
+        userRole: 'admin'
+      });
+    }
+
+    // Jika admin belum setup 2FA, paksa setup
+    if (!admin.is_2fa_enabled) {
+      return res.json({
+        success: true,
+        message: 'Admin must setup 2FA for security.',
+        requiresSetup: true,
+        tempToken: await generateTempToken(admin.id),
+        userRole: 'admin',
+        canSkip: false // Admin tidak boleh skip
+      });
+    }
     
     // Update last login
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [admin.id]);
     
-    // Generate JWT token
-    const expiresIn = remember ? '7d' : '1d';
-    const token = jwt.sign(
-      { 
-        id: admin.id, 
-        role: admin.role,
-        email: admin.email 
-      },
-      process.env.JWT_SECRET || 'your_jwt_secret_key',
-      { expiresIn }
-    );
-    
-    console.log('Admin login successful');
-    res.json({ 
-      token, 
-      user: {
-        id: admin.id,
-        email: admin.email,
-        role: admin.role
-      }
-    });
-  } catch (error) {
+    } catch (error) {
     console.error('Error in admin login:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
@@ -215,6 +363,7 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
         u.role, 
         u.last_login, 
         u.created_at,
+        u.is_2fa_enabled,
         CASE 
           WHEN u.role = 'guru' THEN g.nama_lengkap
           WHEN u.role = 'orangtua' THEN o.nama_lengkap
@@ -283,11 +432,20 @@ app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) =>
       ORDER BY role
     `);
 
+    const twoFAStatsResult = await pool.query(`
+      SELECT 
+        COUNT(CASE WHEN is_2fa_enabled = true THEN 1 END) as enabled_2fa,
+        COUNT(CASE WHEN is_2fa_enabled = false THEN 1 END) as disabled_2fa
+      FROM users 
+      WHERE role != 'admin'
+    `);
+
     res.json({
       totalUsers: parseInt(totalUsersResult.rows[0].count),
       todayLogins: parseInt(todayLoginsResult.rows[0].count),
       weekLogins: parseInt(weekLoginsResult.rows[0].count),
-      roleStats: roleStatsResult.rows
+      roleStats: roleStatsResult.rows,
+      twoFAStats: twoFAStatsResult.rows[0]
     });
 
   } catch (error) {
@@ -302,7 +460,7 @@ app.get('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res
     const { id } = req.params;
 
     const userResult = await pool.query(
-      'SELECT id, email, role, last_login, created_at FROM users WHERE id = $1 AND role != $2',
+      'SELECT id, email, role, last_login, created_at, is_2fa_enabled FROM users WHERE id = $1 AND role != $2',
       [id, 'admin']
     );
 
@@ -361,6 +519,8 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
     }
 
     // Delete from users table
+    await client.query('DELETE FROM temp_2fa_tokens WHERE user_id = $1', [id]);
+    await client.query('DELETE FROM user_sessions WHERE user_id = $1', [id]);
     await client.query('DELETE FROM users WHERE id = $1', [id]);
 
     await client.query('COMMIT');
@@ -386,6 +546,7 @@ app.get('/api/admin/activities', authenticateToken, requireAdmin, async (req, re
         u.role,
         u.last_login,
         u.created_at,
+        u.is_2fa_enabled,
         CASE 
           WHEN u.role = 'guru' THEN g.nama_lengkap
           WHEN u.role = 'orangtua' THEN o.nama_lengkap
@@ -503,7 +664,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', rateLimitLogin, async (req, res) => {
   const { identifier, password, remember } = req.body;
   
   try {
@@ -513,45 +674,43 @@ app.post('/api/login', async (req, res) => {
     if (identifier.includes('@')) {
       // Kemungkinan email admin
       const adminResult = await pool.query(
-        'SELECT id, email, password, role FROM users WHERE email = $1 AND role = $2',
+        'SELECT id, email, password, role, is_2fa_enabled FROM users WHERE email = $1 AND role = $2',
         [identifier, 'admin']
       );
       
       if (adminResult.rows.length > 0) {
         const admin = adminResult.rows[0];
         
-        // Validate password
         const validPassword = await bcrypt.compare(password, admin.password);
         
         if (!validPassword) {
+          await logLoginAttempt(identifier, req.ip, 'login', false, 'Invalid password');
           return res.status(400).json({ message: 'Email atau password tidak valid' });
         }
         
-        // Update last login
-        await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [admin.id]);
+        await logLoginAttempt(identifier, req.ip, 'login', true);
         
-        // Generate JWT token
-        const expiresIn = remember ? '7d' : '1d';
-        const token = jwt.sign(
-          { 
-            id: admin.id, 
-            role: admin.role,
-            email: admin.email 
-          },
-          process.env.JWT_SECRET || 'your_jwt_secret_key',
-          { expiresIn }
-        );
-        
-        console.log('Admin login successful via /api/login');
-        return res.json({ 
-          token, 
-          user: {
-            id: admin.id,
-            email: admin.email,
-            role: admin.role,
-            nama_lengkap: 'Administrator'
-          }
-        });
+        // BARU: Cek 2FA untuk admin
+        if (admin.is_2fa_enabled) {
+          return res.json({
+            success: true,
+            message: 'Credentials valid. 2FA verification required.',
+            requires2FA: true,
+            userId: admin.id,
+            userRole: 'admin'
+          });
+        }
+
+        // Jika admin belum setup 2FA
+        if (!admin.is_2fa_enabled) {
+          return res.json({
+            success: true,
+            message: 'Login successful. 2FA setup recommended for admin.',
+            requiresSetup: true,
+            tempToken: await generateTempToken(admin.id),
+            userRole: 'admin'
+          });
+        }
       }
     }
     
@@ -560,7 +719,7 @@ app.post('/api/login', async (req, res) => {
     
     // Check in siswa table
     const siswaResult = await pool.query(
-      'SELECT s.*, u.email, u.password, u.role FROM siswa s JOIN users u ON s.user_id = u.id WHERE s.nis = $1',
+      'SELECT s.*, u.email, u.password, u.role, u.is_2fa_enabled FROM siswa s JOIN users u ON s.user_id = u.id WHERE s.nis = $1',
       [identifier]
     );
     
@@ -575,13 +734,12 @@ app.post('/api/login', async (req, res) => {
     } else {
       // Check in guru table
       const guruResult = await pool.query(
-        'SELECT g.*, u.email, u.password, u.role FROM guru g JOIN users u ON g.user_id = u.id WHERE g.nuptk = $1',
+        'SELECT g.*, u.email, u.password, u.role, u.is_2fa_enabled FROM guru g JOIN users u ON g.user_id = u.id WHERE g.nuptk = $1',
         [identifier]
       );
       
       if (guruResult.rows.length > 0) {
         user = guruResult.rows[0];
-        console.log('User found in guru table with role:', user.role);
         roleInfo = {
           nama_lengkap: user.nama_lengkap,
           role: 'guru',
@@ -590,13 +748,12 @@ app.post('/api/login', async (req, res) => {
       } else {
         // Check in orangtua table
         const orangtuaResult = await pool.query(
-          'SELECT o.*, u.email, u.password, u.role FROM orangtua o JOIN users u ON o.user_id = u.id WHERE o.nik = $1',
+          'SELECT o.*, u.email, u.password, u.role, u.is_2fa_enabled FROM orangtua o JOIN users u ON o.user_id = u.id WHERE o.nik = $1',
           [identifier]
         );
         
         if (orangtuaResult.rows.length > 0) {
           user = orangtuaResult.rows[0];
-          console.log('User found in orangtua table with role:', user.role);
           roleInfo = {
             nama_lengkap: user.nama_lengkap,
             role: 'orangtua',
@@ -606,36 +763,534 @@ app.post('/api/login', async (req, res) => {
       }
     }
     
-    console.log('User found:', user ? 'Yes' : 'No');
-    
     if (!user) {
+      await logLoginAttempt(identifier, req.ip, 'login', false, 'User not found');
       return res.status(400).json({ message: 'NIS/NIK/NUPTK atau password tidak valid' });
     }
     
     // Validate password
     const validPassword = await bcrypt.compare(password, user.password);
-    console.log('Password valid:', validPassword);
     
     if (!validPassword) {
+      await logLoginAttempt(user.email, req.ip, 'login', false, 'Invalid password');
       return res.status(400).json({ message: 'NIS/NIK/NUPTK atau password tidak valid' });
     }
     
     // Update last login
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.user_id]);
+
+    await logLoginAttempt(user.email, req.ip, 'login', true);
     
-    // Generate JWT token
-    const expiresIn = remember ? '7d' : '1d';
-    const token = jwt.sign(
-      { id: user.user_id, role: roleInfo.role, ...roleInfo },
-      process.env.JWT_SECRET || 'your_jwt_secret_key',
-      { expiresIn }
-    );
+    // BARU: Check if 2FA is enabled
+    if (user.is_2fa_enabled) {
+      return res.json({
+        success: true,
+        message: 'Credentials valid. 2FA verification required.',
+        requires2FA: true,
+        userId: user.user_id,
+        userRole: roleInfo.role
+      });
+    } else {
+      // BARU: Jika belum setup 2FA, berikan opsi untuk setup
+      return res.json({
+        success: true,
+        message: 'Login successful. 2FA setup available.',
+        requiresSetup: true,
+        tempToken: await generateTempToken(user.user_id),
+        userRole: roleInfo.role,
+        canSkip: true // Allow skip for non-admin users
+      });
+    }
     
-    console.log('Sending response with token and user info');
-    res.json({ token, user: roleInfo });
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
+
+// Setup 2FA - Generate QR code
+app.post('/api/auth/setup-2fa', async (req, res) => {
+  try {
+    const tempToken = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!tempToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Temporary token required'
+      });
+    }
+
+    console.log('Setup 2FA attempt with temp token:', tempToken);
+
+    // Verify temp token dan pastikan masih valid
+    const tempTokenResult = await pool.query(
+      'SELECT user_id FROM temp_2fa_tokens WHERE temp_token = $1 AND expires_at > NOW()',
+      [tempToken]
+    );
+
+    if (tempTokenResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired temporary token'
+      });
+    }
+
+    const userId = tempTokenResult.rows[0].user_id;
+    
+    // Get user email
+    const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Generate 2FA secret menggunakan TwoFactorService
+    const { secret, otpauthUrl } = TwoFactorService.generateSecret(user.email);
+    const qrCodeDataURL = await TwoFactorService.generateQRCode(otpauthUrl);
+    const backupCodes = TwoFactorService.generateBackupCodes();
+
+    // Update temp token dengan secret yang baru di-generate
+    await pool.query(
+      'UPDATE temp_2fa_tokens SET secret = $1 WHERE temp_token = $2',
+      [secret, tempToken]
+    );
+
+    console.log('2FA setup successful for user:', user.email);
+
+    res.json({
+      success: true,
+      qrCode: qrCodeDataURL,
+      secret: secret,
+      backupCodes: backupCodes,
+      timeRemaining: TwoFactorService.getTimeRemaining()
+    });
+
+  } catch (error) {
+    console.error('Setup 2FA error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to setup 2FA: ' + error.message
+    });
+  }
+});
+
+// Verify 2FA setup
+app.post('/api/auth/verify-setup', async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token || !/^\d{6}$/.test(token)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid 6-digit token required'
+      });
+    }
+
+    const tempToken = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!tempToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Temporary token required'
+      });
+    }
+
+    // Get temp token data with secret
+    const tempTokenResult = await pool.query(
+      'SELECT user_id, secret FROM temp_2fa_tokens WHERE temp_token = $1 AND expires_at > NOW() AND secret IS NOT NULL',
+      [tempToken]
+    );
+
+    if (tempTokenResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired temporary token, or setup not completed'
+      });
+    }
+
+    const { user_id, secret } = tempTokenResult.rows[0];
+
+    // Verify token using TwoFactorService
+    const isValid = TwoFactorService.verifyToken(secret, token);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid token. Please check your authenticator app.'
+      });
+    }
+
+    // Save secret to user and enable 2FA
+    await pool.query(
+      'UPDATE users SET two_factor_secret = $1, is_2fa_enabled = TRUE WHERE id = $2',
+      [secret, user_id]
+    );
+
+    // Clean up temp token
+    await pool.query('DELETE FROM temp_2fa_tokens WHERE user_id = $1', [user_id]);
+
+    // Get user data dan generate final tokens
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [user_id]);
+    const user = userResult.rows[0];
+
+    // Update last login
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+
+    // Generate JWT token
+    const expiresIn = '1d';
+    const jwtToken = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role,
+        email: user.email 
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      { expiresIn }
+    );
+
+    // Save session
+    await saveSession(user.id, jwtToken, null, req);
+
+    // Get user details based on role
+    let userDetails = await getUserDetails(user.id, user.role);
+    
+    console.log('2FA setup verification successful for user:', user.email);
+
+    res.json({
+      success: true,
+      message: '2FA setup completed successfully',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        ...userDetails
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify setup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify 2FA setup: ' + error.message
+    });
+  }
+});
+
+// Verify 2FA for login
+app.post('/api/auth/verify-2fa', async (req, res) => {
+  try {
+    const { userId, token, remember } = req.body;
+
+    if (!userId || !token) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID and token required'
+      });
+    }
+
+    if (!/^\d{6}$/.test(token)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid 6-digit token required'
+      });
+    }
+
+    // Get user
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Verify token
+    const isValid = TwoFactorService.verifyToken(user.two_factor_secret, token);
+    if (!isValid) {
+      await logLoginAttempt(user.email, req.ip, '2fa_verify', false, 'Invalid 2FA token');
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid token. Please check your authenticator app.'
+      });
+    }
+
+    // Update last 2FA verify time
+    await pool.query(
+      'UPDATE users SET last_2fa_verify = NOW(), last_login = CURRENT_TIMESTAMP WHERE id = $1',
+      [user.id]
+    );
+
+    await logLoginAttempt(user.email, req.ip, '2fa_verify', true);
+
+    // Generate JWT token
+    const expiresIn = remember ? '7d' : '1d';
+    const jwtToken = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role,
+        email: user.email 
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      { expiresIn }
+    );
+
+    // Save session
+    await saveSession(user.id, jwtToken, null, req);
+
+    // Get user details based on role
+    let userDetails = await getUserDetails(user.id, user.role);
+
+    console.log('2FA verification successful for user:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        ...userDetails
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify 2FA error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify 2FA: ' + error.message
+    });
+  }
+});
+
+// Skip 2FA setup (untuk non-admin users)
+app.post('/api/auth/skip-2fa', async (req, res) => {
+  try {
+    const tempToken = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!tempToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'Temporary token required'
+      });
+    }
+
+    const tempTokenResult = await pool.query(
+      'SELECT user_id FROM temp_2fa_tokens WHERE temp_token = $1 AND expires_at > NOW()',
+      [tempToken]
+    );
+
+    if (tempTokenResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired temporary token'
+      });
+    }
+
+    const userId = tempTokenResult.rows[0].user_id;
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+
+    // Admin cannot skip 2FA
+    if (user.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin must setup 2FA'
+      });
+    }
+
+    // Clean up temp token
+    await pool.query('DELETE FROM temp_2fa_tokens WHERE user_id = $1', [userId]);
+
+    // Update last login
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+
+    // Generate JWT token
+    const jwtToken = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role,
+        email: user.email 
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      { expiresIn: '1d' }
+    );
+
+    // Save session
+    await saveSession(user.id, jwtToken, null, req);
+
+    // Get user details based on role
+    let userDetails = await getUserDetails(user.id, user.role);
+
+    console.log('2FA skipped for user:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Login successful (2FA skipped)',
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        ...userDetails
+      }
+    });
+
+  } catch (error) {
+    console.error('Skip 2FA error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to skip 2FA: ' + error.message
+    });
+  }
+});
+
+// Disable 2FA (untuk user yang sudah login)
+app.post('/api/auth/disable-2fa', authenticateToken, async (req, res) => {
+  try {
+    const schema = Joi.object({
+      password: Joi.string().required(),
+      token: Joi.string().length(6).required()
+    });
+
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.details[0].message
+      });
+    }
+
+    const { password, token } = value;
+    const userId = req.user.id;
+
+    // Get user
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid password'
+      });
+    }
+
+    // Verify 2FA token
+    const isValid = TwoFactorService.verifyToken(user.two_factor_secret, token);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid 2FA token'
+      });
+    }
+
+    // Disable 2FA
+    await pool.query(
+      'UPDATE users SET is_2fa_enabled = FALSE, two_factor_secret = NULL, backup_codes = NULL WHERE id = $1',
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: '2FA has been disabled'
+    });
+
+  } catch (error) {
+    console.error('Disable 2FA error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to disable 2FA'
+    });
+  }
+});
+
+// Validate session endpoint
+app.post('/api/auth/validate-session', authenticateToken, async (req, res) => {
+  try {
+    // Get complete user data
+    const userResult = await pool.query(
+      'SELECT id, email, role, profile_picture, is_2fa_enabled, last_login FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Get role-specific data
+    let roleData = {};
+    if (user.role === 'siswa') {
+      const siswaResult = await pool.query(
+        'SELECT nama_lengkap, nis FROM siswa WHERE user_id = $1',
+        [user.id]
+      );
+      if (siswaResult.rows.length > 0) {
+        roleData = siswaResult.rows[0];
+      }
+    } else if (user.role === 'guru') {
+      const guruResult = await pool.query(
+        'SELECT nama_lengkap, nuptk FROM guru WHERE user_id = $1',
+        [user.id]
+      );
+      if (guruResult.rows.length > 0) {
+        roleData = guruResult.rows[0];
+      }
+    } else if (user.role === 'orangtua') {
+      const orangtuaResult = await pool.query(
+        'SELECT nama_lengkap, nik FROM orangtua WHERE user_id = $1',
+        [user.id]
+      );
+      if (orangtuaResult.rows.length > 0) {
+        roleData = orangtuaResult.rows[0];
+      }
+    } else if (user.role === 'admin') {
+      roleData = { nama_lengkap: 'Administrator' };
+    }
+
+    // Format profile picture URL
+    let profilePictureUrl = user.profile_picture;
+    if (profilePictureUrl && !profilePictureUrl.startsWith('http') && !profilePictureUrl.startsWith('data:')) {
+      profilePictureUrl = `${req.protocol}://${req.get('host')}/${profilePictureUrl}`;
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        profile_picture: profilePictureUrl,
+        is_2fa_enabled: user.is_2fa_enabled,
+        last_login: user.last_login,
+        ...roleData
+      }
+    });
+
+  } catch (error) {
+    console.error('Session validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to validate session: ' + error.message
+    });
   }
 });
 
@@ -644,7 +1299,7 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
   try {
     // Ambil data user dari database
     const userResult = await pool.query(
-      'SELECT id, email, role, profile_picture FROM users WHERE id = $1',
+      'SELECT id, email, role, profile_picture, is_2fa_enabled FROM users WHERE id = $1',
       [req.user.id]
     );
     
@@ -868,6 +1523,64 @@ app.delete('/api/users/profile-picture', authenticateToken, async (req, res) => 
   } catch (error) {
     console.error('Error deleting profile picture:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
+
+app.post('/api/auth/logout', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    // Deactivate current session
+    await pool.query(
+      'UPDATE user_sessions SET is_active = FALSE WHERE user_id = $1 AND session_token = $2',
+      [userId, token]
+    );
+
+    console.log('User logged out:', userId);
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to logout: ' + error.message
+    });
+  }
+});
+
+app.get('/api/user/2fa-status', authenticateToken, async (req, res) => {
+  try {
+    const userResult = await pool.query(
+      'SELECT is_2fa_enabled, last_2fa_verify FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    res.json({
+      success: true,
+      is2FAEnabled: user.is_2fa_enabled,
+      lastVerify: user.last_2fa_verify
+    });
+
+  } catch (error) {
+    console.error('Get 2FA status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get 2FA status'
+    });
   }
 });
 

@@ -7,6 +7,10 @@ import Login from './components/auth/Login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardLayout from './components/layout/DashboardLayout';
 
+//Import Khusus 2FA
+import TwoFactorSetup from './components/auth/TwoFactorSetup';
+import TwoFactorVerify from './components/auth/TwoFactorVerify';
+
 // Import komponen kursus
 import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
@@ -65,6 +69,8 @@ function App() {
         <Route path="/role-selection" element={<RoleSelection />} />
         <Route path="/register/:role" element={<Register />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/2fa-setup" element={<TwoFactorSetup />} />
+        <Route path="/2fa-verify" element={<TwoFactorVerify />} />
 
         <Route path="/" element={<DashboardLayout />}>
 

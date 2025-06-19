@@ -1,18 +1,32 @@
+// components/auth/Login.jsx - Quick Fix
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/authContext';
+import TwoFactorSetup from './TwoFactorSetup';
+import TwoFactorVerify from './TwoFactorVerify';
 import LoginImage from '../../assets/login mindagrow.jpg';
 
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Form states
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // 2FA states
+  const [loginStep, setLoginStep] = useState('login'); // 'login', 'setup', 'verify'
+  const [authData, setAuthData] = useState({
+    tempToken: null,
+    userId: null,
+    userRole: null,
+    userEmail: null,
+    canSkip: false
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,11 +42,106 @@ const Login = () => {
 
       console.log('🔄 Frontend: Attempting login with:', identifier);
 
-      const result = await login(identifier, password, remember);
+      // FIXED: Use the existing endpoint that's already working
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          identifier,
+          password,
+          remember
+        })
+      });
+
+      // Check if response is HTML (404 page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response. Check if backend is running on port 5000.');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'Login gagal');
+        return;
+      }
+
+      console.log('✅ Frontend: Login response:', data);
+
+      // Handle different response types based on your current backend
+      if (data.success === false) {
+        setError(data.message || 'Login gagal');
+        return;
+      }
+
+      // Check for 2FA responses (new system)
+      if (data.requires2FA) {
+        // User needs 2FA verification
+        setAuthData({
+          userId: data.userId,
+          userRole: data.userRole,
+          userEmail: identifier.includes('@') ? identifier : null,
+          canSkip: false
+        });
+        setLoginStep('verify');
+        return;
+      } 
+      
+      if (data.requiresSetup) {
+        // User needs 2FA setup
+        setAuthData({
+          tempToken: data.tempToken,
+          userRole: data.userRole,
+          canSkip: data.canSkip,
+          userEmail: identifier.includes('@') ? identifier : null
+        });
+        setLoginStep('setup');
+        return;
+      } 
+      
+      // Direct login success (current working system)
+      if (data.token && data.user) {
+        await handleLoginSuccess(data);
+      } else {
+        // Handle old system response format
+        await handleLoginSuccess(data);
+      }
+
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      
+      // Better error handling for network issues
+      if (error.message.includes('fetch')) {
+        setError('Tidak dapat terhubung ke server. Pastikan server berjalan di port 5000.');
+      } else if (error.message.includes('Unexpected token')) {
+        setError('Server mengembalikan response yang tidak valid. Periksa console untuk detail.');
+      } else {
+        setError(error.message || 'Terjadi kesalahan saat login');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle successful login (after 2FA verification or direct login)
+  const handleLoginSuccess = async (data) => {
+    try {
+      // Use authContext login to save token and user data
+      let result;
+      
+      if (data.token && data.user) {
+        // New format: {token, user}
+        result = await login(data.token, data.user);
+      } else {
+        // Legacy format or direct user object
+        result = await login(identifier, password, remember);
+      }
 
       console.log('✅ Frontend: Login successful, user role:', result.user.role);
 
-      // Navigate based on role - TAMBAHAN UNTUK ADMIN
+      // Navigate based on role
       if (result.user.role === 'admin') {
         console.log('🔑 Admin detected! Redirecting to admin dashboard...');
         navigate('/dashboard/admin');
@@ -50,13 +159,71 @@ const Login = () => {
         setError('Role tidak dikenali: ' + result.user.role);
       }
     } catch (error) {
-      console.error('❌ Login error:', error);
-      setError(error.message || 'Terjadi kesalahan saat login');
-    } finally {
-      setIsLoading(false);
+      console.error('❌ Login success handler error:', error);
+      setError('Terjadi kesalahan setelah login');
     }
   };
 
+  // Handle 2FA setup completion
+  const handle2FASetupComplete = (data) => {
+    console.log('✅ 2FA Setup completed:', data);
+    handleLoginSuccess(data);
+  };
+
+  // Handle 2FA setup skip
+  const handle2FASetupSkip = (data) => {
+    console.log('⏭️ 2FA Setup skipped:', data);
+    handleLoginSuccess(data);
+  };
+
+  // Handle 2FA verification success
+  const handle2FAVerifySuccess = (data) => {
+    console.log('✅ 2FA Verification successful:', data);
+    handleLoginSuccess(data);
+  };
+
+  // Reset to login form
+  const handleBackToLogin = () => {
+    setLoginStep('login');
+    setAuthData({
+      tempToken: null,
+      userId: null,
+      userRole: null,
+      userEmail: null,
+      canSkip: false
+    });
+    setError('');
+  };
+
+  // Render 2FA Setup component
+  if (loginStep === 'setup') {
+    return (
+      <TwoFactorSetup
+        tempToken={authData.tempToken}
+        userRole={authData.userRole}
+        canSkip={authData.canSkip}
+        onComplete={handle2FASetupComplete}
+        onSkip={handle2FASetupSkip}
+        onCancel={handleBackToLogin}
+      />
+    );
+  }
+
+  // Render 2FA Verify component
+  if (loginStep === 'verify') {
+    return (
+      <TwoFactorVerify
+        userId={authData.userId}
+        userRole={authData.userRole}
+        userEmail={authData.userEmail}
+        onSuccess={handle2FAVerifySuccess}
+        onBack={handleBackToLogin}
+        rememberDevice={remember}
+      />
+    );
+  }
+
+  // Render login form
   return (
     <div className="h-screen flex overflow-hidden">
       {/* Left Section - Login Form */}
@@ -79,7 +246,6 @@ const Login = () => {
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  {/* UPDATED ICON - Email/User icon */}
                   {identifier.includes('@') ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
@@ -102,8 +268,6 @@ const Login = () => {
                   className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
-              {/* TAMBAHAN: Helper text */}
-              {/* Helper text - hanya untuk mode admin */}
               {identifier.includes('@') && (
                 <p className="mt-1 text-xs text-gray-500">
                   Mode Admin
@@ -180,7 +344,7 @@ const Login = () => {
                 className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${identifier.includes('admin@')
                     ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
                     : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
               >
                 {isLoading ? (
                   <div className="flex items-center">
@@ -228,6 +392,19 @@ const Login = () => {
                   Register
                 </Link>
               </p>
+            </div>
+
+            {/* 2FA Info */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">Keamanan Tingkat Tinggi</p>
+                  <p>Akun dilindungi dengan Two-Factor Authentication (2FA) untuk keamanan maksimal.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
