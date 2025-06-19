@@ -1,46 +1,41 @@
-
+import { useAuth } from '../../../context/authContext';
 import { useState } from "react"
 
-const initialMessages = [
-    {
-        id: 1,
-        sender: "teacher",
-        username: "username 1", // Teacher username
-        message: "Mantap ITO!! Semangatttt",
-        timestamp: "kemarin, 19 April 2025 11.56",
-        avatar: "/placeholder.svg?height=60&width=60",
-    },
-    {
-        id: 2,
-        sender: "student",
-        username: "username 2", // Student username
-        message: "Hehehee, makasi ibu!",
-        timestamp: "kemarin, 19 April 2025 13.01",
-        avatar: "/placeholder.svg?height=60&width=60",
-    }
-]
+export default function CardKomenGuru() {
+    const { user } = useAuth();
 
+    const initialMessages = [
+        {
+            id: 1,
+            sender: "teacher",
+            username: "Guru", // Teacher username
+            message: "Mantap Semangatttt",
+            timestamp: "kemarin, 19 April 2025 11.56",
+            avatar: "/placeholder.svg?height=60&width=60",
+        },
+        {
+            id: 2,
+            sender: "student",
+            username: user?.nama_lengkap || "Siswa", // Now it can access user
+            message: "Hehehee, makasi ibu!",
+            timestamp: "kemarin, 19 April 2025 13.01",
+            avatar: "/placeholder.svg?height=60&width=60",
+        }
+    ]
 
-export default function CardKomenGuru () {
-
-    // Untuk menyimpan pesan yang ada di chat
     const [messages, setMessages] = useState(initialMessages)
-    // Untuk menyimpan pesan yang baru dikirim
     const [newMessage, setNewMessage] = useState("")
 
-    // 
     const handleSendMessage = (e) => {
         e.preventDefault()
         if (newMessage.trim() === "") return
 
         // Menambahkan pesan baru ke dalam array messages
         const newMsg = {
-            id: messages.length + 1, // ID baru untuk pesan
-            sender: "student", 
-            username: "username 2", // Student username
-            message: newMessage, // Pesan yang baru dikirim
-            
-            // Menggunakan format tanggal dan waktu lokal
+            id: messages.length + 1,
+            sender: "student",
+            username: user.nama_lengkap, // Changed this line to use user's name
+            message: newMessage,
             timestamp: new Date().toLocaleString("id-ID", {
                 day: "numeric",
                 month: "long",
@@ -51,15 +46,15 @@ export default function CardKomenGuru () {
             avatar: "/placeholder.svg?height=60&width=60",
         }
 
-        setMessages([...messages, newMsg]) // Menambahkan pesan baru ke dalam array messages
-        setNewMessage("") // Mengosongkan input setelah mengirim pesan
+        setMessages([...messages, newMsg])
+        setNewMessage("")
     }
-        
+
 
 
     return (
-        <div className="max-w-md  bg-white rounded-3xl shadow-lg overflow-hidden border border-blue-100">    
-            <div className="p-6 space-y-6"> 
+        <div className="max-w-md  bg-white rounded-3xl shadow-lg overflow-hidden border border-blue-100">
+            <div className="p-6 space-y-6">
                 <h2 className="text-2xl font-bold text-gray-900">Komentar guru tentang anda</h2>
 
                 <div className="space-y-6">
@@ -96,8 +91,8 @@ export default function CardKomenGuru () {
                 {/* Input Message */}
                 <form onSubmit={handleSendMessage} className="mt-4">
                     <div className="relative">
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             placeholder="Ketik disini..."
                             className="w-full px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-300"
                             value={newMessage}
