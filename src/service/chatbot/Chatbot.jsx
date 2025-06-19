@@ -86,7 +86,7 @@ const Chatbot = ({ onClose }) => {
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header Chatbot */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex items-center justify-between shadow-lg">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-400 text-white px-6 py-4 flex items-center justify-between shadow-lg">
         <div className="flex items-center">
           <div className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mr-4 shadow-lg">
             <span className="text-2xl">🤖</span>

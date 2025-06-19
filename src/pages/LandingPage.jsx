@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authContext';
 import Footer from '../components/layout/layoutParts/Footer';
 
 import heroImg from '../assets/HeroSection.png'; // Gambar hero dengan 2 anak
@@ -62,7 +62,7 @@ const LandingPage = () => {
       text: 'Sebagai guru, saya sangat terbantu dengan laporan detail di platform ini. Memudahkan personalisasi pembelajaran.'
     },
   ];
-  
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header/Navbar */}
@@ -86,14 +86,14 @@ const LandingPage = () => {
               platform edukasi berbasis AI & gamifikasi untuk anak usia 5-12 tahun.
             </p>
             <div className="flex space-x-4">
-              <Link 
-                to="/role-selection" 
+              <Link
+                to="/role-selection"
                 className="bg-yellow-400 text-blue-800 px-6 py-3 rounded-md font-medium hover:bg-yellow-300"
               >
                 Daftar sekarang
               </Link>
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="bg-transparent border-2 border-white text-white px-6 py-3 rounded-md font-medium hover:bg-white hover:bg-opacity-10"
               >
                 Masuk
@@ -102,9 +102,9 @@ const LandingPage = () => {
           </div>
           <div className="md:w-1/2">
             <div className="rounded-3xl overflow-hidden bg-gradient-to-r from-yellow-300 to-red-500">
-              <img 
-                src={heroImg} 
-                alt="Children learning" 
+              <img
+                src={heroImg}
+                alt="Children learning"
                 className="w-full h-auto object-cover"
               />
             </div>
@@ -118,7 +118,7 @@ const LandingPage = () => {
           <h2 className="text-3xl text-blue-600 font-bold text-center mb-12">
             Fitur Unggulan
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <div key={index} className="p-6 border border-gray-100 rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -148,7 +148,7 @@ const LandingPage = () => {
           <h2 className="text-2xl font-bold text-center mb-12">
             Apa kata orang tua mengenai website kami?
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {testimonials.map((testimonial, index) => (
               <div key={index} className="bg-white p-6 rounded-lg shadow-sm">
