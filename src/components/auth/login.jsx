@@ -1,37 +1,37 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import LoginImage from '../../assets/login mindagrow.jpg';
 
 const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
-  
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!identifier || !password) {
       setError('Email dan password wajib diisi');
       return;
     }
-    
+
     try {
       setIsLoading(true);
       setError('');
-      
+
       console.log('🔄 Frontend: Attempting login with:', identifier);
-      
+
       const result = await login(identifier, password, remember);
-      
+
       console.log('✅ Frontend: Login successful, user role:', result.user.role);
-      
+
       // Navigate based on role - TAMBAHAN UNTUK ADMIN
       if (result.user.role === 'admin') {
         console.log('🔑 Admin detected! Redirecting to admin dashboard...');
@@ -56,7 +56,7 @@ const Login = () => {
       setIsLoading(false);
     }
   };
-  
+
   return (
     <div className="h-screen flex overflow-hidden">
       {/* Left Section - Login Form */}
@@ -65,13 +65,13 @@ const Login = () => {
           <h2 className="text-3xl font-normal text-center text-gray-800 mb-8">
             Login
           </h2>
-          
+
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
             </div>
           )}
-          
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
@@ -177,11 +177,10 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                  identifier.includes('admin@')
-                    ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 ${identifier.includes('admin@')
+                    ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
                     : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
-                }`}
+                  }`}
               >
                 {isLoading ? (
                   <div className="flex items-center">
@@ -233,12 +232,12 @@ const Login = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Right Section - Image */}
       <div className="hidden md:block md:w-1/2 bg-red-500">
-        <img 
-          src={LoginImage} 
-          alt="login image" 
+        <img
+          src={LoginImage}
+          alt="login image"
           className="h-full w-full object-cover"
         />
       </div>

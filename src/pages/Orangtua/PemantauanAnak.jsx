@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import Header from '../../components/layout/layoutParts/Header';
-import { 
-  RiBookOpenLine, 
-  RiTimeLine, 
-  RiArrowUpLine, 
+import {
+  RiBookOpenLine,
+  RiTimeLine,
+  RiArrowUpLine,
   RiArrowDownLine,
   RiMedalLine,
   RiFileChartLine,
@@ -28,36 +28,36 @@ const PemantauanAnakPage = () => {
     const fetchChildrenData = async () => {
       try {
         setLoading(true);
-        
+
         // Dalam implementasi sebenarnya, ini akan menjadi panggilan API
         // const childrenResponse = await axios.get('/api/parents/children');
         // setChildren(childrenResponse.data);
-        
+
         // Untuk demo, kita gunakan data dummy
         const dummyChildren = [
           { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', nis: '23523252', image: '/api/placeholder/50/50' },
           { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', nis: '23523253', image: '/api/placeholder/50/50' }
         ];
-        
+
         setChildren(dummyChildren);
-        
+
         // Set anak pertama sebagai default yang dipilih
         if (dummyChildren.length > 0 && !selectedChild) {
           setSelectedChild(dummyChildren[0]);
-          
+
           // Fetch data for selected child
           // const [coursesRes, activitiesRes] = await Promise.all([
           //   axios.get(`/api/parents/children/${dummyChildren[0].id}/courses`),
           //   axios.get(`/api/parents/children/${dummyChildren[0].id}/activities`)
           // ]);
-          
+
           // Dummy data untuk kursus anak
           setCourses([
-            { 
-              id: 1, 
-              title: 'Matematika - Aljabar', 
-              progress: 82, 
-              last_accessed: '2 jam lalu', 
+            {
+              id: 1,
+              title: 'Matematika - Aljabar',
+              progress: 82,
+              last_accessed: '2 jam lalu',
               score: 85,
               status: 'active',
               teacher: 'Ibu Indah Pertiwi',
@@ -65,11 +65,11 @@ const PemantauanAnakPage = () => {
                 { id: 1, title: 'Quiz Persamaan Kuadrat', deadline: '12 Mei 2025' }
               ]
             },
-            { 
-              id: 2, 
-              title: 'Biologi - Reproduksi Manusia', 
-              progress: 43, 
-              last_accessed: '1 hari lalu', 
+            {
+              id: 2,
+              title: 'Biologi - Reproduksi Manusia',
+              progress: 43,
+              last_accessed: '1 hari lalu',
               score: 78,
               status: 'active',
               teacher: 'Bapak Ahmad Jauhari',
@@ -77,11 +77,11 @@ const PemantauanAnakPage = () => {
                 { id: 1, title: 'Tugas Laporan Praktikum', deadline: '14 Mei 2025' }
               ]
             },
-            { 
-              id: 3, 
-              title: 'Fisika - Hukum Newton', 
-              progress: 10, 
-              last_accessed: '3 hari lalu', 
+            {
+              id: 3,
+              title: 'Fisika - Hukum Newton',
+              progress: 10,
+              last_accessed: '3 hari lalu',
               score: null,
               status: 'active',
               teacher: 'Ibu Sri Wahyuni',
@@ -89,28 +89,28 @@ const PemantauanAnakPage = () => {
                 { id: 1, title: 'Quiz Hukum Newton', deadline: '16 Mei 2025' }
               ]
             },
-            { 
-              id: 4, 
-              title: 'Bahasa Indonesia - Puisi', 
-              progress: 100, 
-              last_accessed: '1 minggu lalu', 
+            {
+              id: 4,
+              title: 'Bahasa Indonesia - Puisi',
+              progress: 100,
+              last_accessed: '1 minggu lalu',
               score: 90,
               status: 'completed',
               teacher: 'Bapak Darmawan',
               upcoming_tasks: []
             },
-            { 
-              id: 5, 
-              title: 'IPS - Sejarah Indonesia', 
-              progress: 100, 
-              last_accessed: '2 minggu lalu', 
+            {
+              id: 5,
+              title: 'IPS - Sejarah Indonesia',
+              progress: 100,
+              last_accessed: '2 minggu lalu',
               score: 88,
               status: 'completed',
               teacher: 'Ibu Ratna Sari',
               upcoming_tasks: []
             },
           ]);
-          
+
           // Dummy data untuk aktivitas anak
           setActivities([
             { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
@@ -121,7 +121,7 @@ const PemantauanAnakPage = () => {
             { id: 6, type: 'course_complete', course: 'IPS - Sejarah Indonesia', description: 'Menyelesaikan kursus', score: 88, date: '2 minggu lalu' },
           ]);
         }
-        
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching children data:', error);
@@ -183,21 +183,21 @@ const PemantauanAnakPage = () => {
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen ml-20">
+    <div className="bg-gray-50 min-h-screen">
       <Header title="Pemantauan Anak" />
-      
+
       <div className="px-6 py-4">
         {/* Pilihan Anak */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-3">Anak Saya</h2>
           <div className="flex space-x-4">
             {children.map(child => (
-              <div 
+              <div
                 key={child.id}
                 onClick={() => handleChildSelect(child)}
                 className={`flex items-center p-3 rounded-lg cursor-pointer transition-all
-                  ${selectedChild?.id === child.id 
-                    ? 'bg-blue-100 ring-2 ring-blue-500' 
+                  ${selectedChild?.id === child.id
+                    ? 'bg-blue-100 ring-2 ring-blue-500'
                     : 'bg-gray-50 hover:bg-gray-100'}`}
               >
                 <div className="w-10 h-10 rounded-full bg-gray-300 mr-3 overflow-hidden">
@@ -232,42 +232,39 @@ const PemantauanAnakPage = () => {
             <div className="bg-white p-4 rounded-lg shadow mb-6">
               <div className="flex flex-wrap justify-between items-center">
                 <div className="flex space-x-2 mb-2 sm:mb-0">
-                  <button 
+                  <button
                     onClick={() => setFilterActive('all')}
-                    className={`px-4 py-2 rounded-md text-sm ${
-                      filterActive === 'all' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm ${filterActive === 'all'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     Semua
                   </button>
-                  <button 
+                  <button
                     onClick={() => setFilterActive('active')}
-                    className={`px-4 py-2 rounded-md text-sm ${
-                      filterActive === 'active' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm ${filterActive === 'active'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     Aktif
                   </button>
-                  <button 
+                  <button
                     onClick={() => setFilterActive('completed')}
-                    className={`px-4 py-2 rounded-md text-sm ${
-                      filterActive === 'completed' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm ${filterActive === 'completed'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     Selesai
                   </button>
                 </div>
-                
+
                 <div className="flex items-center">
                   <span className="text-sm text-gray-600 mr-2">Urutkan: </span>
-                  <select 
-                    value={sortBy} 
+                  <select
+                    value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                     className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -283,7 +280,7 @@ const PemantauanAnakPage = () => {
             {/* Kursus */}
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-4">Kursus {filterActive === 'all' ? '' : filterActive === 'active' ? 'Aktif' : 'Selesai'}</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {sortedCourses.map(course => (
                   <div key={course.id} className="bg-white rounded-lg shadow overflow-hidden">
@@ -296,28 +293,28 @@ const PemantauanAnakPage = () => {
                           </span>
                         )}
                       </div>
-                      
+
                       <p className="text-sm text-gray-500 mb-3">Pengajar: {course.teacher}</p>
-                      
-                                              <div className="mb-3">
+
+                      <div className="mb-3">
                         <div className="flex justify-between text-sm mb-1">
                           <span>Kemajuan</span>
                           <span className="font-medium">{course.progress}%</span>
                         </div>
                         <div className="w-full h-2 bg-gray-200 rounded-full">
-                          <div 
+                          <div
                             className={`h-2 rounded-full ${getProgressColorClass(course.progress)}`}
                             style={{ width: `${course.progress}%` }}
                           ></div>
                         </div>
                       </div>
-                      
+
                       <div className="flex justify-between items-center">
                         <div className="flex items-center text-sm text-gray-500">
                           <RiTimeLine className="mr-1" />
                           <span>Terakhir diakses {course.last_accessed}</span>
                         </div>
-                        
+
                         <div className="flex items-center">
                           <RiMedalLine className="mr-1" />
                           <span className={`font-bold ${getScoreColorClass(course.score)}`}>
@@ -326,7 +323,7 @@ const PemantauanAnakPage = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     {course.upcoming_tasks.length > 0 && (
                       <div className="border-t border-gray-100 p-4 bg-gray-50">
                         <p className="text-sm font-medium mb-2">Tugas Mendatang:</p>
@@ -341,27 +338,27 @@ const PemantauanAnakPage = () => {
                   </div>
                 ))}
               </div>
-              
+
               {sortedCourses.length === 0 && (
                 <div className="bg-white rounded-lg shadow p-8 text-center">
                   <RiErrorWarningLine size={48} className="mx-auto text-gray-400 mb-3" />
                   <p className="text-gray-500">
-                    {filterActive === 'all' 
-                      ? 'Tidak ada kursus yang tersedia' 
-                      : filterActive === 'active' 
+                    {filterActive === 'all'
+                      ? 'Tidak ada kursus yang tersedia'
+                      : filterActive === 'active'
                         ? 'Tidak ada kursus aktif'
                         : 'Tidak ada kursus yang telah selesai'}
                   </p>
                 </div>
               )}
             </div>
-            
+
             {/* Aktivitas Terbaru */}
             <div className="bg-white rounded-lg shadow mb-6">
               <div className="p-4 border-b border-gray-100">
                 <h2 className="text-xl font-semibold">Aktivitas Terbaru</h2>
               </div>
-              
+
               <div className="p-4">
                 <div className="space-y-4">
                   {activities.map(activity => (
@@ -386,11 +383,11 @@ const PemantauanAnakPage = () => {
                 </div>
               </div>
             </div>
-            
+
             {/* Statistik Kursus */}
             <div className="bg-white rounded-lg shadow p-4">
               <h2 className="text-xl font-semibold mb-4">Statistik Pembelajaran</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-lg font-medium mb-3">Distribusi Status Kursus</h3>
@@ -402,14 +399,14 @@ const PemantauanAnakPage = () => {
                       </div>
                       <div className="flex h-20">
                         <div className="w-1/2 mr-1">
-                          <div 
-                            className="bg-blue-500 w-full rounded-t-md" 
+                          <div
+                            className="bg-blue-500 w-full rounded-t-md"
                             style={{ height: `${(courses.filter(c => c.status === 'active').length / courses.length) * 100}%` }}
                           ></div>
                         </div>
                         <div className="w-1/2 ml-1">
-                          <div 
-                            className="bg-green-500 w-full rounded-t-md" 
+                          <div
+                            className="bg-green-500 w-full rounded-t-md"
                             style={{ height: `${(courses.filter(c => c.status === 'completed').length / courses.length) * 100}%` }}
                           ></div>
                         </div>
@@ -421,26 +418,26 @@ const PemantauanAnakPage = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-lg font-medium mb-3">Rata-rata Nilai</h3>
                   <div className="flex items-center justify-center h-32">
                     <div className="text-center">
                       <div className="text-4xl font-bold text-blue-600">
-                        {Math.round(courses.filter(c => c.score !== null).reduce((sum, course) => sum + course.score, 0) / 
+                        {Math.round(courses.filter(c => c.score !== null).reduce((sum, course) => sum + course.score, 0) /
                           courses.filter(c => c.score !== null).length)}
                       </div>
                       <p className="text-sm text-gray-500 mt-2">dari 100</p>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-lg font-medium mb-3">Kemajuan Keseluruhan</h3>
                   <div className="flex items-center justify-center h-32">
                     <div className="w-32 h-32 relative">
                       <svg className="w-full h-full" viewBox="0 0 36 36">
-                        <path 
+                        <path
                           d="M18 2.0845
                             a 15.9155 15.9155 0 0 1 0 31.831
                             a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -448,7 +445,7 @@ const PemantauanAnakPage = () => {
                           stroke="#eeeeee"
                           strokeWidth="3"
                         />
-                        <path 
+                        <path
                           d="M18 2.0845
                             a 15.9155 15.9155 0 0 1 0 31.831
                             a 15.9155 15.9155 0 0 1 0 -31.831"

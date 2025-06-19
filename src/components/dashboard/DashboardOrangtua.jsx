@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import Header from '../layout/layoutParts/Header';
-import { 
-  RiUserHeartLine, 
-  RiMessage3Line, 
+import {
+  RiUserHeartLine,
+  RiMessage3Line,
   RiParentLine,
-  RiCheckboxCircleLine, 
+  RiCheckboxCircleLine,
   RiTimeLine,
   RiArrowRightSLine,
   RiLineChartLine,
@@ -35,21 +35,21 @@ const DashboardOrangtua = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        
+
         // Dalam implementasi nyata, ini akan menjadi panggilan API
         // Dummy data untuk demo
         const dummyChildren = [
           { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523252' },
           { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523253' }
         ];
-        
+
         setChildren(dummyChildren);
-        
+
         // Set anak pertama sebagai default
         if (dummyChildren.length > 0) {
           const firstChild = dummyChildren[0];
           setSelectedChild(firstChild);
-          
+
           // Dummy stats untuk anak yang dipilih
           setChildStats({
             completedCourses: 5,
@@ -58,7 +58,7 @@ const DashboardOrangtua = () => {
             lastActivity: '2 jam lalu',
             totalMinutes: 1280
           });
-          
+
           // Dummy data untuk aktivitas terbaru
           setRecentActivities([
             { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
@@ -66,7 +66,7 @@ const DashboardOrangtua = () => {
             { id: 3, type: 'quiz_complete', course: 'Biologi', description: 'Menyelesaikan quiz Sistem Reproduksi', score: 78, date: '3 hari lalu' },
             { id: 4, type: 'course_started', course: 'Fisika - Hukum Newton', description: 'Memulai kursus baru', date: '3 hari lalu' },
           ]);
-          
+
           // Dummy data untuk acara mendatang
           setUpcomingEvents([
             { id: 1, title: 'Ujian Matematika', date: 'Senin, 12 Mei 2025', course: 'Matematika - Aljabar' },
@@ -74,7 +74,7 @@ const DashboardOrangtua = () => {
             { id: 3, title: 'Quiz Fisika', date: 'Jumat, 16 Mei 2025', course: 'Fisika - Hukum Newton' }
           ]);
         }
-        
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -103,21 +103,21 @@ const DashboardOrangtua = () => {
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen ml-20">
+    <div className="bg-gray-50 min-h-screen">
       <Header title="Dashboard Orangtua" />
-      
+
       <div className="px-6 py-4">
         {/* Pilihan Anak */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-3">Anak Saya</h2>
           <div className="flex space-x-4">
             {children.map(child => (
-              <div 
+              <div
                 key={child.id}
                 onClick={() => handleChildSelect(child)}
                 className={`flex items-center p-3 rounded-lg cursor-pointer transition-all
-                  ${selectedChild?.id === child.id 
-                    ? 'bg-blue-100 ring-2 ring-blue-500' 
+                  ${selectedChild?.id === child.id
+                    ? 'bg-blue-100 ring-2 ring-blue-500'
                     : 'bg-gray-50 hover:bg-gray-100'}`}
               >
                 <div className="w-10 h-10 rounded-full bg-gray-300 mr-3 overflow-hidden">
@@ -131,7 +131,7 @@ const DashboardOrangtua = () => {
             ))}
           </div>
         </div>
-        
+
         {selectedChild && (
           <>
             {/* Statistik Anak */}
@@ -143,7 +143,7 @@ const DashboardOrangtua = () => {
                 <p className="text-gray-500 text-sm">Kursus Selesai</p>
                 <p className="text-2xl font-bold">{childStats.completedCourses}</p>
               </div>
-              
+
               <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
                 <div className="bg-green-100 p-3 rounded-full mb-2">
                   <RiLineChartLine size={24} className="text-green-600" />
@@ -151,7 +151,7 @@ const DashboardOrangtua = () => {
                 <p className="text-gray-500 text-sm">Kursus Aktif</p>
                 <p className="text-2xl font-bold">{childStats.activeCourses}</p>
               </div>
-              
+
               <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
                 <div className="bg-yellow-100 p-3 rounded-full mb-2">
                   <RiMedalLine size={24} className="text-yellow-600" />
@@ -159,7 +159,7 @@ const DashboardOrangtua = () => {
                 <p className="text-gray-500 text-sm">Rata-rata Nilai</p>
                 <p className="text-2xl font-bold">{childStats.averageScore}</p>
               </div>
-              
+
               <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
                 <div className="bg-purple-100 p-3 rounded-full mb-2">
                   <RiTimeLine size={24} className="text-purple-600" />
@@ -167,7 +167,7 @@ const DashboardOrangtua = () => {
                 <p className="text-gray-500 text-sm">Total Waktu Belajar</p>
                 <p className="text-2xl font-bold">{childStats.totalMinutes} <span className="text-sm">menit</span></p>
               </div>
-              
+
               <div className="bg-white p-4 rounded-lg shadow flex flex-col items-center">
                 <div className="bg-red-100 p-3 rounded-full mb-2">
                   <RiCalendarCheckLine size={24} className="text-red-600" />
@@ -176,10 +176,10 @@ const DashboardOrangtua = () => {
                 <p className="text-lg font-medium">{childStats.lastActivity}</p>
               </div>
             </div>
-            
+
             {/* Menu Akses Cepat */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div 
+              <div
                 className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
                 onClick={() => navigateToSection('/pemantauan-anak')}
               >
@@ -192,8 +192,8 @@ const DashboardOrangtua = () => {
                   <RiArrowRightSLine size={24} />
                 </div>
               </div>
-              
-              <div 
+
+              <div
                 className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
                 onClick={() => navigateToSection('/chat-guru')}
               >
@@ -206,8 +206,8 @@ const DashboardOrangtua = () => {
                   <RiArrowRightSLine size={24} />
                 </div>
               </div>
-              
-              <div 
+
+              <div
                 className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-6 rounded-lg shadow cursor-pointer transform transition hover:scale-105"
                 onClick={() => navigateToSection('/laporan-anak')}
               >
@@ -253,7 +253,7 @@ const DashboardOrangtua = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Acara Mendatang */}
               <div className="bg-white rounded-lg shadow">
                 <div className="p-4 border-b border-gray-100">

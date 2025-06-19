@@ -110,6 +110,11 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiFileList3Line size={24} />
         },
         {
+          path: '/chat-ortu',
+          name: 'Chat dengan Guru',
+          icon: <RiMessage3Line size={24} />
+        },
+        {
           path: '/notifikasi-guru',
           name: 'Notifikasi',
           icon: <RiBellLine size={24} />
@@ -145,7 +150,7 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiParentLine size={24} />
         },
         {
-          path: '/notifikasi',
+          path: '/notifikasi-ortu',
           name: 'Notifikasi',
           icon: <RiBellLine size={24} />
         },

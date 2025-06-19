@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import Header from '../../components/layout/layoutParts/Header';
-import { 
-  RiFileDownloadLine, 
-  RiPrinterLine, 
+import {
+  RiFileDownloadLine,
+  RiPrinterLine,
   RiShareLine,
   RiCalendarLine,
   RiMedalLine,
@@ -27,7 +27,7 @@ const LaporanPerkembanganPage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportPeriod, setReportPeriod] = useState('semester');
   const [loading, setLoading] = useState(true);
-  
+
   // Fake chart data
   const academicProgressData = [
     { month: 'Jan', score: 75 },
@@ -36,7 +36,7 @@ const LaporanPerkembanganPage = () => {
     { month: 'Apr', score: 82 },
     { month: 'Mei', score: 85 }
   ];
-  
+
   const subjectPerformanceData = [
     { subject: 'Matematika', score: 85, average: 75 },
     { subject: 'IPA', score: 78, average: 72 },
@@ -44,7 +44,7 @@ const LaporanPerkembanganPage = () => {
     { subject: 'B. Inggris', score: 82, average: 77 },
     { subject: 'IPS', score: 75, average: 74 }
   ];
-  
+
   const skillsData = [
     { skill: 'Pemecahan Masalah', level: 80 },
     { skill: 'Kreativitas', level: 85 },
@@ -57,19 +57,19 @@ const LaporanPerkembanganPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Dummy data untuk anak
         const dummyChildren = [
           { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', image: '/api/placeholder/50/50' },
           { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', image: '/api/placeholder/50/50' }
         ];
-        
+
         setChildren(dummyChildren);
-        
+
         // Set anak pertama sebagai default
         if (dummyChildren.length > 0) {
           setSelectedChild(dummyChildren[0]);
-          
+
           // Dummy reports data
           const dummyReports = [
             {
@@ -203,11 +203,11 @@ const LaporanPerkembanganPage = () => {
               teacherNotes: 'Dimas bekerja dengan baik bulan ini, namun perlu sedikit lebih fokus pada mata pelajaran IPS.'
             }
           ];
-          
+
           setReports(dummyReports);
           setSelectedReport(dummyReports[0]);
         }
-        
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -263,21 +263,21 @@ const LaporanPerkembanganPage = () => {
   const filteredReports = reports.filter(report => report.type === reportPeriod);
 
   return (
-    <div className="bg-gray-50 min-h-screen ml-20">
+    <div className="bg-gray-50 min-h-screen ">
       <Header title="Laporan Perkembangan" />
-      
+
       <div className="px-6 py-4">
         {/* Pilihan Anak */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-3">Anak Saya</h2>
           <div className="flex space-x-4">
             {children.map(child => (
-              <div 
+              <div
                 key={child.id}
                 onClick={() => handleChildSelect(child)}
                 className={`flex items-center p-3 rounded-lg cursor-pointer transition-all
-                  ${selectedChild?.id === child.id 
-                    ? 'bg-blue-100 ring-2 ring-blue-500' 
+                  ${selectedChild?.id === child.id
+                    ? 'bg-blue-100 ring-2 ring-blue-500'
                     : 'bg-gray-50 hover:bg-gray-100'}`}
               >
                 <div className="w-10 h-10 rounded-full bg-gray-300 mr-3 overflow-hidden">
@@ -300,23 +300,21 @@ const LaporanPerkembanganPage = () => {
                 <RiFilterLine className="text-gray-500 mr-2" />
                 <span className="text-gray-700 mr-4">Jenis Laporan:</span>
                 <div className="flex space-x-2">
-                  <button 
+                  <button
                     onClick={() => handlePeriodChange('semester')}
-                    className={`px-4 py-2 rounded-md text-sm ${
-                      reportPeriod === 'semester' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm ${reportPeriod === 'semester'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     Semester
                   </button>
-                  <button 
+                  <button
                     onClick={() => handlePeriodChange('monthly')}
-                    className={`px-4 py-2 rounded-md text-sm ${
-                      reportPeriod === 'monthly' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm ${reportPeriod === 'monthly'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     Bulanan
                   </button>
@@ -332,17 +330,17 @@ const LaporanPerkembanganPage = () => {
                   <div className="p-4 border-b border-gray-100">
                     <h2 className="text-lg font-semibold">Daftar Laporan</h2>
                   </div>
-                  
+
                   <div className="p-4">
                     {filteredReports.length > 0 ? (
                       <div className="space-y-3">
                         {filteredReports.map(report => (
-                          <div 
+                          <div
                             key={report.id}
                             onClick={() => handleReportSelect(report)}
                             className={`p-3 rounded-lg cursor-pointer transition-all
-                              ${selectedReport?.id === report.id 
-                                ? 'bg-blue-50 ring-1 ring-blue-500' 
+                              ${selectedReport?.id === report.id
+                                ? 'bg-blue-50 ring-1 ring-blue-500'
                                 : 'bg-gray-50 hover:bg-gray-100'}`}
                           >
                             <div className="flex justify-between items-start">
@@ -370,7 +368,7 @@ const LaporanPerkembanganPage = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Report Detail */}
               <div className="md:col-span-2">
                 {selectedReport ? (
@@ -389,7 +387,7 @@ const LaporanPerkembanganPage = () => {
                         </button>
                       </div>
                     </div>
-                    
+
                     <div className="p-4">
                       {/* Header Info */}
                       <div className="flex justify-between items-center mb-4">
@@ -401,7 +399,7 @@ const LaporanPerkembanganPage = () => {
                           Dibuat pada: {selectedReport.createdAt}
                         </div>
                       </div>
-                      
+
                       {/* Summary Box */}
                       <div className="bg-blue-50 p-4 rounded-lg mb-6">
                         <h3 className="font-semibold text-blue-700 mb-3">Ringkasan</h3>
@@ -414,14 +412,14 @@ const LaporanPerkembanganPage = () => {
                               </span>
                             </div>
                           )}
-                          
+
                           <div className="bg-white p-3 rounded-lg shadow-sm flex flex-col items-center">
                             <span className="text-sm text-gray-500 mb-1">Rata-rata Nilai</span>
                             <span className={`text-2xl font-bold ${getScoreColor(selectedReport.summary.averageScore)}`}>
                               {selectedReport.summary.averageScore}
                             </span>
                           </div>
-                          
+
                           {selectedReport.summary.improvement && (
                             <div className="bg-white p-3 rounded-lg shadow-sm flex flex-col items-center">
                               <span className="text-sm text-gray-500 mb-1">Peningkatan</span>
@@ -431,7 +429,7 @@ const LaporanPerkembanganPage = () => {
                               </span>
                             </div>
                           )}
-                          
+
                           {selectedReport.summary.ranking && (
                             <div className="bg-white p-3 rounded-lg shadow-sm flex flex-col items-center">
                               <span className="text-sm text-gray-500 mb-1">Peringkat</span>
@@ -440,7 +438,7 @@ const LaporanPerkembanganPage = () => {
                               </span>
                             </div>
                           )}
-                          
+
                           <div className="bg-white p-3 rounded-lg shadow-sm flex flex-col items-center">
                             <span className="text-sm text-gray-500 mb-1">Kehadiran</span>
                             <span className="text-2xl font-bold text-blue-600">
@@ -449,14 +447,14 @@ const LaporanPerkembanganPage = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Visualisasi Grafik */}
                       <div className="mb-6">
                         <h3 className="font-semibold text-gray-700 mb-3 flex items-center">
                           <RiLineChartLine className="mr-2" />
                           Visualisasi Perkembangan
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                           {/* Academic Progress Chart */}
                           <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -464,8 +462,8 @@ const LaporanPerkembanganPage = () => {
                             <div className="h-48 flex items-end justify-between">
                               {academicProgressData.map((item, index) => (
                                 <div key={index} className="flex flex-col items-center">
-                                  <div 
-                                    className="w-10 bg-blue-500 rounded-t-md" 
+                                  <div
+                                    className="w-10 bg-blue-500 rounded-t-md"
                                     style={{ height: `${item.score}%` }}
                                   ></div>
                                   <span className="text-xs mt-1">{item.month}</span>
@@ -473,7 +471,7 @@ const LaporanPerkembanganPage = () => {
                               ))}
                             </div>
                           </div>
-                          
+
                           {/* Subject Performance Chart */}
                           <div className="bg-white p-4 rounded-lg shadow-sm">
                             <h4 className="text-sm font-medium text-gray-600 mb-3">Performa Mata Pelajaran</h4>
@@ -481,12 +479,12 @@ const LaporanPerkembanganPage = () => {
                               {subjectPerformanceData.map((item, index) => (
                                 <div key={index} className="flex flex-col items-center">
                                   <div className="relative w-12">
-                                    <div 
-                                      className="w-5 absolute left-0 bottom-0 bg-blue-500 rounded-t-md" 
+                                    <div
+                                      className="w-5 absolute left-0 bottom-0 bg-blue-500 rounded-t-md"
                                       style={{ height: `${item.score}%` }}
                                     ></div>
-                                    <div 
-                                      className="w-5 absolute right-0 bottom-0 bg-gray-300 rounded-t-md" 
+                                    <div
+                                      className="w-5 absolute right-0 bottom-0 bg-gray-300 rounded-t-md"
                                       style={{ height: `${item.average}%` }}
                                     ></div>
                                   </div>
@@ -502,7 +500,7 @@ const LaporanPerkembanganPage = () => {
                             </div>
                           </div>
                         </div>
-                        
+
                         {/* Skills Radar Chart (Simplified visualization) */}
                         {selectedReport.type === 'semester' && (
                           <div className="bg-white p-4 rounded-lg shadow-sm">
@@ -511,8 +509,8 @@ const LaporanPerkembanganPage = () => {
                               {skillsData.map((skill, index) => (
                                 <div key={index} className="flex flex-col items-center">
                                   <div className="w-full h-4 bg-gray-200 rounded-full mb-1 relative">
-                                    <div 
-                                      className="h-4 bg-green-500 rounded-full absolute left-0 top-0" 
+                                    <div
+                                      className="h-4 bg-green-500 rounded-full absolute left-0 top-0"
                                       style={{ width: `${skill.level}%` }}
                                     ></div>
                                   </div>
@@ -524,14 +522,14 @@ const LaporanPerkembanganPage = () => {
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Academic Performance */}
                       <div className="mb-6">
                         <h3 className="font-semibold text-gray-700 mb-3 flex items-center">
                           <RiBookOpenLine className="mr-2" />
                           Performa Akademik
                         </h3>
-                        
+
                         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                           <table className="w-full">
                             <thead className="bg-gray-50">
@@ -579,7 +577,7 @@ const LaporanPerkembanganPage = () => {
                           </table>
                         </div>
                       </div>
-                      
+
                       {/* Personal Development (if semester report) */}
                       {selectedReport.type === 'semester' && selectedReport.personalDevelopment && (
                         <div className="mb-6">
@@ -587,25 +585,25 @@ const LaporanPerkembanganPage = () => {
                             <RiGroupLine className="mr-2" />
                             Perkembangan Personal
                           </h3>
-                          
+
                           <div className="bg-white p-4 rounded-lg shadow-sm">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                               <div className="bg-gray-50 p-3 rounded-md">
                                 <p className="text-sm text-gray-500 mb-1">Sikap</p>
                                 <p className="font-medium">{selectedReport.personalDevelopment.attitude}</p>
                               </div>
-                              
+
                               <div className="bg-gray-50 p-3 rounded-md">
                                 <p className="text-sm text-gray-500 mb-1">Perilaku</p>
                                 <p className="font-medium">{selectedReport.personalDevelopment.behavior}</p>
                               </div>
-                              
+
                               <div className="bg-gray-50 p-3 rounded-md">
                                 <p className="text-sm text-gray-500 mb-1">Sosialisasi</p>
                                 <p className="font-medium">{selectedReport.personalDevelopment.socialization}</p>
                               </div>
                             </div>
-                            
+
                             <h4 className="font-medium text-gray-700 mb-2">Keterampilan</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                               {selectedReport.personalDevelopment.skills.map((skill, index) => (
@@ -618,7 +616,7 @@ const LaporanPerkembanganPage = () => {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Monthly Highlights (if monthly report) */}
                       {selectedReport.type === 'monthly' && selectedReport.monthlyHighlights && (
                         <div className="mb-6">
@@ -626,7 +624,7 @@ const LaporanPerkembanganPage = () => {
                             <RiMedalLine className="mr-2" />
                             Pencapaian Bulan Ini
                           </h3>
-                          
+
                           <div className="bg-white p-4 rounded-lg shadow-sm">
                             <ul className="space-y-2">
                               {selectedReport.monthlyHighlights.map((highlight, index) => (
@@ -641,35 +639,35 @@ const LaporanPerkembanganPage = () => {
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Teacher Notes */}
                       <div className="mb-6">
                         <h3 className="font-semibold text-gray-700 mb-3 flex items-center">
                           <RiGraduationCapLine className="mr-2" />
                           Catatan Guru
                         </h3>
-                        
+
                         <div className="bg-white p-4 rounded-lg shadow-sm">
                           <p className="text-gray-700">{selectedReport.teacherNotes}</p>
                         </div>
                       </div>
-                      
+
                       {/* Principal Notes (if semester report) */}
                       {selectedReport.type === 'semester' && selectedReport.principalNotes && (
                         <div className="mb-6">
                           <h3 className="font-semibold text-gray-700 mb-3">Catatan Kepala Sekolah</h3>
-                          
+
                           <div className="bg-white p-4 rounded-lg shadow-sm">
                             <p className="text-gray-700">{selectedReport.principalNotes}</p>
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Recommendations (if semester report) */}
                       {selectedReport.type === 'semester' && selectedReport.recommendations && (
                         <div>
                           <h3 className="font-semibold text-gray-700 mb-3">Rekomendasi</h3>
-                          
+
                           <div className="bg-white p-4 rounded-lg shadow-sm">
                             <p className="text-gray-700">{selectedReport.recommendations}</p>
                           </div>
@@ -682,8 +680,8 @@ const LaporanPerkembanganPage = () => {
                     <RiFileChartLine size={64} className="text-gray-300 mb-4" />
                     <p className="text-gray-500 text-lg mb-2">Pilih laporan untuk melihat detail</p>
                     <p className="text-gray-400">
-                      {filteredReports.length === 0 
-                        ? `Tidak ada laporan ${reportPeriod === 'semester' ? 'semester' : 'bulanan'} yang tersedia.` 
+                      {filteredReports.length === 0
+                        ? `Tidak ada laporan ${reportPeriod === 'semester' ? 'semester' : 'bulanan'} yang tersedia.`
                         : 'Silakan pilih salah satu laporan dari daftar di sebelah kiri.'}
                     </p>
                   </div>

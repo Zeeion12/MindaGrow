@@ -29,12 +29,14 @@ import BuatKursusPage from './pages/Guru/BuatKursus';
 import ManajemenKelas from './pages/Guru/ManajemenKelas';
 import KelasYangDiajar from './pages/Guru/KelasYangDiajar';
 import NotifikasiGuru from './pages/Guru/NotifikasiGuru';
+import ChatOrtuPage from './pages/Guru/ChatOrtu';
 
 // Import OrangTua
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
 import PemantauanAnakPage from './pages/Orangtua/PemantauanAnak';
 import ChatGuruPage from './pages/Orangtua/ChatGuru';
 import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
+import NotifikasiOrtu from './pages/Orangtua/NotifikasiOrtu';
 
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
@@ -153,6 +155,11 @@ function App() {
               <NotifikasiGuru />
             </ProtectedRoute>
           } />
+          <Route path="/chat-ortu" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <ChatOrtuPage />
+            </ProtectedRoute>
+          } />
 
           {/*Route khusus Orangtua*/}
           <Route path="/dashboard/orangtua" element={
@@ -173,6 +180,11 @@ function App() {
           <Route path="/laporan-anak" element={
             <ProtectedRoute allowedRoles={['orangtua']}>
               <LaporanPerkembanganPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/notifikasi-ortu" element={
+            <ProtectedRoute allowedRoles={['orangtua']}>
+              <NotifikasiOrtu />
             </ProtectedRoute>
           } />
 
