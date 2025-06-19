@@ -1,22 +1,24 @@
 const { Pool } = require('pg');
-const dotenv = require('dotenv');
-const path = require('path');
 
-// Load environment variables
-const envPath = path.resolve(__dirname, '../../.env');
-dotenv.config({ path: envPath });
-
-// Konfigurasi koneksi database
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'mindagrow',
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT || 5432,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Ekspor query helper untuk memudahkan akses database
-module.exports = {
-  query: (text, params) => pool.query(text, params),
-  pool
+// Helper function untuk execute query
+const execute = async (text, params) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return [result.rows, result.fields];
+  } finally {
+    client.release();
+  }
 };
+
+module.exports = { pool, execute };
