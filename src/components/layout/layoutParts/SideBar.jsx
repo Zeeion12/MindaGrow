@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../context/authContext';
 
 // Icons - Anda bisa menggunakan icon dari library seperti react-icons atau buat sendiri
 import {
@@ -95,7 +95,7 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiDashboardLine size={24} />,
         },
         {
-          path: '/kelas-diajar',
+          path: '/kelas-yang-diajar',
           name: 'Kelas yang Diajar',
           icon: <RiUser3Line size={24} />
         },
@@ -110,7 +110,7 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiFileList3Line size={24} />
         },
         {
-          path: '/notifikasi',
+          path: '/notifikasi-guru',
           name: 'Notifikasi',
           icon: <RiBellLine size={24} />
         },

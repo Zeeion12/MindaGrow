@@ -1,4 +1,4 @@
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -13,21 +13,21 @@ import CardTugas from '../../components/layout/TaskCard/CardTugas';
 
 
 // Import ikon-ikon yang diperlukan
-import { 
-    FaBookOpen as BookOpen, 
+import {
+    FaBookOpen as BookOpen,
     FaCalculator as Calculator,
     FaFlask as Beaker,
 } from "react-icons/fa";
-import { 
+import {
     GiEarthAmerica as Globe,
     GiPalette as Palette,
     GiMusicalNotes as Music,
 } from "react-icons/gi";
-import { 
-    IoMdTime as Clock 
+import {
+    IoMdTime as Clock
 } from "react-icons/io";
-import { 
-    FaUsers as Users 
+import {
+    FaUsers as Users
 } from "react-icons/fa";
 
 const subjects = [
@@ -57,7 +57,7 @@ const subjects = [
     },
 ]
 
-export default function ClassMainUI () {
+export default function ClassMainUI() {
 
     // State untuk menyimpan data kelas, subjek, dan aktivitas
     const [selectedSubject, setSelectedSubject] = useState(null)
@@ -91,9 +91,8 @@ export default function ClassMainUI () {
                             >
                                 <div
                                     key={subject.id}
-                                    className={`relative bg-white rounded-3xl p-6 shadow-lg cursor-pointer transform transition-all duration-300 hover:scale-105 hover:shadow-xl border-2 border-gray-100 ${
-                                        hoveredCard === subject.id ? "ring-4 ring-blue-200" : ""
-                                    }`}
+                                    className={`relative bg-white rounded-3xl p-6 shadow-lg cursor-pointer transform transition-all duration-300 hover:scale-105 hover:shadow-xl border-2 border-gray-100 ${hoveredCard === subject.id ? "ring-4 ring-blue-200" : ""
+                                        }`}
                                     onMouseEnter={() => setHoveredCard(subject.id)}
                                     onMouseLeave={() => setHoveredCard(null)}
                                     onClick={() => setSelectedSubject(subject)}
@@ -128,25 +127,35 @@ export default function ClassMainUI () {
                     })}
                 </div>
 
-                {/* Favorite Subject Chart */}
-                <div className="mt-12">
-                    {/* xs -> sm -> md -> lg -> xl -> 2xl */}
-                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-[1fr_auto] xl:grid-cols-[1fr_400px]">
-                        <div>
-                            <FavoriteSubjectChart />
-                        </div>
-                        <div className="self-start">
-                            <CardCalendar />
+                {/* Favorite Subject Chart and Calendar Section */}
+                <div className="mt-8 md:mt-12">
+                    <div className="grid grid-cols-1 gap-4 md:gap-5">
+                        {/* Chart and Calendar Container */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr] xl:grid-cols-[3fr_400px] gap-4 md:gap-5">
+                            {/* Chart */}
+                            <div className="w-full min-h-[300px] sm:min-h-[400px]">
+                                <FavoriteSubjectChart />
+                            </div>
+                            {/* Calendar */}
+                            <div className="w-full self-start">
+                                <CardCalendar />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Other Component */}
-                <div className='mt-12'>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <CardTugas/>
-                        <CardSkor/>
-                        <CardKomenGuru/>
+                {/* Other Components Section */}
+                <div className="mt-8 md:mt-12">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                        <div className="w-full">
+                            <CardTugas />
+                        </div>
+                        <div className="w-full">
+                            <CardSkor />
+                        </div>
+                        <div className="w-full self-start sm:col-span-2 lg:col-span-1">
+                            <CardKomenGuru />
+                        </div>
                     </div>
                 </div>
             </main>

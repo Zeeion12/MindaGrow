@@ -6,6 +6,7 @@ import Register from './components/auth/Register';
 import Login from './components/auth/Login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardLayout from './components/layout/DashboardLayout';
+
 // Import komponen kursus
 import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
@@ -25,7 +26,9 @@ import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
 // Import Guru
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import BuatKursusPage from './pages/Guru/BuatKursus';
-import ManajemenKelasPage from './pages/Guru/ManajemenKelas';
+import ManajemenKelas from './pages/Guru/ManajemenKelas';
+import KelasYangDiajar from './pages/Guru/KelasYangDiajar';
+import NotifikasiGuru from './pages/Guru/NotifikasiGuru';
 
 // Import OrangTua
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
@@ -35,10 +38,8 @@ import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
 
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
-import { AuthProvider, useAuth } from './context/AuthContext'
-
-// Import Admin
-import AdminDashboard from './components/dashboard/DashboardAdmin';
+import Chatbot from './service/chatbot/Chatbot'
+import { AuthProvider, useAuth } from './context/authContext'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -101,7 +102,7 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/kelas/:id" element={
-            <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
+            <ProtectedRoute allowedRoles={['siswa', 'orangtua', 'guru']}>
               <ClassDetailUI />
             </ProtectedRoute>
           } />
@@ -139,7 +140,17 @@ function App() {
           } />
           <Route path="/manajemen-kelas" element={
             <ProtectedRoute allowedRoles={['guru']}>
-              <ManajemenKelasPage />
+              <ManajemenKelas />
+            </ProtectedRoute>
+          } />
+          <Route path="/kelas-yang-diajar" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <KelasYangDiajar />
+            </ProtectedRoute>
+          } />
+          <Route path="/notifikasi-guru" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <NotifikasiGuru />
             </ProtectedRoute>
           } />
 
@@ -168,10 +179,9 @@ function App() {
           {/*Route khusus pengaturan*/}
           <Route path="/pengaturan" element={<ProfileSettings />} />
           <Route path="/pengaturan/premium" element={<UpdatePremium />} />
-        </Route>
+          <Route path="/chatbot" element={<Chatbot />} />
 
-          {/*Route khusus admin*/}
-          <Route path="/dashboard/admin" element={<AdminDashboard />} />
+        </Route>
       </Routes>
     </AuthProvider>
   );
