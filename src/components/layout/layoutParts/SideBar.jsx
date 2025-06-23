@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../../context/authContext';
+import { useAuth } from '../../../context/AuthContext';
 
 // Icons - Anda bisa menggunakan icon dari library seperti react-icons atau buat sendiri
 import {
@@ -162,6 +162,21 @@ const Sidebar = ({ onToggle }) => {
       ];
     }
 
+    if (userRole === 'admin') {
+      return [
+        {
+          path: '/dashboard/admin',
+          name: 'Dashboard',
+          icon: <RiDashboardLine size={24} />,
+        },
+        {
+          path: '/pengaturan',
+          name: 'Pengaturan',
+          icon: <RiSettings4Line size={24} />
+        }
+      ];
+    }
+
     // Fallback jika role tidak dikenali
     return [
       {
@@ -214,19 +229,21 @@ const Sidebar = ({ onToggle }) => {
         ))}
       </div>
 
-      {/* Pro Upgrade Button */}
-      <Link to="pengaturan/premium">
-        <div className={`mt-auto mb-4 px-3 w-full cursor-pointer`}>
-          <div className={`bg-yellow-400 text-blue-800 rounded-md p-2 flex ${expanded ? 'flex-col items-center' : 'justify-center'}`}>
-            <div className="bg-white p-2 rounded-full mb-1">
-              <RiCoinLine size={20} className="text-yellow-400" />
+      {/* Pro Upgrade Button - Hanya ditampilkan untuk siswa, guru, dan orangtua */}
+      {userRole !== 'admin' && (
+        <Link to="pengaturan/premium">
+          <div className={`mt-auto mb-4 px-3 w-full cursor-pointer`}>
+            <div className={`bg-yellow-400 text-blue-800 rounded-md p-2 flex ${expanded ? 'flex-col items-center' : 'justify-center'}`}>
+              <div className="bg-white p-2 rounded-full mb-1">
+                <RiCoinLine size={20} className="text-yellow-400" />
+              </div>
+              {expanded && (
+                <span className="text-sm font-medium text-center">Tingkatkan Pro untuk fitur lebih</span>
+              )}
             </div>
-            {expanded && (
-              <span className="text-sm font-medium text-center">Tingkatkan Pro untuk fitur lebih</span>
-            )}
           </div>
-        </div>
-      </Link>
+        </Link>
+      )}
     </div>
   );
 };

@@ -42,10 +42,13 @@ import ChatGuruPage from './pages/Orangtua/ChatGuru';
 import LaporanPerkembanganPage from './pages/Orangtua/LaporanPerkembangan';
 import NotifikasiOrtu from './pages/Orangtua/NotifikasiOrtu';
 
+// import Admin
+import AdminDashboard from './components/dashboard/DashboardAdmin';
+
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
 import Chatbot from './service/chatbot/Chatbot'
-import { AuthProvider, useAuth } from './context/authContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -74,7 +77,14 @@ function App() {
 
         <Route path="/" element={<DashboardLayout />}>
 
-          {/*Route khusus dashboard*/}
+          {/*Route khusus dashboard admin*/}
+          <Route path="/dashboard/admin" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/*Route khusus dashboard siswa*/}
           <Route path="/dashboard/siswa" element={
             <ProtectedRoute allowedRoles={['siswa']}>
               <DashboardSiswa />
