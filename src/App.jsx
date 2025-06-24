@@ -48,7 +48,7 @@ import AdminDashboard from './components/dashboard/DashboardAdmin';
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
 import Chatbot from './service/chatbot/Chatbot'
-import { AuthProvider, useAuth } from './context/AuthContext'
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
