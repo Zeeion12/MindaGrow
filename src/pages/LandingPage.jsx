@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/authContext';
+import { useAuth } from '../context/AuthContext';
 import Footer from '../components/layout/layoutParts/Footer';
 
 import heroImg from '../assets/HeroSection.png'; // Gambar hero dengan 2 anak

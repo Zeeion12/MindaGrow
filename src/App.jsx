@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import LandingPage from './pages/LandingPage';
 import RoleSelection from './components/auth/RoleSelection';
 import Register from './components/auth/Register';
-import Login from './components/auth/Login';
+import Login from './components/auth/login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardLayout from './components/layout/DashboardLayout';
 
