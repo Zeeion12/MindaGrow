@@ -6,13 +6,13 @@ const crypto = require('crypto');
 class TwoFactorService {
   /**
    * Generate 2FA secret for new user
-   * @param {string} email - User email
+   * @param {string} userName - User's display name (nama_lengkap)
    * @param {string} appName - Application name
    * @returns {Object} - Secret and OTP auth URL
    */
-  static generateSecret(email, appName = 'MindaGrow Platform') {
+  static generateSecret(userName, appName = 'MindaGrow:') {
     const secret = speakeasy.generateSecret({
-      name: `${appName} (${email})`,
+      name: `${appName} (${userName})`,
       issuer: appName,
       length: 32
     });
@@ -230,10 +230,10 @@ class TwoFactorService {
 
   /**
    * Generate recovery information
-   * @param {string} email - User email
+   * @param {string} userName - User's display name
    * @returns {Object} - Recovery information
    */
-  static generateRecoveryInfo(email) {
+  static generateRecoveryInfo(userName) {
     const backupCodes = this.generateBackupCodes();
     const recoveryCode = crypto.randomBytes(16).toString('hex');
     
@@ -241,7 +241,7 @@ class TwoFactorService {
       backupCodes,
       recoveryCode,
       generatedAt: new Date().toISOString(),
-      email
+      userName
     };
   }
 
@@ -261,13 +261,61 @@ class TwoFactorService {
       errors.push('Token must be 6 digits');
     }
 
-    if (!setupData.email || !/\S+@\S+\.\S+/.test(setupData.email)) {
-      errors.push('Valid email is required');
+    if (!setupData.userName || setupData.userName.trim().length === 0) {
+      errors.push('Valid user name is required');
     }
 
     return {
       valid: errors.length === 0,
       errors
+    };
+  }
+
+  /**
+   * Get user display name for 2FA
+   * @param {Object} user - User object with role-specific data
+   * @returns {string} - Display name for 2FA
+   */
+  static getUserDisplayName(user) {
+    // For admin users
+    if (user.role === 'admin') {
+      return user.email || 'Administrator';
+    }
+    
+    // For other users, try to get nama_lengkap
+    if (user.nama_lengkap) {
+      return user.nama_lengkap;
+    }
+    
+    // Fallback to email or role
+    return user.email || user.role || 'User';
+  }
+
+  /**
+   * Generate secret with user context
+   * @param {Object} user - Complete user object
+   * @param {string} appName - Application name
+   * @returns {Object} - Secret and OTP auth URL with user context
+   */
+  static generateSecretForUser(user, appName = 'MindaGrow') {
+    const userName = this.getUserDisplayName(user);
+    
+    // Add role context to the issuer for better identification
+    const issuerWithRole = `${appName} (${user.role.charAt(0).toUpperCase() + user.role.slice(1)})`;
+    
+    const secret = speakeasy.generateSecret({
+      name: `${issuerWithRole} - ${userName}`,
+      issuer: appName,
+      length: 32
+    });
+    
+    return {
+      secret: secret.base32,
+      otpauthUrl: secret.otpauth_url,
+      qrcode: secret.qr_code_ascii,
+      backupSecret: secret.hex,
+      userName: userName,
+      userRole: user.role
     };
   }
 }
