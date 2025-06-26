@@ -11,7 +11,243 @@ const QRCode = require('qrcode');
 const Joi = require('joi');
 
 const TwoFactorService = require('./services/TwoFactorService');
-const courseRoutes = require('./routes/courses');
+
+const courseService = {
+  // Get all courses with filters
+  getAllCourses: async (page, limit, filters) => {
+    try {
+      const offset = (page - 1) * limit;
+      let whereClause = 'WHERE c.status = $1';
+      const queryParams = ['active'];
+      let paramCount = 1;
+
+      // Add filters
+      if (filters.category) {
+        paramCount++;
+        whereClause += ` AND c.category_id = $${paramCount}`;
+        queryParams.push(filters.category);
+      }
+
+      if (filters.search) {
+        paramCount++;
+        whereClause += ` AND (c.title ILIKE $${paramCount} OR c.description ILIKE $${paramCount + 1})`;
+        queryParams.push(`%${filters.search}%`, `%${filters.search}%`);
+        paramCount++;
+      }
+
+      if (filters.level) {
+        paramCount++;
+        whereClause += ` AND c.level = $${paramCount}`;
+        queryParams.push(filters.level);
+      }
+
+      const coursesQuery = `
+        SELECT 
+          c.id,
+          c.title,
+          c.description,
+          c.thumbnail,
+          c.price,
+          c.level,
+          c.duration,
+          c.created_at,
+          COALESCE(cat.name, 'Uncategorized') as category_name,
+          COALESCE(
+            CASE 
+              WHEN c.instructor_role = 'guru' THEN g.nama_lengkap
+              WHEN c.instructor_role = 'admin' THEN 'Administrator'
+              ELSE 'Unknown'
+            END, 'Unknown'
+          ) as instructor_name,
+          COUNT(DISTINCT e.id) as enrolled_count,
+          AVG(cr.rating) as average_rating,
+          COUNT(DISTINCT cr.id) as review_count
+        FROM courses c
+        LEFT JOIN categories cat ON c.category_id = cat.id
+        LEFT JOIN guru g ON c.instructor_id = g.user_id AND c.instructor_role = 'guru'
+        LEFT JOIN enrollments e ON c.id = e.course_id
+        LEFT JOIN course_ratings cr ON c.id = cr.course_id
+        ${whereClause}
+        GROUP BY c.id, cat.name, g.nama_lengkap
+        ORDER BY c.created_at DESC
+        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT c.id) as total
+        FROM courses c
+        LEFT JOIN categories cat ON c.category_id = cat.id
+        ${whereClause}
+      `;
+
+      queryParams.push(parseInt(limit), parseInt(offset));
+
+      // Menggunakan pool yang sudah ada di index.js (BUKAN pool baru)
+      const coursesResult = await pool.query(coursesQuery, queryParams);
+      const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
+
+      return {
+        courses: coursesResult.rows,
+        total: parseInt(countResult.rows[0].total)
+      };
+    } catch (error) {
+      console.error('Error in getAllCourses:', error);
+      throw new Error(`Error fetching courses: ${error.message}`);
+    }
+  },
+
+  // Get course by ID with full details
+  getCourseById: async (courseId, userId = null) => {
+    try {
+      let query = `
+        SELECT 
+          c.*,
+          COALESCE(cat.name, 'Uncategorized') as category_name,
+          COALESCE(
+            CASE 
+              WHEN c.instructor_role = 'guru' THEN g.nama_lengkap
+              WHEN c.instructor_role = 'admin' THEN 'Administrator'
+              ELSE 'Unknown'
+            END, 'Unknown'
+          ) as instructor_name,
+          COUNT(DISTINCT e.id) as enrolled_count,
+          AVG(cr.rating) as average_rating,
+          COUNT(DISTINCT cr.id) as review_count
+      `;
+
+      let params = [courseId];
+      
+      if (userId) {
+        query += `, 
+          CASE WHEN user_enrollment.id IS NOT NULL THEN 1 ELSE 0 END as is_enrolled`;
+      } else {
+        query += `, 0 as is_enrolled`;
+      }
+
+      query += `
+        FROM courses c
+        LEFT JOIN categories cat ON c.category_id = cat.id
+        LEFT JOIN guru g ON c.instructor_id = g.user_id AND c.instructor_role = 'guru'
+        LEFT JOIN enrollments e ON c.id = e.course_id
+        LEFT JOIN course_ratings cr ON c.id = cr.course_id
+      `;
+
+      if (userId) {
+        query += `
+          LEFT JOIN enrollments user_enrollment ON c.id = user_enrollment.course_id AND user_enrollment.user_id = $2
+        `;
+        params.push(userId);
+      }
+
+      query += `
+        WHERE c.id = $1 AND c.status = 'active'
+        GROUP BY c.id, cat.name, g.nama_lengkap
+      `;
+
+      if (userId) {
+        query += `, user_enrollment.id`;
+      }
+
+      const result = await pool.query(query, params);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const course = result.rows[0];
+
+      // Get course modules (if table exists)
+      try {
+        const modulesQuery = `
+          SELECT id, title, description, duration, order_index
+          FROM modules
+          WHERE course_id = $1
+          ORDER BY order_index ASC
+        `;
+        const modulesResult = await pool.query(modulesQuery, [courseId]);
+        course.modules = modulesResult.rows;
+      } catch (error) {
+        console.log('Modules table not exists yet, skipping...');
+        course.modules = [];
+      }
+
+      // Get recent reviews (if table exists)
+      try {
+        const reviewsQuery = `
+          SELECT 
+            cr.rating,
+            cr.comment,
+            cr.created_at,
+            COALESCE(
+              CASE 
+                WHEN u.role = 'siswa' THEN s.nama_lengkap
+                WHEN u.role = 'guru' THEN g.nama_lengkap
+                WHEN u.role = 'orangtua' THEN o.nama_lengkap
+                ELSE 'Anonymous'
+              END, 'Anonymous'
+            ) as user_name
+          FROM course_ratings cr
+          JOIN users u ON cr.user_id = u.id
+          LEFT JOIN siswa s ON u.id = s.user_id AND u.role = 'siswa'
+          LEFT JOIN guru g ON u.id = g.user_id AND u.role = 'guru'  
+          LEFT JOIN orangtua o ON u.id = o.user_id AND u.role = 'orangtua'
+          WHERE cr.course_id = $1
+          ORDER BY cr.created_at DESC
+          LIMIT 5
+        `;
+        const reviewsResult = await pool.query(reviewsQuery, [courseId]);
+        course.recent_reviews = reviewsResult.rows;
+      } catch (error) {
+        console.log('Course ratings table not exists yet, skipping...');
+        course.recent_reviews = [];
+      }
+
+      return course;
+    } catch (error) {
+      console.error('Error in getCourseById:', error);
+      throw new Error(`Error fetching course: ${error.message}`);
+    }
+  },
+
+  // Get categories
+  getCategories: async () => {
+    try {
+      const query = `
+        SELECT 
+          cat.*,
+          COUNT(c.id) as course_count
+        FROM categories cat
+        LEFT JOIN courses c ON cat.id = c.category_id AND c.status = 'active'
+        GROUP BY cat.id
+        ORDER BY cat.name ASC
+      `;
+
+      const result = await pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('Error in getCategories:', error);
+      // If categories table doesn't exist, return empty array
+      return [];
+    }
+  }
+};
+
+// Optional auth middleware untuk course endpoints
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key');
+      req.user = decoded;
+    }
+    
+    next();
+  } catch (error) {
+    // If token is invalid, just continue without user
+    next();
+  }
+};
 
 require('dotenv').config();
 
@@ -45,8 +281,6 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
-
-app.use('/api/courses', courseRoutes);
 
 // Middleware untuk admin only
 const requireAdmin = (req, res, next) => {
@@ -656,103 +890,206 @@ app.get('/api/admin/course-stats', authenticateToken, requireAdmin, async (req, 
   }
 });
 
-// Search courses (enhanced search)
-app.get('/api/courses/search', async (req, res) => {
+app.get('/api/courses/categories', async (req, res) => {
   try {
-    const { q, category, level, instructor, sort = 'newest' } = req.query;
     
-    let query = `
-      SELECT 
-        c.id,
-        c.title,
-        c.description,
-        c.thumbnail,
-        c.price,
-        c.level,
-        c.created_at,
-        cat.name as category_name,
-        CASE 
-          WHEN c.instructor_role = 'guru' THEN g.nama_lengkap
-          WHEN c.instructor_role = 'admin' THEN 'Administrator'
-          ELSE 'Unknown'
-        END as instructor_name,
-        COUNT(DISTINCT e.id) as enrolled_count,
-        AVG(cr.rating) as average_rating
-      FROM courses c
-      LEFT JOIN categories cat ON c.category_id = cat.id
-      LEFT JOIN guru g ON c.instructor_id = g.user_id AND c.instructor_role = 'guru'
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      LEFT JOIN course_ratings cr ON c.id = cr.course_id
-      WHERE c.status = 'active'
-    `;
-
-    const params = [];
-    let paramCount = 0;
-
-    if (q) {
-      paramCount++;
-      query += ` AND (c.title ILIKE $${paramCount} OR c.description ILIKE $${paramCount + 1})`;
-      params.push(`%${q}%`, `%${q}%`);
-      paramCount++;
-    }
-
-    if (category) {
-      paramCount++;
-      query += ` AND c.category_id = $${paramCount}`;
-      params.push(category);
-    }
-
-    if (level) {
-      paramCount++;
-      query += ` AND c.level = $${paramCount}`;
-      params.push(level);
-    }
-
-    if (instructor) {
-      paramCount++;
-      query += ` AND c.instructor_id = $${paramCount}`;
-      params.push(instructor);
-    }
-
-    query += ' GROUP BY c.id, cat.name, g.nama_lengkap';
-
-    // Add sorting
-    switch (sort) {
-      case 'popular':
-        query += ' ORDER BY enrolled_count DESC, average_rating DESC NULLS LAST';
-        break;
-      case 'rating':
-        query += ' ORDER BY average_rating DESC NULLS LAST, enrolled_count DESC';
-        break;
-      case 'price_low':
-        query += ' ORDER BY c.price ASC';
-        break;
-      case 'price_high':
-        query += ' ORDER BY c.price DESC';
-        break;
-      default: // newest
-        query += ' ORDER BY c.created_at DESC';
-    }
-
-    query += ' LIMIT 50'; // Limit results
-
-    const result = await pool.query(query, params);
-
+    const categories = await courseService.getCategories();
+    
     res.json({
       success: true,
-      data: result.rows,
-      count: result.rows.length
+      data: categories
     });
-
   } catch (error) {
-    console.error('Search courses error:', error);
+    console.error('GET /api/courses/categories error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error searching courses',
+      message: 'Error fetching categories',
       error: error.message
     });
   }
 });
+
+app.get('/api/courses/popular', async (req, res) => {
+  try {
+    const { limit = 6 } = req.query;
+    
+    console.log('GET /api/courses/popular - limit:', limit);
+    
+    const courses = await courseService.getPopularCourses(limit);
+    
+    res.json({
+      success: true,
+      data: courses
+    });
+  } catch (error) {
+    console.error('GET /api/courses/popular error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching popular courses',
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/courses/new', async (req, res) => {
+  try {
+    const { limit = 6 } = req.query;
+    
+    console.log('GET /api/courses/new - limit:', limit);
+    
+    const courses = await courseService.getNewCourses(limit);
+    
+    res.json({
+      success: true,
+      data: courses
+    });
+  } catch (error) {
+    console.error('GET /api/courses/new error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching new courses',
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/courses', optionalAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 12, category, search, level } = req.query;
+    const filters = { category, search, level };
+    
+    const result = await courseService.getAllCourses(page, limit, filters);
+    
+    res.json({
+      success: true,
+      data: result.courses,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(result.total / limit),
+        totalItems: result.total,
+        itemsPerPage: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('GET /api/courses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching courses',
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/courses/:id/enroll', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { id: userId, role } = req.user;
+    
+    console.log('POST /api/courses/:id/enroll - params:', { id, userId, role });
+    
+    if (role !== 'siswa') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only students can enroll in courses'
+      });
+    }
+
+    // Check if already enrolled
+    const checkQuery = 'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2';
+    const existing = await pool.query(checkQuery, [userId, id]);
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'You are already enrolled in this course'
+      });
+    }
+
+    // Create enrollment
+    const query = `
+      INSERT INTO enrollments (user_id, course_id, enrolled_at, status)
+      VALUES ($1, $2, NOW(), 'active')
+      RETURNING id
+    `;
+
+    const result = await pool.query(query, [userId, id]);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Successfully enrolled in course',
+      data: { id: result.rows[0].id, user_id: userId, course_id: id }
+    });
+  } catch (error) {
+    console.error('POST /api/courses/:id/enroll error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error enrolling in course',
+      error: error.message
+    });
+  }
+});
+
+app.delete('/api/courses/:id/unenroll', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { id: userId, role } = req.user;
+    
+    console.log('DELETE /api/courses/:id/unenroll - params:', { id, userId, role });
+    
+    if (role !== 'siswa') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only students can unenroll from courses'
+      });
+    }
+
+    const query = 'DELETE FROM enrollments WHERE user_id = $1 AND course_id = $2';
+    await pool.query(query, [userId, id]);
+    
+    res.json({
+      success: true,
+      message: 'Successfully unenrolled from course'
+    });
+  } catch (error) {
+    console.error('DELETE /api/courses/:id/unenroll error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error unenrolling from course',
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/courses/:id', optionalAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    console.log('GET /api/courses/:id - params:', { id, userId });
+    
+    const course = await courseService.getCourseById(id, userId);
+    
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: course
+    });
+  } catch (error) {
+    console.error('GET /api/courses/:id error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching course',
+      error: error.message
+    });
+  }
+});
+
 
 // Admin: Get user statistics
 app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {

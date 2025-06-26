@@ -1,71 +1,125 @@
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// src/services/api.js - CLEAN VERSION (minimal logging)
+import axios from 'axios';
 
-// Fungsi untuk mengirim pesan ke Groq API
-export async function sendMessageToGroq(messages) {
-    try {
-        const response = await fetch(GROQ_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROQ_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'mixtral-8x7b-32768',
-                messages: messages,
-                temperature: 0.7,
-                max_tokens: 1024
-            })
-        });
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+// Simplified interceptors - only log errors
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-        const data = await response.json();
-        return data.choices[0].message.content;
-    } catch (error) {
-        console.error('Error calling Groq API:', error);
-        throw error;
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Only log actual errors
+    if (error.response?.status >= 400) {
+      console.error('❌ API Error:', error.response.status, error.config?.url);
     }
-}
-
-// Fungsi untuk mengecek apakah pertanyaan terkait dataset
-export function isDatasetQuestion(question) {
-    const datasetKeywords = [
-        'dataset',
-        'data',
-        'statistik',
-        'analisis',
-        'grafik',
-        'chart',
-        'visualisasi'
-    ];
-
-    return datasetKeywords.some(keyword =>
-        question.toLowerCase().includes(keyword.toLowerCase())
-    );
-}
-
-// Fungsi untuk query dataset (memerlukan backend Python)
-export async function queryDataset(question) {
-    try {
-        const response = await fetch('http://localhost:5000/query', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ question })
-        });
-
-        if (!response.ok) {
-            throw new Error('Backend Python error');
-        }
-
-        const data = await response.json();
-        return data.response;
-    } catch (error) {
-        console.error('Error querying dataset:', error);
-        throw error;
+    
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
-}
+    return Promise.reject(error);
+  }
+);
+
+// Course API - CLEAN VERSION
+export const courseAPI = {
+  getAllCourses: (params = {}) => {
+    return api.get('/courses', { params });
+  },
+
+  getCategories: () => {
+    return api.get('/courses/categories');
+  },
+
+  getCourseById: (id) => {
+    return api.get(`/courses/${id}`);
+  },
+
+  enrollCourse: (courseId) => {
+    return api.post(`/courses/${courseId}/enroll`);
+  },
+
+  unenrollCourse: (courseId) => {
+    return api.delete(`/courses/${courseId}/unenroll`);
+  },
+
+  getMyEnrolledCourses: () => {
+    return api.get('/courses/my/enrolled');
+  },
+
+  getMyCreatedCourses: () => {
+    return api.get('/courses/my/created');
+  },
+
+  createCourse: (courseData) => {
+    return api.post('/courses', courseData);
+  },
+
+  updateCourse: (id, courseData) => {
+    return api.put(`/courses/${id}`, courseData);
+  },
+
+  deleteCourse: (id) => {
+    return api.delete(`/courses/${id}`);
+  }
+};
+
+// Auth API
+export const authAPI = {
+  login: (credentials) => api.post('/login', credentials),
+  register: (userData) => api.post('/register', userData),
+  validateSession: () => api.post('/auth/validate-session'),
+  logout: () => api.post('/auth/logout'),
+  setup2FA: (tempToken) => api.post('/auth/setup-2fa', {}, {
+    headers: { Authorization: `Bearer ${tempToken}` }
+  }),
+  verifySetup: (token, tempToken) => api.post('/auth/verify-setup', { token }, {
+    headers: { Authorization: `Bearer ${tempToken}` }
+  }),
+  verify2FA: (data) => api.post('/auth/verify-2fa', data),
+  skip2FA: (tempToken) => api.post('/auth/skip-2fa', {}, {
+    headers: { Authorization: `Bearer ${tempToken}` }
+  }),
+  disable2FA: (data) => api.post('/auth/disable-2fa', data),
+  get2FAStatus: () => api.get('/user/2fa-status'),
+  checkNIK: (nik) => api.post('/check-nik', { nik }),
+};
+
+// Admin API
+export const adminAPI = {
+  getUsers: () => api.get('/admin/users'),
+  getUserById: (id) => api.get(`/admin/users/${id}`),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getStats: () => api.get('/admin/stats'),
+  getCourseStats: () => api.get('/admin/course-stats'),
+  getActivities: () => api.get('/admin/activities'),
+};
+
+// User API
+export const userAPI = {
+  getDashboard: () => api.get('/dashboard'),
+  uploadProfilePicture: (file) => {
+    const formData = new FormData();
+    formData.append('profilePicture', file);
+    return api.post('/users/profile-picture', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteProfilePicture: () => api.delete('/users/profile-picture'),
+};
+
+export default api;

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { courseAPI } from '../../services/api';
+import { courseAPI } from '../../service/api';
 
 const CourseCreate = () => {
   const navigate = useNavigate();

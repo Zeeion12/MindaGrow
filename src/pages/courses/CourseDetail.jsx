@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext, useAuth } from '../../context/AuthContext';
 import EnrollButton from '../../components/layout/layoutParts/enrollButton';
-import { courseAPI } from '../../../server/services/api';
+import { courseAPI } from '../../service/api';
 
 const CourseDetail = () => {
   const { id } = useParams();
