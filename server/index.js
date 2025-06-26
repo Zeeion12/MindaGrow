@@ -10,7 +10,8 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const Joi = require('joi');
 
-const TwoFactorService = require('./services/TwoFactorService'); 
+const TwoFactorService = require('./services/TwoFactorService');
+const courseRoutes = require('./routes/courses');
 
 require('dotenv').config();
 
@@ -44,6 +45,8 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+app.use('/api/courses', courseRoutes);
 
 // Middleware untuk admin only
 const requireAdmin = (req, res, next) => {
@@ -153,6 +156,204 @@ const initDB = async () => {
       `);
     } catch (error) {
       console.log('2FA columns might already exist:', error.message);
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        description TEXT,
+        icon VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS courses (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        thumbnail VARCHAR(500),
+        price DECIMAL(10,2) DEFAULT 0,
+        level VARCHAR(50) DEFAULT 'beginner',
+        duration INTEGER DEFAULT 60,
+        category_id INTEGER REFERENCES categories(id),
+        instructor_id INTEGER NOT NULL REFERENCES users(id),
+        instructor_role VARCHAR(50) DEFAULT 'guru',
+        created_by INTEGER REFERENCES users(id),
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_level CHECK (level IN ('beginner', 'intermediate', 'advanced')),
+        CONSTRAINT chk_status CHECK (status IN ('active', 'inactive', 'deleted')),
+        CONSTRAINT chk_instructor_role CHECK (instructor_role IN ('guru', 'admin'))
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS enrollments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        course_id INTEGER NOT NULL REFERENCES courses(id),
+        enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'active',
+        completed_at TIMESTAMP,
+        
+        CONSTRAINT chk_enrollment_status CHECK (status IN ('active', 'completed', 'cancelled')),
+        CONSTRAINT unique_enrollment UNIQUE (user_id, course_id)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS modules (
+        id SERIAL PRIMARY KEY,
+        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        duration INTEGER DEFAULT 30,
+        order_index INTEGER NOT NULL,
+        video_url VARCHAR(500),
+        content TEXT,
+        is_free BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT unique_module_order UNIQUE (course_id, order_index)
+      )
+    `);
+
+    // Lessons table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lessons (
+        id SERIAL PRIMARY KEY,
+        module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        content TEXT,
+        video_url VARCHAR(500),
+        duration INTEGER DEFAULT 15,
+        order_index INTEGER NOT NULL,
+        is_free BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT unique_lesson_order UNIQUE (module_id, order_index)
+      )
+    `);
+
+    // Lesson progress table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lesson_progress (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        course_id INTEGER NOT NULL REFERENCES courses(id),
+        module_id INTEGER NOT NULL REFERENCES modules(id),
+        lesson_id INTEGER REFERENCES lessons(id),
+        completed BOOLEAN DEFAULT FALSE,
+        completion_percentage INTEGER DEFAULT 0,
+        time_spent INTEGER DEFAULT 0,
+        completed_at TIMESTAMP,
+        last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_completion_percentage CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+        CONSTRAINT unique_lesson_progress UNIQUE (user_id, lesson_id)
+      )
+    `);
+
+    // Course ratings table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS course_ratings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        course_id INTEGER NOT NULL REFERENCES courses(id),
+        rating INTEGER NOT NULL,
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_rating CHECK (rating >= 1 AND rating <= 5),
+        CONSTRAINT unique_course_rating UNIQUE (user_id, course_id)
+      )
+    `);
+
+    // Certificates table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        course_id INTEGER NOT NULL REFERENCES courses(id),
+        certificate_number VARCHAR(100) UNIQUE NOT NULL,
+        issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        certificate_url VARCHAR(500),
+        
+        CONSTRAINT unique_certificate UNIQUE (user_id, course_id)
+      )
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
+      CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
+      CREATE INDEX IF NOT EXISTS idx_courses_status ON courses(status);
+      CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
+      CREATE INDEX IF NOT EXISTS idx_lesson_progress_user ON lesson_progress(user_id);
+      CREATE INDEX IF NOT EXISTS idx_course_ratings_course ON course_ratings(course_id);
+    `);
+
+    // Insert default categories if they don't exist
+    const categoriesExist = await pool.query('SELECT COUNT(*) FROM categories');
+    if (parseInt(categoriesExist.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO categories (name, description, icon) VALUES 
+        ('Biologi', 'Ilmu tentang makhluk hidup dan lingkungannya', '🧬'),
+        ('Fisika', 'Ilmu tentang materi, energi, dan interaksinya', '⚛️'),
+        ('Kimia', 'Ilmu tentang struktur, sifat, dan reaksi zat', '🧪'),
+        ('Matematika', 'Ilmu tentang bilangan, struktur, dan pola', '📐'),
+        ('Bahasa Indonesia', 'Bahasa dan sastra Indonesia', '📚'),
+        ('Bahasa Inggris', 'Bahasa Inggris dan komunikasi global', '🌍'),
+        ('Sejarah', 'Ilmu tentang peristiwa masa lampau', '📜'),
+        ('Geografi', 'Ilmu tentang bumi dan fenomena geografis', '🌏'),
+        ('Teknologi Informasi', 'Komputer, programming, dan teknologi digital', '💻'),
+        ('Seni dan Budaya', 'Seni rupa, musik, dan budaya nusantara', '🎨')
+      `);
+      console.log('Default categories inserted');
+    }
+
+    // Create sample course for testing (hanya jika ada guru)
+    const guruExists = await pool.query("SELECT id FROM users WHERE role = 'guru' LIMIT 1");
+    if (guruExists.rows.length > 0) {
+      const courseExists = await pool.query("SELECT id FROM courses WHERE title LIKE '%Biologi%' LIMIT 1");
+      if (courseExists.rows.length === 0) {
+        const biologiCategory = await pool.query("SELECT id FROM categories WHERE name = 'Biologi' LIMIT 1");
+        if (biologiCategory.rows.length > 0) {
+          await pool.query(`
+            INSERT INTO courses (
+              title, description, category_id, level, price, duration, 
+              instructor_id, instructor_role, created_by
+            ) VALUES (
+              'Biologi - Reproduksi Manusia',
+              'Pada modul ini anda akan belajar mengenai organ reproduksi yang ada pada manusia serta belajar mengenai kegunaanya. Lorem ipsum dolor sit amet consectetur adipisicing elit.',
+              $1, 'beginner', 0, 120, $2, 'guru', $2
+            )
+          `, [biologiCategory.rows[0].id, guruExists.rows[0].id]);
+
+          // Add sample modules
+          const courseResult = await pool.query("SELECT id FROM courses WHERE title = 'Biologi - Reproduksi Manusia' LIMIT 1");
+          if (courseResult.rows.length > 0) {
+            const courseId = courseResult.rows[0].id;
+            await pool.query(`
+              INSERT INTO modules (course_id, title, description, duration, order_index) VALUES
+              ($1, 'Pengenalan Sistem Reproduksi', 'Memahami dasar-dasar sistem reproduksi manusia', 30, 1),
+              ($1, 'Organ Reproduksi Pria', 'Mempelajari anatomi dan fungsi organ reproduksi pria', 30, 2),
+              ($1, 'Organ Reproduksi Wanita', 'Mempelajari anatomi dan fungsi organ reproduksi wanita', 30, 3),
+              ($1, 'Proses Fertilisasi', 'Memahami proses pembuahan dan kehamilan', 30, 4)
+            `, [courseId]);
+          }
+          
+          console.log('Sample course "Biologi - Reproduksi Manusia" created');
+        }
+      }
     }
 
     // Buat tabel untuk temporary 2FA tokens
@@ -394,6 +595,162 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.get('/api/admin/course-stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Total courses
+    const totalCoursesResult = await pool.query(
+      "SELECT COUNT(*) as count FROM courses WHERE status = 'active'"
+    );
+
+    // Total enrollments
+    const totalEnrollmentsResult = await pool.query(
+      "SELECT COUNT(*) as count FROM enrollments WHERE status = 'active'"
+    );
+
+    // Courses by category
+    const categoryStatsResult = await pool.query(`
+      SELECT 
+        c.name as category_name,
+        COUNT(co.id) as course_count,
+        COUNT(e.id) as enrollment_count
+      FROM categories c
+      LEFT JOIN courses co ON c.id = co.category_id AND co.status = 'active'
+      LEFT JOIN enrollments e ON co.id = e.course_id AND e.status = 'active'
+      GROUP BY c.id, c.name
+      ORDER BY course_count DESC
+    `);
+
+    // Top instructors
+    const topInstructorsResult = await pool.query(`
+      SELECT 
+        CASE 
+          WHEN u.role = 'guru' THEN g.nama_lengkap
+          WHEN u.role = 'admin' THEN 'Administrator'
+          ELSE 'Unknown'
+        END as instructor_name,
+        COUNT(DISTINCT c.id) as course_count,
+        COUNT(DISTINCT e.id) as total_enrollments
+      FROM courses c
+      JOIN users u ON c.instructor_id = u.id
+      LEFT JOIN guru g ON u.id = g.user_id AND u.role = 'guru'
+      LEFT JOIN enrollments e ON c.id = e.course_id AND e.status = 'active'
+      WHERE c.status = 'active'
+      GROUP BY u.id, instructor_name
+      ORDER BY total_enrollments DESC
+      LIMIT 5
+    `);
+
+    res.json({
+      totalCourses: parseInt(totalCoursesResult.rows[0].count),
+      totalEnrollments: parseInt(totalEnrollmentsResult.rows[0].count),
+      categoryStats: categoryStatsResult.rows,
+      topInstructors: topInstructorsResult.rows
+    });
+
+  } catch (error) {
+    console.error('Get course stats error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Search courses (enhanced search)
+app.get('/api/courses/search', async (req, res) => {
+  try {
+    const { q, category, level, instructor, sort = 'newest' } = req.query;
+    
+    let query = `
+      SELECT 
+        c.id,
+        c.title,
+        c.description,
+        c.thumbnail,
+        c.price,
+        c.level,
+        c.created_at,
+        cat.name as category_name,
+        CASE 
+          WHEN c.instructor_role = 'guru' THEN g.nama_lengkap
+          WHEN c.instructor_role = 'admin' THEN 'Administrator'
+          ELSE 'Unknown'
+        END as instructor_name,
+        COUNT(DISTINCT e.id) as enrolled_count,
+        AVG(cr.rating) as average_rating
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN guru g ON c.instructor_id = g.user_id AND c.instructor_role = 'guru'
+      LEFT JOIN enrollments e ON c.id = e.course_id
+      LEFT JOIN course_ratings cr ON c.id = cr.course_id
+      WHERE c.status = 'active'
+    `;
+
+    const params = [];
+    let paramCount = 0;
+
+    if (q) {
+      paramCount++;
+      query += ` AND (c.title ILIKE $${paramCount} OR c.description ILIKE $${paramCount + 1})`;
+      params.push(`%${q}%`, `%${q}%`);
+      paramCount++;
+    }
+
+    if (category) {
+      paramCount++;
+      query += ` AND c.category_id = $${paramCount}`;
+      params.push(category);
+    }
+
+    if (level) {
+      paramCount++;
+      query += ` AND c.level = $${paramCount}`;
+      params.push(level);
+    }
+
+    if (instructor) {
+      paramCount++;
+      query += ` AND c.instructor_id = $${paramCount}`;
+      params.push(instructor);
+    }
+
+    query += ' GROUP BY c.id, cat.name, g.nama_lengkap';
+
+    // Add sorting
+    switch (sort) {
+      case 'popular':
+        query += ' ORDER BY enrolled_count DESC, average_rating DESC NULLS LAST';
+        break;
+      case 'rating':
+        query += ' ORDER BY average_rating DESC NULLS LAST, enrolled_count DESC';
+        break;
+      case 'price_low':
+        query += ' ORDER BY c.price ASC';
+        break;
+      case 'price_high':
+        query += ' ORDER BY c.price DESC';
+        break;
+      default: // newest
+        query += ' ORDER BY c.created_at DESC';
+    }
+
+    query += ' LIMIT 50'; // Limit results
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+
+  } catch (error) {
+    console.error('Search courses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error searching courses',
+      error: error.message
+    });
   }
 });
 

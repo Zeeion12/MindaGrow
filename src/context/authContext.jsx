@@ -354,4 +354,8 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// ADD THIS: Named export for AuthContext
+export { AuthContext };
+
+// Keep default export as well
 export default AuthContext;
