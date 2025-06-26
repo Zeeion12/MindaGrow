@@ -77,7 +77,7 @@ const DashboardGuru = () => {
       <main className="container mx-auto px-4 py-6">
         {/* Welcome Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Selamat datang, Bu {user?.nama_lengkap || 'Senia'}!</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Selamat datang, {user?.nama_lengkap || 'Senia'}!</h1>
           <p className="text-gray-600">Pantau perkembangan kelas dan siswa Anda di dashboard ini.</p>
         </div>
         
