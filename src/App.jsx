@@ -44,6 +44,7 @@ import NotifikasiOrtu from './pages/Orangtua/NotifikasiOrtu';
 
 // import Admin
 import AdminDashboard from './components/dashboard/DashboardAdmin';
+import BuatKursusAdmin from './pages/Admin/BuatKursusAdmin';
 
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
@@ -77,10 +78,16 @@ function App() {
 
         <Route path="/" element={<DashboardLayout />}>
 
-          {/*Route khusus dashboard admin*/}
+          {/*Route khusus admin*/}
           <Route path="/dashboard/admin" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <AdminDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/buat-kursus/admin" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <BuatKursusAdmin />
             </ProtectedRoute>
           } />
 

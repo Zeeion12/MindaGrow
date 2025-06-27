@@ -66,11 +66,19 @@ export const courseAPI = {
   },
 
   createCourse: (courseData) => {
-    return api.post('/courses', courseData);
+    return api.post('/courses', courseData, {
+      headers: {
+        'Content-Type': 'multipart/form-data', // For file upload
+      },
+    });
   },
 
   updateCourse: (id, courseData) => {
-    return api.put(`/courses/${id}`, courseData);
+    return api.put(`/courses/${id}`, courseData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   },
 
   deleteCourse: (id) => {

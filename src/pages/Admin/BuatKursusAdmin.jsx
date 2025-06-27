@@ -1,28 +1,28 @@
+// src/pages/admin/BuatKursusAdmin.jsx - Admin version with teacher selection
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { courseAPI } from '../../service/api';
+import { courseAPI, adminAPI } from '../../service/api';
 import Header from '../../components/layout/layoutParts/Header';
 import {
   RiSaveLine,
   RiImageAddLine,
   RiDeleteBin6Line,
-  RiFileList3Line,
-  RiCloseCircleLine,
   RiCheckboxCircleLine,
   RiErrorWarningLine,
   RiTimeLine,
   RiArrowGoBackLine,
   RiDraftLine,
-  RiEyeLine
+  RiEyeLine,
+  RiUserLine
 } from 'react-icons/ri';
 
-const BuatKursusPage = () => {
+const BuatKursusAdmin = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  // State untuk data form
+  // Form data with teacher selection for admin
   const [formData, setFormData] = useState({
     title: '',
     slug: '',
@@ -30,59 +30,72 @@ const BuatKursusPage = () => {
     short_description: '',
     banner_image: null,
     category_id: '',
-    level: 'beginner', // Match backend enum
+    teacher_id: '', // Admin can select teacher
+    level: 'beginner',
     is_featured: false,
     is_published: false,
     estimated_duration: '',
-    price: 0, // Add price field
+    price: 0,
   });
 
-  // State untuk preview image
   const [imagePreview, setImagePreview] = useState(null);
-
-  // State untuk loading
   const [loading, setLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState({ success: false, error: null });
-
-  // State untuk daftar kategori
+  
+  // Data lists
   const [categories, setCategories] = useState([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [teachers, setTeachers] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  // Effect untuk mengambil daftar kategori dari API
+  // Fetch categories and teachers
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchData = async () => {
       try {
-        setCategoriesLoading(true);
-        const response = await courseAPI.getCategories();
-        
-        if (response.data.success) {
-          setCategories(response.data.data || []);
-        } else {
-          console.error('Failed to fetch categories:', response.data.message);
-          setCategories([]);
+        setDataLoading(true);
+
+        // Fetch categories and teachers in parallel
+        const [categoriesResponse, teachersResponse] = await Promise.all([
+          courseAPI.getCategories(),
+          adminAPI.getUsers() // Get all users, filter teachers on frontend
+        ]);
+
+        // Set categories
+        if (categoriesResponse.data.success) {
+          setCategories(categoriesResponse.data.data || []);
         }
+
+        // Filter and set teachers
+        if (teachersResponse.data.success) {
+          const allUsers = teachersResponse.data.data || [];
+          const teacherUsers = allUsers.filter(user => 
+            user.role === 'guru' || user.role === 'admin'
+          );
+          setTeachers(teacherUsers);
+        }
+
       } catch (error) {
-        console.error('Error fetching categories:', error);
-        setCategories([]);
+        console.error('Error fetching data:', error);
+        setSubmitStatus({
+          success: false,
+          error: 'Gagal memuat data kategori dan guru. Silakan refresh halaman.'
+        });
       } finally {
-        setCategoriesLoading(false);
+        setDataLoading(false);
       }
     };
 
-    fetchCategories();
+    fetchData();
   }, []);
 
-  // Fungsi untuk mengupdate slug otomatis dari judul
   const generateSlug = (title) => {
     return title
       .toLowerCase()
-      .replace(/[^\w\s-]/g, '') // Hapus karakter khusus
-      .replace(/\s+/g, '-') // Ganti spasi dengan dash
-      .replace(/-+/g, '-') // Hindari multiple dash berurutan
-      .trim(); // Hapus whitespace di awal dan akhir
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
   };
 
-  // Handler saat title berubah, generate slug
   const handleTitleChange = (e) => {
     const newTitle = e.target.value;
     const newSlug = generateSlug(newTitle);
@@ -94,11 +107,8 @@ const BuatKursusPage = () => {
     });
   };
 
-  // Handler untuk input field
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-
-    // Untuk checkbox, gunakan checked sebagai value
     const inputValue = type === 'checkbox' ? checked : value;
 
     setFormData({
@@ -107,52 +117,35 @@ const BuatKursusPage = () => {
     });
   };
 
-  // Handler untuk upload gambar
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check file size (limit to 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('Ukuran file terlalu besar. Maksimal 5MB.');
       return;
     }
 
-    // Check file type
     if (!file.type.startsWith('image/')) {
       alert('File harus berupa gambar (jpg, png, gif).');
       return;
     }
 
-    // Set file to state
-    setFormData({
-      ...formData,
-      banner_image: file
-    });
+    setFormData({ ...formData, banner_image: file });
 
-    // Create preview URL
     const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(reader.result);
-    };
+    reader.onload = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
   };
 
-  // Handler untuk menghapus gambar
   const handleRemoveImage = () => {
-    setFormData({
-      ...formData,
-      banner_image: null
-    });
+    setFormData({ ...formData, banner_image: null });
     setImagePreview(null);
-
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  // Validasi form
   const validateForm = () => {
     const errors = {};
 
@@ -161,6 +154,7 @@ const BuatKursusPage = () => {
     if (!formData.description.trim()) errors.description = 'Deskripsi kursus harus diisi';
     if (!formData.short_description.trim()) errors.short_description = 'Deskripsi singkat harus diisi';
     if (!formData.category_id) errors.category_id = 'Kategori harus dipilih';
+    if (!formData.teacher_id) errors.teacher_id = 'Guru harus dipilih';
     if (!formData.estimated_duration || formData.estimated_duration <= 0) {
       errors.estimated_duration = 'Estimasi durasi harus diisi dan lebih dari 0';
     }
@@ -168,16 +162,11 @@ const BuatKursusPage = () => {
     return errors;
   };
 
-  // Handler submit form
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Reset status
     setSubmitStatus({ success: false, error: null });
 
-    // Validasi form
     const errors = validateForm();
-
     if (Object.keys(errors).length > 0) {
       const errorMessage = Object.values(errors).join('\n');
       setSubmitStatus({ success: false, error: errorMessage });
@@ -187,30 +176,23 @@ const BuatKursusPage = () => {
     try {
       setLoading(true);
 
-      // Prepare FormData for API submission
       const courseData = new FormData();
-
-      // Add all form fields to FormData
       courseData.append('title', formData.title.trim());
       courseData.append('slug', formData.slug.trim());
       courseData.append('description', formData.description.trim());
       courseData.append('short_description', formData.short_description.trim());
       courseData.append('category_id', formData.category_id);
+      courseData.append('teacher_id', formData.teacher_id); // Admin specifies teacher
       courseData.append('level', formData.level);
       courseData.append('estimated_duration', formData.estimated_duration);
       courseData.append('price', formData.price || 0);
       courseData.append('is_featured', formData.is_featured);
       courseData.append('is_published', formData.is_published);
 
-      // Add banner image if exists
       if (formData.banner_image) {
         courseData.append('banner_image', formData.banner_image);
       }
 
-      // Add teacher_id from logged in user
-      courseData.append('teacher_id', user.id);
-
-      // Call API to create course
       const response = await courseAPI.createCourse(courseData);
 
       if (response.data.success) {
@@ -220,13 +202,8 @@ const BuatKursusPage = () => {
           message: 'Kursus berhasil dibuat!'
         });
 
-        // Redirect after success
         setTimeout(() => {
-          if (formData.is_published) {
-            navigate(`/kursus/${response.data.data.id}`); // View created course
-          } else {
-            navigate('/kelas-diajar'); // Back to course list
-          }
+          navigate('/admin/kursus');
         }, 2000);
 
       } else {
@@ -244,7 +221,6 @@ const BuatKursusPage = () => {
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.errors) {
-        // Handle validation errors
         const validationErrors = Object.values(error.response.data.errors).flat();
         errorMessage = validationErrors.join('\n');
       }
@@ -258,23 +234,38 @@ const BuatKursusPage = () => {
     }
   };
 
-  // Level options mapping
   const levelOptions = [
     { value: 'beginner', label: 'Pemula' },
     { value: 'intermediate', label: 'Menengah' },
     { value: 'advanced', label: 'Lanjutan' }
   ];
 
+  if (dataLoading) {
+    return (
+      <div className="bg-gray-50 min-h-screen">
+        <Header title="Buat Kursus Baru" />
+        <div className="container mx-auto px-6 py-4">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-gray-600">Memuat data...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-50 min-h-screen">
-      <Header title="Buat Kursus Baru" />
+      <Header title="Buat Kursus Baru (Admin)" />
 
       <div className="container mx-auto px-6 py-4">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-gray-800">Buat Kursus Baru</h1>
             <button
-              onClick={() => navigate('/kelas-diajar')}
+              onClick={() => navigate('/admin/kursus')}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md flex items-center hover:bg-gray-200"
             >
               <RiArrowGoBackLine className="mr-2" />
@@ -288,9 +279,7 @@ const BuatKursusPage = () => {
               <div>
                 <p className="text-green-700 font-medium">Kursus berhasil dibuat!</p>
                 <p className="text-green-600 text-sm">
-                  {formData.is_published
-                    ? 'Kursus Anda telah dipublikasi dan tersedia untuk siswa.'
-                    : 'Kursus Anda disimpan sebagai draft. Anda dapat mengeditnya nanti sebelum dipublikasikan.'}
+                  Kursus telah dibuat dan akan diarahkan ke halaman manajemen kursus.
                 </p>
               </div>
             </div>
@@ -326,28 +315,37 @@ const BuatKursusPage = () => {
                     value={formData.title}
                     onChange={handleTitleChange}
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Contoh: Matematika Dasar Kelas 5"
-                    required
-                  />
-                </div>
-
-                {/* Slug */}
-                <div>
-                  <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
-                    Slug <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="slug"
-                    name="slug"
-                    value={formData.slug}
-                    onChange={handleInputChange}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     placeholder="matematika-dasar-kelas-5"
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Slug akan digunakan sebagai bagian dari URL kursus
+                  </p>
+                </div>
+
+                {/* Pilih Guru - ADMIN ONLY */}
+                <div>
+                  <label htmlFor="teacher_id" className="block text-sm font-medium text-gray-700 mb-1">
+                    Pilih Guru <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="teacher_id"
+                    name="teacher_id"
+                    value={formData.teacher_id}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Pilih Guru</option>
+                    {teachers.map(teacher => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.name} ({teacher.email}) - {teacher.role}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    <RiUserLine className="inline mr-1" />
+                    Guru yang akan mengajar kursus ini
                   </p>
                 </div>
 
@@ -363,11 +361,8 @@ const BuatKursusPage = () => {
                     onChange={handleInputChange}
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     required
-                    disabled={categoriesLoading}
                   >
-                    <option value="">
-                      {categoriesLoading ? 'Memuat kategori...' : 'Pilih Kategori'}
-                    </option>
+                    <option value="">Pilih Kategori</option>
                     {categories.map(category => (
                       <option key={category.id} value={category.id}>
                         {category.name}
@@ -416,9 +411,6 @@ const BuatKursusPage = () => {
                     />
                     <RiTimeLine className="ml-2 text-gray-500" />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Total durasi perkiraan untuk menyelesaikan kursus ini
-                  </p>
                 </div>
 
                 {/* Harga */}
@@ -595,7 +587,7 @@ const BuatKursusPage = () => {
             <div className="flex justify-end space-x-3">
               <button
                 type="button"
-                onClick={() => navigate('/kelas-diajar')}
+                onClick={() => navigate('/admin/kursus')}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50"
                 disabled={loading}
               >
@@ -628,4 +620,4 @@ const BuatKursusPage = () => {
   );
 };
 
-export default BuatKursusPage;
+export default BuatKursusAdmin;

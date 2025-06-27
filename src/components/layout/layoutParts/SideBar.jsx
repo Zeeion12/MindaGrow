@@ -170,6 +170,11 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiDashboardLine size={24} />,
         },
         {
+          path: '/buat-kursus/admin',
+          name: 'Buat Kursus',
+          icon: <RiBookletLine size={24} />
+        },
+        {
           path: '/pengaturan',
           name: 'Pengaturan',
           icon: <RiSettings4Line size={24} />
