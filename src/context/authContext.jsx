@@ -27,7 +27,6 @@ export const AuthProvider = ({ children }) => {
         
         if (response.data.success && response.data.valid) {
           setUser(response.data.user);
-          console.log('✅ Auth: Session validated for user:', response.data.user.role);
         } else {
           console.log('❌ Auth: Session invalid, logging out');
           handleLogout();
@@ -58,7 +57,6 @@ export const AuthProvider = ({ children }) => {
         const token = tokenOrIdentifier;
         const userData = passwordOrUserData;
         
-        console.log('🔐 Auth: Saving login data for user:', userData.role);
         localStorage.setItem('token', token);
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setUser(userData);

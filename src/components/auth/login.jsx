@@ -40,8 +40,6 @@ const Login = () => {
       setIsLoading(true);
       setError('');
 
-      console.log('🔄 Frontend: Attempting login with:', identifier);
-
       // FIXED: Use the existing endpoint that's already working
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -67,8 +65,6 @@ const Login = () => {
         setError(data.message || 'Login gagal');
         return;
       }
-
-      console.log('✅ Frontend: Login response:', data);
 
       // Handle different response types based on your current backend
       if (data.success === false) {
@@ -139,20 +135,14 @@ const Login = () => {
         result = await login(identifier, password, remember);
       }
 
-      console.log('✅ Frontend: Login successful, user role:', result.user.role);
-
       // Navigate based on role
       if (result.user.role === 'admin') {
-        console.log('🔑 Admin detected! Redirecting to admin dashboard...');
         navigate('/dashboard/admin');
       } else if (result.user.role === 'siswa') {
-        console.log('👨‍🎓 Student detected! Redirecting to student dashboard...');
         navigate('/dashboard/siswa');
       } else if (result.user.role === 'guru') {
-        console.log('👨‍🏫 Teacher detected! Redirecting to teacher dashboard...');
         navigate('/dashboard/guru');
       } else if (result.user.role === 'orangtua') {
-        console.log('👨‍👩‍👧‍👦 Parent detected! Redirecting to parent dashboard...');
         navigate('/dashboard/orangtua');
       } else {
         console.warn('⚠️  Unknown role:', result.user.role);
@@ -166,19 +156,16 @@ const Login = () => {
 
   // Handle 2FA setup completion
   const handle2FASetupComplete = (data) => {
-    console.log('✅ 2FA Setup completed:', data);
     handleLoginSuccess(data);
   };
 
   // Handle 2FA setup skip
   const handle2FASetupSkip = (data) => {
-    console.log('⏭️ 2FA Setup skipped:', data);
     handleLoginSuccess(data);
   };
 
   // Handle 2FA verification success
   const handle2FAVerifySuccess = (data) => {
-    console.log('✅ 2FA Verification successful:', data);
     handleLoginSuccess(data);
   };
 

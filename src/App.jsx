@@ -104,7 +104,7 @@ function App() {
               <CourseList />
             </ProtectedRoute>
           } />
-          <Route path="/kursus/:courseId" element={
+          <Route path="/kursus/:id" element={
             <ProtectedRoute allowedRoles={['siswa', 'guru', 'orangtua']}>
               <CourseDetail />
             </ProtectedRoute>

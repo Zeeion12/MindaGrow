@@ -162,6 +162,13 @@ const courseService = {
   // Get course by ID
   getCourseById: async (courseId, userId = null) => {
     try {
+      // TAMBAHKAN VALIDASI DI SERVICE LEVEL
+      if (!courseId || isNaN(courseId) || parseInt(courseId) <= 0) {
+        throw new Error(`Invalid course ID: ${courseId}`);
+      }
+      
+      const validCourseId = parseInt(courseId);
+      
       let query = `
         SELECT 
           c.*,
@@ -176,7 +183,7 @@ const courseService = {
           COUNT(DISTINCT cr.id) as review_count
       `;
 
-      let params = [courseId];
+      let params = [validCourseId]; // GUNAKAN validCourseId
       
       if (userId) {
         query += `, 
@@ -225,9 +232,10 @@ const courseService = {
           WHERE course_id = $1
           ORDER BY order_index ASC
         `;
-        const modulesResult = await pool.query(modulesQuery, [courseId]);
+        const modulesResult = await pool.query(modulesQuery, [validCourseId]); // GUNAKAN validCourseId
         course.modules = modulesResult.rows;
       } catch (error) {
+        console.error('Error fetching modules:', error);
         course.modules = [];
       }
 
@@ -255,9 +263,10 @@ const courseService = {
           ORDER BY cr.created_at DESC
           LIMIT 5
         `;
-        const reviewsResult = await pool.query(reviewsQuery, [courseId]);
+        const reviewsResult = await pool.query(reviewsQuery, [validCourseId]); // GUNAKAN validCourseId
         course.recent_reviews = reviewsResult.rows;
       } catch (error) {
+        console.error('Error fetching reviews:', error);
         course.recent_reviews = [];
       }
 
@@ -749,9 +758,20 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const { id } = req.params;
     const userId = req.user?.id;
     
-    console.log('GET /api/courses/:id - params:', { id, userId });
+    // VALIDASI LENGKAP ID
+    if (!id || id === 'undefined' || id === 'null' || isNaN(parseInt(id)) || parseInt(id) <= 0) {
+      console.log('❌ Invalid ID detected:', id);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid course ID provided',
+        error: `Received ID: "${id}" is not a valid course ID`
+      });
+    }
     
-    const course = await courseService.getCourseById(id, userId);
+    // Convert to integer untuk safety
+    const courseId = parseInt(id);
+    
+    const course = await courseService.getCourseById(courseId, userId);
     
     if (!course) {
       return res.status(404).json({
@@ -769,8 +789,19 @@ router.get('/:id', optionalAuth, async (req, res) => {
       success: true,
       data: course
     });
+    
   } catch (error) {
-    console.error('GET /api/courses/:id error:', error);
+    console.error('❌ GET /api/courses/:id error:', error);
+    
+    // Handle specific PostgreSQL errors
+    if (error.code === '22P02') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid course ID format',
+        error: 'Course ID must be a valid number'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Error fetching course',
