@@ -130,4 +130,52 @@ export const userAPI = {
   deleteProfilePicture: () => api.delete('/users/profile-picture'),
 };
 
+export const getAllUsers = async () => {
+  try {
+    const response = await api.get('/admin/users');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    throw error;
+  }
+};
+
+// Update course function
+export const updateCourse = async (courseId, courseData) => {
+  try {
+    const formData = new FormData();
+    
+    // Append required fields
+    Object.keys(courseData).forEach(key => {
+      if (key === 'thumbnail' && courseData[key] instanceof File) {
+        formData.append('banner_image', courseData[key]);
+      } else if (courseData[key] !== null && courseData[key] !== undefined) {
+        formData.append(key, courseData[key]);
+      }
+    });
+
+    const response = await api.put(`/courses/${courseId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error updating course:', error);
+    throw error;
+  }
+};
+
+// Delete course function
+export const deleteCourse = async (courseId) => {
+  try {
+    const response = await api.delete(`/courses/${courseId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting course:', error);
+    throw error;
+  }
+};
+
 export default api;

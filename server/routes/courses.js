@@ -115,6 +115,7 @@ const courseService = {
           c.price,
           c.level,
           c.duration,
+          c.status,  -- PASTIKAN INI ADA
           c.created_at,
           COALESCE(cat.name, 'Uncategorized') as category_name,
           CASE 
@@ -131,7 +132,7 @@ const courseService = {
         LEFT JOIN enrollments e ON c.id = e.course_id
         LEFT JOIN course_ratings cr ON c.id = cr.course_id
         ${whereClause}
-        GROUP BY c.id, cat.name, g.nama_lengkap
+        GROUP BY c.id, cat.name, g.nama_lengkap, c.status  -- TAMBAH c.status DI GROUP BY
         ORDER BY c.created_at DESC
         LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
       `;
@@ -367,8 +368,6 @@ router.get('/', optionalAuth, async (req, res) => {
     const { page = 1, limit = 12, category, search, level } = req.query;
     const filters = { category, search, level };
     
-    console.log('GET /api/courses - filters:', filters);
-    
     const result = await courseService.getAllCourses(page, limit, filters);
     
     // Convert thumbnails to full URLs
@@ -499,18 +498,6 @@ router.post('/',
         price = 0,
         instructor_id
       } = req.body;
-
-      console.log('Creating course with data:', {
-        title,
-        description,
-        category_id,
-        level,
-        duration,
-        price,
-        instructor_id,
-        user_role: req.user.role,
-        user_id: req.user.id
-      });
 
       // Validation
       if (!title || !description || !category_id) {
@@ -644,8 +631,6 @@ router.post('/',
       if (courseWithDetails.thumbnail) {
         courseWithDetails.thumbnail = `${req.protocol}://${req.get('host')}/${courseWithDetails.thumbnail}`;
       }
-
-      console.log('Course created successfully:', courseWithDetails.title);
 
       res.status(201).json({
         success: true,
@@ -939,7 +924,10 @@ router.delete('/:id',
     try {
       const courseId = req.params.id;
 
-      // Check authorization
+      console.log('DELETE request for course:', courseId);
+      console.log('User requesting:', req.user);
+
+      // Check authorization - ADMIN BISA DELETE SEMUA
       if (req.user.role !== 'guru' && req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
@@ -958,26 +946,29 @@ router.delete('/:id',
 
       const course = courseResult.rows[0];
 
-      // Check permission
-      if (req.user.role !== 'admin' && course.instructor_id !== req.user.id) {
+      // PERBAIKAN: Admin bisa delete semua course, guru hanya course mereka
+      if (req.user.role === 'guru' && course.instructor_id !== req.user.id) {
         return res.status(403).json({
           success: false,
-          message: 'You are not authorized to delete this course'
+          message: 'You can only delete your own courses'
         });
       }
 
-      // Check if course has enrollments
-      const enrollmentResult = await pool.query(
-        'SELECT COUNT(*) as count FROM enrollments WHERE course_id = $1',
-        [courseId]
-      );
+      // HAPUS CEK ENROLLMENT untuk admin (admin bisa force delete)
+      if (req.user.role !== 'admin') {
+        // Hanya check enrollment untuk guru
+        const enrollmentResult = await pool.query(
+          'SELECT COUNT(*) as count FROM enrollments WHERE course_id = $1',
+          [courseId]
+        );
 
-      const enrollmentCount = parseInt(enrollmentResult.rows[0].count);
-      if (enrollmentCount > 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot delete course with active enrollments'
-        });
+        const enrollmentCount = parseInt(enrollmentResult.rows[0].count);
+        if (enrollmentCount > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot delete course with active enrollments'
+          });
+        }
       }
 
       // Delete course thumbnail if exists
@@ -990,6 +981,8 @@ router.delete('/:id',
 
       // Delete course (modules and lessons will be deleted by CASCADE)
       await pool.query('DELETE FROM courses WHERE id = $1', [courseId]);
+
+      console.log('Course deleted successfully by:', req.user.role, req.user.id);
 
       res.json({
         success: true,

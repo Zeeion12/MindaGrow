@@ -20,7 +20,9 @@ const app = express();
 // CORS and middleware
 app.use(cors({
     origin: 'http://localhost:3000',
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
@@ -325,42 +327,6 @@ const initDB = async () => {
         ('Seni dan Budaya', 'Seni rupa, musik, dan budaya nusantara', '🎨')
       `);
       console.log('Default categories inserted');
-    }
-
-    // Create sample course for testing (hanya jika ada guru)
-    const guruExists = await pool.query("SELECT id FROM users WHERE role = 'guru' LIMIT 1");
-    if (guruExists.rows.length > 0) {
-      const courseExists = await pool.query("SELECT id FROM courses WHERE title LIKE '%Biologi%' LIMIT 1");
-      if (courseExists.rows.length === 0) {
-        const biologiCategory = await pool.query("SELECT id FROM categories WHERE name = 'Biologi' LIMIT 1");
-        if (biologiCategory.rows.length > 0) {
-          await pool.query(`
-            INSERT INTO courses (
-              title, description, category_id, level, price, duration, 
-              instructor_id, instructor_role, created_by
-            ) VALUES (
-              'Biologi - Reproduksi Manusia',
-              'Pada modul ini anda akan belajar mengenai organ reproduksi yang ada pada manusia serta belajar mengenai kegunaanya. Lorem ipsum dolor sit amet consectetur adipisicing elit.',
-              $1, 'beginner', 0, 120, $2, 'guru', $2
-            )
-          `, [biologiCategory.rows[0].id, guruExists.rows[0].id]);
-
-          // Add sample modules
-          const courseResult = await pool.query("SELECT id FROM courses WHERE title = 'Biologi - Reproduksi Manusia' LIMIT 1");
-          if (courseResult.rows.length > 0) {
-            const courseId = courseResult.rows[0].id;
-            await pool.query(`
-              INSERT INTO modules (course_id, title, description, duration, order_index) VALUES
-              ($1, 'Pengenalan Sistem Reproduksi', 'Memahami dasar-dasar sistem reproduksi manusia', 30, 1),
-              ($1, 'Organ Reproduksi Pria', 'Mempelajari anatomi dan fungsi organ reproduksi pria', 30, 2),
-              ($1, 'Organ Reproduksi Wanita', 'Mempelajari anatomi dan fungsi organ reproduksi wanita', 30, 3),
-              ($1, 'Proses Fertilisasi', 'Memahami proses pembuahan dan kehamilan', 30, 4)
-            `, [courseId]);
-          }
-          
-          console.log('Sample course "Biologi - Reproduksi Manusia" created');
-        }
-      }
     }
 
     // Buat tabel untuk temporary 2FA tokens
@@ -930,8 +896,6 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
   const { identifier, password, remember } = req.body;
   
   try {
-    console.log('Login attempt with identifier:', identifier);
-
     // Check dulu apakah ini admin login
     if (identifier.includes('@')) {
       // Kemungkinan email admin
@@ -987,7 +951,6 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
     
     if (siswaResult.rows.length > 0) {
       user = siswaResult.rows[0];
-      console.log('User found in siswa table with role:', user.role);
       roleInfo = {
         nama_lengkap: user.nama_lengkap,
         role: 'siswa',
@@ -1223,8 +1186,6 @@ app.post('/api/auth/verify-setup', async (req, res) => {
 
     // Get user details based on role
     let userDetails = await getUserDetails(user.id, user.role);
-    
-    console.log('2FA setup verification successful for user:', user.email);
 
     res.json({
       success: true,
@@ -1316,8 +1277,6 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
 
     // Get user details based on role
     let userDetails = await getUserDetails(user.id, user.role);
-
-    console.log('2FA verification successful for user:', user.email);
 
     res.json({
       success: true,
@@ -1810,8 +1769,6 @@ app.post('/api/auth/logout', authenticateToken, async (req, res) => {
       [userId, token]
     );
 
-    console.log('User logged out:', userId);
-
     res.json({
       success: true,
       message: 'Logged out successfully'
@@ -1911,13 +1868,11 @@ app.listen(PORT, () => {
 📊 Database: mindagrow
 🔗 Frontend URL: http://localhost:3000
 🔗 Backend URL: http://localhost:${PORT}
-📁 Uploads: /uploads directory
-🔐 Admin Login: admin@platform.com / admin123
-
-Available Endpoints:
-📚 Courses: /api/courses/*
-👤 Auth: /api/auth/*
-👥 Admin: /api/admin/*
-📸 Profile: /api/users/profile-picture
   `);
 });
+
+//Available Endpoints:
+//📚 Courses: /api/courses/*
+//👤 Auth: /api/auth/*
+//👥 Admin: /api/admin/*
+//📸 Profile: /api/users/profile-picture
