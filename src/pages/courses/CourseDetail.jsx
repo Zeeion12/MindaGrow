@@ -238,8 +238,6 @@ const CourseDetail = () => {
     { id: 'guru', label: 'Guru' }
   ];
 
-  console.log('Current activeTab:', activeTab); // Debug log
-
   // Render tab content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
@@ -583,7 +581,6 @@ const CourseDetail = () => {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log('Tab clicked:', tab.id); // Debug log
                       setActiveTab(tab.id);
                     }}
                     className={`py-2 px-4 border-b-2 font-medium text-sm transition-colors duration-200 cursor-pointer z-10 relative ${
@@ -604,7 +601,6 @@ const CourseDetail = () => {
 
             {/* Tab Content */}
             <div className="min-h-96">
-              {console.log('Rendering tab content for:', activeTab)}
               {renderTabContent()}
             </div>
           </div>

@@ -274,7 +274,8 @@ const AdminCourseManagement = () => {
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all duration-300 ease-out scale-95 hover:scale-100"></div>
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
@@ -411,7 +412,8 @@ const AdminCourseManagement = () => {
     if (!isOpen) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all duration-300 ease-out scale-95 hover:scale-100"></div>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 transform transition-all duration-300 animate-modal-enter">
           <div className="p-6 text-center">
@@ -817,24 +819,6 @@ const AdminCourseManagement = () => {
         onClose={handleSuccessClose}
         message={successModal.message}
       />
-
-      {/* CSS Animations */}
-      <style jsx>{`
-        @keyframes modal-enter {
-          0% {
-            opacity: 0;
-            transform: scale(0.9) translateY(-10px);
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-        
-        .animate-modal-enter {
-          animation: modal-enter 0.3s ease-out;
-        }
-      `}</style>
     </div>
   );
 };

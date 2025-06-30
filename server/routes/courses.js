@@ -429,8 +429,6 @@ router.get('/popular', async (req, res) => {
   try {
     const { limit = 6 } = req.query;
     
-    console.log('GET /api/courses/popular - limit:', limit);
-    
     const courses = await courseService.getPopularCourses(limit);
     
     // Convert thumbnails to full URLs
@@ -457,8 +455,6 @@ router.get('/popular', async (req, res) => {
 router.get('/new', async (req, res) => {
   try {
     const { limit = 6 } = req.query;
-    
-    console.log('GET /api/courses/new - limit:', limit);
     
     const courses = await courseService.getNewCourses(limit);
     
@@ -686,8 +682,6 @@ router.get('/instructor/:instructorId',
     try {
       const { instructorId } = req.params;
       const { page = 1, limit = 12 } = req.query;
-      
-      console.log('Getting courses for instructor:', instructorId);
 
       // Check authorization - users can only see their own courses unless admin
       if (req.user.role !== 'admin' && req.user.id !== parseInt(instructorId)) {
@@ -760,7 +754,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
     
     // VALIDASI LENGKAP ID
     if (!id || id === 'undefined' || id === 'null' || isNaN(parseInt(id)) || parseInt(id) <= 0) {
-      console.log('❌ Invalid ID detected:', id);
       return res.status(400).json({
         success: false,
         message: 'Invalid course ID provided',
@@ -834,10 +827,9 @@ router.put('/:id',
         level,
         duration,
         price,
-        status
+        status,
+        instructor_id
       } = req.body;
-
-      console.log('Updating course:', courseId, 'with data:', req.body);
 
       // Find existing course
       const courseResult = await pool.query('SELECT * FROM courses WHERE id = $1', [courseId]);
@@ -866,18 +858,63 @@ router.put('/:id',
         });
       }
 
-      // Prepare update data
-      const updateData = {
-        updated_at: new Date()
-      };
+      // Prepare update data with proper handling
+      const updateFields = [];
+      const updateValues = [];
+      let paramCount = 1;
 
-      if (title) updateData.title = title.trim();
-      if (description) updateData.description = description.trim();
-      if (category_id) updateData.category_id = parseInt(category_id);
-      if (level) updateData.level = level;
-      if (duration) updateData.duration = parseInt(duration);
-      if (price !== undefined) updateData.price = parseFloat(price);
-      if (status) updateData.status = status;
+      // Add courseId as first parameter
+      updateValues.push(courseId);
+      paramCount++;
+
+      // Handle each field individually with proper type casting
+      if (title !== undefined && title !== null) {
+        updateFields.push(`title = $${paramCount}`);
+        updateValues.push(title.trim());
+        paramCount++;
+      }
+
+      if (description !== undefined && description !== null) {
+        updateFields.push(`description = $${paramCount}`);
+        updateValues.push(description.trim());
+        paramCount++;
+      }
+
+      if (category_id !== undefined && category_id !== null) {
+        updateFields.push(`category_id = $${paramCount}`);
+        updateValues.push(parseInt(category_id));
+        paramCount++;
+      }
+
+      if (level !== undefined && level !== null) {
+        updateFields.push(`level = $${paramCount}`);
+        updateValues.push(level);
+        paramCount++;
+      }
+
+      if (duration !== undefined && duration !== null) {
+        updateFields.push(`duration = $${paramCount}`);
+        updateValues.push(parseInt(duration));
+        paramCount++;
+      }
+
+      if (price !== undefined && price !== null) {
+        updateFields.push(`price = $${paramCount}`);
+        updateValues.push(parseFloat(price));
+        paramCount++;
+      }
+
+      if (status !== undefined && status !== null) {
+        updateFields.push(`status = $${paramCount}`);
+        updateValues.push(status);
+        paramCount++;
+      }
+
+      if (instructor_id !== undefined && instructor_id !== null) {
+        updateFields.push(`instructor_id = $${paramCount}`);
+        updateValues.push(parseInt(instructor_id));
+        paramCount++;
+      }
 
       // Handle thumbnail upload
       if (req.file) {
@@ -888,15 +925,32 @@ router.put('/:id',
             fs.unlinkSync(oldPath);
           }
         }
-        updateData.thumbnail = `uploads/courses/${req.file.filename}`;
+        
+        updateFields.push(`thumbnail = $${paramCount}`);
+        updateValues.push(`uploads/courses/${req.file.filename}`);
+        paramCount++;
       }
 
-      // Build dynamic update query
-      const setClause = Object.keys(updateData).map((key, index) => `${key} = ${index + 2}`).join(', ');
-      const values = [courseId, ...Object.values(updateData)];
+      // Always update the updated_at field with proper timestamp
+      updateFields.push(`updated_at = NOW()`);
 
-      const updateQuery = `UPDATE courses SET ${setClause} WHERE id = $1 RETURNING id`;
-      await pool.query(updateQuery, values);
+      // Check if there are fields to update
+      if (updateFields.length === 1) { // Only updated_at
+        return res.status(400).json({
+          success: false,
+          message: 'No fields to update'
+        });
+      }
+
+      // Build and execute update query
+      const updateQuery = `
+        UPDATE courses 
+        SET ${updateFields.join(', ')} 
+        WHERE id = $1 
+        RETURNING id
+      `;
+
+      await pool.query(updateQuery, updateValues);
 
       // Fetch updated course with relations
       const completeQuery = `
@@ -940,9 +994,21 @@ router.put('/:id',
         }
       }
 
+      // Handle specific PostgreSQL errors
+      if (error.code === '23505') { // Unique violation
+        return res.status(400).json({
+          success: false,
+          message: 'Course with this title already exists',
+          errors: {
+            title: ['Title must be unique']
+          }
+        });
+      }
+
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
       });
     }
   }
@@ -954,9 +1020,6 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const courseId = req.params.id;
-
-      console.log('DELETE request for course:', courseId);
-      console.log('User requesting:', req.user);
 
       // Check authorization - ADMIN BISA DELETE SEMUA
       if (req.user.role !== 'guru' && req.user.role !== 'admin') {
@@ -1013,8 +1076,6 @@ router.delete('/:id',
       // Delete course (modules and lessons will be deleted by CASCADE)
       await pool.query('DELETE FROM courses WHERE id = $1', [courseId]);
 
-      console.log('Course deleted successfully by:', req.user.role, req.user.id);
-
       res.json({
         success: true,
         message: 'Course deleted successfully'
@@ -1035,8 +1096,6 @@ router.post('/:id/enroll', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { id: userId, role } = req.user;
-    
-    console.log('POST /api/courses/:id/enroll - params:', { id, userId, role });
     
     if (role !== 'siswa') {
       return res.status(403).json({
@@ -1094,8 +1153,6 @@ router.delete('/:id/unenroll', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { id: userId, role } = req.user;
-    
-    console.log('DELETE /api/courses/:id/unenroll - params:', { id, userId, role });
     
     if (role !== 'siswa') {
       return res.status(403).json({
