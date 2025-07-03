@@ -1,13 +1,16 @@
-// src/services/api.js - CLEAN VERSION (minimal logging)
+// src/services/api.js - FIXED VERSION
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'http://localhost:5001/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// URL untuk Flask backend (port 5001)
+const CHATBOT_API_URL = 'http://localhost:5001/api';
 
 // Simplified interceptors - only log errors
 api.interceptors.request.use((config) => {
@@ -21,11 +24,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Only log actual errors
     if (error.response?.status >= 400) {
       console.error('❌ API Error:', error.response.status, error.config?.url);
     }
-    
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -37,53 +38,20 @@ api.interceptors.response.use(
 
 // Course API - CLEAN VERSION
 export const courseAPI = {
-  getAllCourses: (params = {}) => {
-    return api.get('/courses', { params });
-  },
-
-  getCategories: () => {
-    return api.get('/courses/categories');
-  },
-
-  getCourseById: (id) => {
-    return api.get(`/courses/${id}`);
-  },
-
-  enrollCourse: (courseId) => {
-    return api.post(`/courses/${courseId}/enroll`);
-  },
-
-  unenrollCourse: (courseId) => {
-    return api.delete(`/courses/${courseId}/unenroll`);
-  },
-
-  getMyEnrolledCourses: () => {
-    return api.get('/courses/my/enrolled');
-  },
-
-  getMyCreatedCourses: () => {
-    return api.get('/courses/my/created');
-  },
-
-  createCourse: (courseData) => {
-    return api.post('/courses', courseData, {
-      headers: {
-        'Content-Type': 'multipart/form-data', // For file upload
-      },
-    });
-  },
-
-  updateCourse: (id, courseData) => {
-    return api.put(`/courses/${id}`, courseData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-  },
-
-  deleteCourse: (id) => {
-    return api.delete(`/courses/${id}`);
-  }
+  getAllCourses: (params = {}) => api.get('/courses', { params }),
+  getCategories: () => api.get('/courses/categories'),
+  getCourseById: (id) => api.get(`/courses/${id}`),
+  enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
+  unenrollCourse: (courseId) => api.delete(`/courses/${courseId}/unenroll`),
+  getMyEnrolledCourses: () => api.get('/courses/my/enrolled'),
+  getMyCreatedCourses: () => api.get('/courses/my/created'),
+  createCourse: (courseData) => api.post('/courses', courseData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  updateCourse: (id, courseData) => api.put(`/courses/${id}`, courseData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  deleteCourse: (id) => api.delete(`/courses/${id}`),
 };
 
 // Auth API
@@ -92,16 +60,10 @@ export const authAPI = {
   register: (userData) => api.post('/register', userData),
   validateSession: () => api.post('/auth/validate-session'),
   logout: () => api.post('/auth/logout'),
-  setup2FA: (tempToken) => api.post('/auth/setup-2fa', {}, {
-    headers: { Authorization: `Bearer ${tempToken}` }
-  }),
-  verifySetup: (token, tempToken) => api.post('/auth/verify-setup', { token }, {
-    headers: { Authorization: `Bearer ${tempToken}` }
-  }),
+  setup2FA: (tempToken) => api.post('/auth/setup-2fa', {}, { headers: { Authorization: `Bearer ${tempToken}` } }),
+  verifySetup: (token, tempToken) => api.post('/auth/verify-setup', { token }, { headers: { Authorization: `Bearer ${tempToken}` } }),
   verify2FA: (data) => api.post('/auth/verify-2fa', data),
-  skip2FA: (tempToken) => api.post('/auth/skip-2fa', {}, {
-    headers: { Authorization: `Bearer ${tempToken}` }
-  }),
+  skip2FA: (tempToken) => api.post('/auth/skip-2fa', {}, { headers: { Authorization: `Bearer ${tempToken}` } }),
   disable2FA: (data) => api.post('/auth/disable-2fa', data),
   get2FAStatus: () => api.get('/user/2fa-status'),
   checkNIK: (nik) => api.post('/check-nik', { nik }),
@@ -130,51 +92,148 @@ export const userAPI = {
   deleteProfilePicture: () => api.delete('/users/profile-picture'),
 };
 
-export const getAllUsers = async () => {
+// Chatbot API
+export const chatbotAPI = {
+  queryDataset: (question) => api.post('/dataset/query', { question }),
+  analyzeStudent: (nis) => api.get(`/student/${nis}/analysis`),
+  testConnection: () => api.get('/test')
+};
+
+// Fungsi untuk mengecek apakah pertanyaan adalah tentang dataset
+export const isDatasetQuestion = (question) => {
+  const datasetKeywords = [
+    'siswa', 'skor', 'nilai', 'rata-rata', 'kuis', 'tugas', 'jumlah',
+    'analisis', 'performa', 'mata pelajaran', 'mapel', 'tertinggi', 'terendah',
+    'statistik', 'data', 'berapa', 'semua', 'keseluruhan'
+  ];
+  return datasetKeywords.some(keyword => question.toLowerCase().includes(keyword));
+};
+
+// Fungsi untuk query dataset ke Flask backend
+export const queryDataset = async (question) => {
   try {
-    const response = await api.get('/admin/users');
-    return response.data;
+    const response = await fetch(`${CHATBOT_API_URL}/dataset/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ question })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.answer;
   } catch (error) {
-    console.error('Error fetching users:', error);
-    throw error;
+    console.error('Error querying dataset:', error);
+    return 'Maaf, tidak dapat mengakses data saat ini. Sistem sedang offline. 🔧';
   }
 };
 
-// Update course function
-export const updateCourse = async (courseId, courseData) => {
+// Fungsi untuk analisis siswa ke Flask backend
+export const analyzeStudent = async (nis) => {
   try {
-    const formData = new FormData();
-    
-    // Append required fields
-    Object.keys(courseData).forEach(key => {
-      if (key === 'thumbnail' && courseData[key] instanceof File) {
-        formData.append('banner_image', courseData[key]);
-      } else if (courseData[key] !== null && courseData[key] !== undefined) {
-        formData.append(key, courseData[key]);
+    const response = await fetch(`${CHATBOT_API_URL}/student/${nis}/analysis`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
       }
     });
 
-    const response = await api.put(`/courses/${courseId}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    
-    return response.data;
+    if (!response.ok) {
+      if (response.status === 404) {
+        return { error: 'Siswa tidak ditemukan' };
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
   } catch (error) {
-    console.error('Error updating course:', error);
-    throw error;
+    console.error('Error analyzing student:', error);
+    return { error: 'Maaf, terjadi kesalahan saat menganalisis data siswa.' };
   }
 };
 
-// Delete course function
-export const deleteCourse = async (courseId) => {
+// Fungsi fallback untuk respon offline
+const getOfflineResponse = (userMessage) => {
+  const message = userMessage.toLowerCase();
+
+  // Respon untuk tips belajar
+  if (message.includes('tips') || message.includes('belajar')) {
+    const tips = [
+      "🌟 Belajar rutin 15-30 menit setiap hari lebih efektif daripada belajar marathon!",
+      "📚 Buat catatan kecil dengan kata-kata kunci untuk mudah diingat.",
+      "🎯 Tetapkan target kecil setiap hari, seperti 'hari ini saya akan memahami 1 konsep baru'.",
+      "👥 Belajar bersama teman bisa membuat proses belajar lebih menyenangkan!",
+      "🔄 Ulangi materi yang sudah dipelajari sebelumnya untuk memperkuat ingatan."
+    ];
+    return tips[Math.floor(Math.random() * tips.length)];
+  }
+
+  // Respon untuk matematika
+  if (message.includes('matematika') || message.includes('mtk')) {
+    const mathTips = [
+      "🔢 Untuk matematika: Mulai dari soal yang mudah, lalu naik ke yang lebih sulit.",
+      "✏️ Tulis rumus-rumus penting di kartu kecil untuk sering dibaca.",
+      "🧮 Gunakan benda di sekitar untuk memahami konsep hitungan.",
+      "📐 Latihan soal adalah kunci sukses matematika. Semakin banyak latihan, semakin paham!"
+    ];
+    return mathTips[Math.floor(Math.random() * mathTips.length)];
+  }
+
+  // Respon untuk sapaan
+  if (['halo', 'hai', 'hi', 'hello', 'hey'].includes(message.trim())) {
+    return "Halo! Saya RoGrow 🌱 Meski sedang offline, saya tetap bisa berbagi tips belajar yang menyenangkan! Tanyakan apa saja tentang belajar ya!";
+  }
+
+  // Respon default
+  const fallbackResponses = [
+    'Saya RoGrow! 🌱 Meski sedang offline, coba tanyakan tips belajar atau masukkan NIS untuk nanti dianalisis.',
+    'Halo! Sistem sedang offline, tapi saya bisa berbagi tips belajar yang menyenangkan! 📚',
+    'Yuk belajar bersama! Tanyakan tips untuk mata pelajaran apa pun. ✨',
+    'Wah, saya sedang offline nih! Tapi tetap bisa kasih tips belajar yang keren! 🤖'
+  ];
+  return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+};
+
+// Fungsi untuk menggunakan AI lokal (offline) - HAPUS GROQ API
+export const sendMessageToGroq = async (messages) => {
   try {
-    const response = await api.delete(`/courses/${courseId}`);
-    return response.data;
+    // Ambil pesan user terakhir
+    const userMessage = messages[messages.length - 1]?.content || '';
+
+    // Gunakan respon offline yang sudah disediakan
+    return getOfflineResponse(userMessage);
+
   } catch (error) {
-    console.error('Error deleting course:', error);
-    throw error;
+    console.error('Error in local AI response:', error);
+    return getOfflineResponse('');
+  }
+};
+
+// Test koneksi ke Flask backend
+export const testFlaskConnection = async () => {
+  try {
+    const response = await fetch(`${CHATBOT_API_URL}/test`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Flask connection test:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Flask connection failed:', error);
+    return null;
   }
 };
 

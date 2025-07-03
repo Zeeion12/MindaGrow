@@ -1,4 +1,3 @@
-# src/service/python_backend/app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -6,377 +5,367 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LinearRegression
-import json
-import re
 import os
+import re
+import random
 
 app = Flask(__name__)
-CORS(app)  # Mengaktifkan CORS untuk permintaan dari frontend
+CORS(app)
 
 # Menentukan path absolut ke file dataset
 current_dir = os.path.dirname(os.path.abspath(__file__))
-dataset_path = os.path.join(current_dir, 'dataset_edukasi_ai_gamifikasi_anak.csv')
+data_dir = os.path.join(current_dir, 'dataChatBot')
+siswa_path = os.path.join(data_dir, 'data_siswa.csv')
+kuis_path = os.path.join(data_dir, 'nilai_kuis.csv')
+tugas_path = os.path.join(data_dir, 'nilai_tugas.csv')
 
-# Load dataset (dengan path absolut)
+# Load datasets
 try:
-    dataset = pd.read_csv(dataset_path)
-    print(f"Dataset berhasil dimuat. Jumlah data: {len(dataset)}")
+    siswa_data = pd.read_csv(siswa_path)
+    kuis_data = pd.read_csv(kuis_path)
+    tugas_data = pd.read_csv(tugas_path)
+    print(f"Dataset siswa: {len(siswa_data)} siswa, kuis: {len(kuis_data)} siswa, tugas: {len(tugas_data)}")
+    
+    # Merge datasets on 'Id' and 'NIS'
+    dataset = siswa_data.merge(kuis_data, on=['Id', 'Nama Lengkap', 'NIS'], how='left')
+    dataset = dataset.merge(tugas_data, on=['Id', 'Nama Lengkap', 'NIS'], how='left')
+    print(f"Dataset gabungan berhasil dimuat. Jumlah data: {len(dataset)}")
 except Exception as e:
     print(f"Error saat memuat dataset: {e}")
-    # Buat dataset dummy jika file tidak ditemukan
     dataset = pd.DataFrame({
-        'id': range(1, 501),
-        'nama': [f'Siswa {i}' for i in range(1, 501)],
-        'skor_mata_pelajaran': np.random.uniform(50, 100, 500),
-        'nama_orang_tua': [f'Orang Tua {i}' for i in range(1, 501)],
-        'absensi': np.random.randint(0, 10, 500),
-        'umur': np.random.randint(6, 12, 500),
-        'grade_class': [f'{np.random.choice(["A", "B", "C", "D", "E"])}-{np.random.choice(["1", "2", "3", "4", "5", "6"])}' for _ in range(500)]
+        'Id': range(1, 31),
+        'Nama Lengkap': [f'Siswa {i}' for i in range(1, 31)],
+        'NIS': [f'202301{i:02d}' for i in range(1, 31)],
+        'MTK_Quiz': np.random.uniform(50, 100, 30),
+        'MTK_Tugas': np.random.uniform(50, 100, 30),
+        'BINDO_Quiz': np.random.uniform(50, 100, 30),
+        'BINDO_Tugas': np.random.uniform(50, 100, 30),
+        'BING_Quiz': np.random.uniform(50, 100, 30),
+        'BING_Tugas': np.random.uniform(50, 100, 30),
+        'IPA_Quiz': np.random.uniform(50, 100, 30),
+        'IPA_Tugas': np.random.uniform(50, 100, 30),
+        'IPS_Quiz': np.random.uniform(50, 100, 30),
+        'IPS_Tugas': np.random.uniform(50, 100, 30),
+        'PKN_Quiz': np.random.uniform(50, 100, 30),
+        'PKN_Tugas': np.random.uniform(50, 100, 30),
+        'Seni_Quiz': np.random.uniform(50, 100, 30),
+        'Seni_Tugas': np.random.uniform(50, 100, 30),
     })
     print("Dataset dummy dibuat karena file asli tidak ditemukan.")
 
 # Preprocessing data
 def preprocess_data():
-    # Konversi tipe data numerik jika diperlukan
-    numeric_columns = ['skor_mata_pelajaran', 'absensi', 'umur']
+    numeric_columns = [
+        'MTK_Quiz', 'MTK_Tugas', 'BINDO_Quiz', 'BINDO_Tugas',
+        'BING_Quiz', 'BING_Tugas', 'IPA_Quiz', 'IPA_Tugas',
+        'IPS_Quiz', 'IPS_Tugas', 'PKN_Quiz', 'PKN_Tugas',
+        'Seni_Quiz', 'Seni_Tugas'
+    ]
     for col in numeric_columns:
         if col in dataset.columns:
             dataset[col] = pd.to_numeric(dataset[col], errors='coerce')
-    
-    # Hapus baris dengan nilai yang hilang
+    # Pastikan NIS bertipe string dan di-strip
+    if 'NIS' in dataset.columns:
+        dataset['NIS'] = dataset['NIS'].astype(str).str.strip()
     return dataset.dropna()
 
 # Fungsi untuk menganalisis dataset
 def analyze_dataset():
     data = preprocess_data()
-    
-    # Statistik dasar
+    subjects = ['MTK', 'BINDO', 'BING', 'IPA', 'IPS', 'PKN', 'Seni']
     stats = {
         "jumlah_siswa": len(data),
-        "rata_rata_skor": data['skor_mata_pelajaran'].mean(),
-        "rata_rata_absensi": data['absensi'].mean(),
-        "min_skor": data['skor_mata_pelajaran'].min(),
-        "max_skor": data['skor_mata_pelajaran'].max(),
-        "min_absensi": data['absensi'].min(),
-        "max_absensi": data['absensi'].max(),
-        "distribusi_umur": data['umur'].value_counts().to_dict(),
-        "distribusi_grade": data['grade_class'].apply(lambda x: x.split('-')[0] if isinstance(x, str) else x).value_counts().to_dict()
+        "rata_rata_skor_kuis": {subject: data[f"{subject}_Quiz"].mean() for subject in subjects},
+        "rata_rata_skor_tugas": {subject: data[f"{subject}_Tugas"].mean() for subject in subjects},
+        "korelasi_kuis_tugas": {subject: data[f"{subject}_Quiz"].corr(data[f"{subject}_Tugas"]) for subject in subjects}
     }
-    
-    # Menghitung korelasi
-    correlation = data['skor_mata_pelajaran'].corr(data['absensi'])
-    stats['korelasi_skor_absensi'] = correlation
-    
-    # Clustering siswa berdasarkan skor dan absensi
-    if len(data) >= 3:  # Minimal 3 data untuk cluster
-        # Persiapkan data untuk clustering
-        X = data[['skor_mata_pelajaran', 'absensi']].copy()
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        
-        # Tentukan jumlah cluster optimal (misalnya 3 cluster)
-        kmeans = KMeans(n_clusters=3, random_state=42)
-        data['cluster'] = kmeans.fit_predict(X_scaled)
-        
-        # Statistik tiap cluster
-        cluster_stats = {}
-        for cluster in range(3):
-            cluster_data = data[data['cluster'] == cluster]
-            cluster_stats[f'cluster_{cluster}'] = {
-                'jumlah_siswa': len(cluster_data),
-                'rata_rata_skor': cluster_data['skor_mata_pelajaran'].mean(),
-                'rata_rata_absensi': cluster_data['absensi'].mean()
-            }
-        
-        stats['clusters'] = cluster_stats
-    
-    # Prediksi
-    if len(data) >= 10:  # Butuh cukup data untuk regresi
-        # Model regresi untuk prediksi skor berdasarkan absensi
-        X = data[['absensi']]
-        y = data['skor_mata_pelajaran']
-        model = LinearRegression()
-        model.fit(X, y)
-        
-        # Koefisien regresi
-        stats['regresi'] = {
-            'intercept': model.intercept_,
-            'coef_absensi': model.coef_[0]
-        }
-    
     return stats
 
-# Simpan data analisis
 analysis_results = analyze_dataset()
 
-# Endpoint untuk menjawab pertanyaan dataset
-@app.route('/api/dataset/query', methods=['POST'])
-def query_dataset():
-    data = request.json
-    question = data.get('question', '').lower()
-    
-    # Preprocess data jika belum
-    data = preprocess_data()
-    
-    # Analisis pertanyaan dan berikan respons
-    response = get_answer_for_question(question, data)
-    
+# ROOT ROUTE - Add this to handle the 404 error
+@app.route('/')
+def home():
     return jsonify({
-        'answer': response
+        'status': 'success',
+        'message': '🐍 Flask Backend - RoGrow Chatbot Service',
+        'endpoints': {
+            '/api/test': 'Test connection',
+            '/api/dataset/query': 'Query dataset (POST)',
+            '/api/student/<nis>/analysis': 'Analyze student (GET)'
+        }
     })
 
-# Fungsi untuk merespons pertanyaan
-def get_answer_for_question(question, data):
-    # Preprocessing pertanyaan
-    question = question.lower().strip()
-    
-    # Pertanyaan sapaan sederhana
-    if question.strip().lower() in ['halo', 'hai', 'hi', 'hello', 'hey', 'oi', 'p', 'hei']:
-        greetings = [
-            f"Halo! Saya adalah AI chatbot yang dapat menjawab pertanyaan tentang dataset edukasi. Ada yang bisa saya bantu?",
-            f"Hai! Saya siap membantu Anda menganalisis data dari {len(data)} siswa. Apa yang ingin Anda ketahui?",
-            f"Halo! Tanyakan pada saya tentang jumlah siswa, rata-rata skor, distribusi umur, korelasi skor dan absensi, tips belajar efektif, cara mendapatkan nilai bagus, atau rekomendasi strategi gamifikasi."
-        ]
-        import random
-        return random.choice(greetings)
-    
-    # Extract keywords dari pertanyaan
-    keywords = set(question.split())
-    education_keywords = {
-        'belajar', 'nilai', 'skor', 'tips', 'cara', 'strategi', 'efektif', 
-        'bagus', 'meningkatkan', 'tingkatkan', 'pelajaran', 'siswa', 'murid',
-        'akademik', 'prestasi', 'performa', 'kinerja', 'pendidikan'
-    }
-    
-    # Periksa jika ada kata kunci pendidikan dalam pertanyaan
-    education_match = keywords.intersection(education_keywords)
-    
-    # ===== BAGIAN 1: PERTANYAAN SPESIFIK DENGAN REGEX =====
-    
-    # Pertanyaan tentang jumlah siswa
-    if re.search(r'berapa (jumlah|banyak|total) siswa', question) or 'jumlah siswa' in question:
-        return f"Terdapat {len(data)} siswa dalam dataset."
-    
-    # Pertanyaan tentang rata-rata skor
-    if re.search(r'(rata-rata|rata rata|average) skor', question) or ('rata-rata' in question and ('skor' in question or 'nilai' in question)):
-        avg_score = data['skor_mata_pelajaran'].mean()
-        return f"Rata-rata skor mata pelajaran adalah {avg_score:.2f}."
-    
-    # Pertanyaan tentang distribusi umur
-    if re.search(r'(distribusi|sebaran) umur', question) or ('umur' in question and ('distribusi' in question or 'sebaran' in question)):
-        umur_counts = data['umur'].value_counts().sort_index()
-        result = "Distribusi umur siswa:\n"
-        for umur, count in umur_counts.items():
-            percentage = count / len(data) * 100
-            result += f"- {umur} tahun: {count} siswa ({percentage:.1f}%)\n"
-        return result
-    
-    # Pertanyaan tentang grade
-    if re.search(r'(distribusi|sebaran) grade', question) or 'grade' in question:
-        grade_data = data['grade_class'].apply(lambda x: x.split('-')[0] if isinstance(x, str) else x)
-        grade_counts = grade_data.value_counts().sort_index()
-        result = "Distribusi grade siswa:\n"
-        for grade, count in grade_counts.items():
-            percentage = count / len(data) * 100
-            result += f"- Grade {grade}: {count} siswa ({percentage:.1f}%)\n"
-        return result
-    
-    # Pertanyaan tentang korelasi
-    if re.search(r'(korelasi|hubungan).*(skor|nilai).*absensi', question) or \
-       re.search(r'(korelasi|hubungan).*absensi.*(skor|nilai)', question) or \
-       ('hubungan' in question and ('absensi' in question or 'kehadiran' in question)):
-        corr = data['skor_mata_pelajaran'].corr(data['absensi'])
-        strength = ""
-        if abs(corr) < 0.3:
-            strength = "lemah"
-        elif abs(corr) < 0.7:
-            strength = "sedang"
-        else:
-            strength = "kuat"
-            
-        direction = "positif" if corr > 0 else "negatif"
+# API ROUTES WITH /api PREFIX
+@app.route('/api/dataset/query', methods=['POST'])
+def query_dataset():
+    try:
+        data = request.json
+        question = data.get('question', '').lower()
         
-        return f"Korelasi antara skor mata pelajaran dan absensi adalah {corr:.3f}, " \
-               f"menunjukkan hubungan {strength} dan {direction}. " \
-               f"{'Semakin tinggi absensi, semakin rendah skor.' if corr < 0 else 'Semakin tinggi absensi, semakin tinggi skor.'}"
-    
-    # Pertanyaan tentang siswa dengan skor tertinggi
-    if re.search(r'(siapa||siswa) dengan (skor|nilai) tertinggi?', question) or \
-       re.search(r'tertinggi.*(skor|nilai)', question) or \
-       'skor tertinggi' in question or 'nilai tertinggi' in question:
-        top_student = data.loc[data['skor_mata_pelajaran'].idxmax()]
-        return f"Siswa dengan skor tertinggi adalah {top_student['nama']} " \
-               f"dengan skor {top_student['skor_mata_pelajaran']:.2f}."
-    
-    # Pertanyaan tentang siswa dengan absensi terendah
-    if re.search(r'siswa (dengan|yang) absensi (terendah|paling sedikit)', question) or \
-       'absensi terendah' in question or 'absensi paling sedikit' in question:
-        min_absence = data.loc[data['absensi'].idxmin()]
-        return f"Siswa dengan absensi terendah adalah {min_absence['nama']} " \
-               f"dengan {min_absence['absensi']} hari absen."
-    
-    # ===== BAGIAN 2: PERTANYAAN DENGAN INTENT UMUM =====
-    
-    # Tips belajar efektif
-    if ('belajar' in question and 'efektif' in question) or \
-       ('cara' in question and 'belajar' in question) or \
-       ('tips' in question and 'belajar' in question):
-        # Analisis data untuk rekomendasi
-        avg_score = data['skor_mata_pelajaran'].mean()
-        top_students = data.nlargest(10, 'skor_mata_pelajaran')
-        avg_top_absence = top_students['absensi'].mean()
+        processed_data = preprocess_data()
+        response = get_answer_for_question(question, processed_data)
         
-        tips = ["Berdasarkan analisis data siswa, berikut tips belajar efektif:\n"]
-        tips.append("1. Kehadiran yang konsisten dan rendah tingkat absensi berkorelasi dengan nilai lebih baik")
-        tips.append(f"2. Siswa dengan nilai tertinggi rata-rata hanya absen {avg_top_absence:.1f} hari")
-        tips.append("3. Buat jadwal belajar tetap dengan waktu istirahat yang cukup")
-        tips.append("4. Gunakan metode pembelajaran aktif seperti praktek soal dan pengajaran ke teman")
-        tips.append("5. Tetapkan target pencapaian harian yang realistis")
-        tips.append("6. Bergabung dengan kelompok belajar siswa berprestasi")
-        
-        return "\n\n".join(tips)
-    
-    # Tips mendapatkan nilai bagus
-    if ('nilai' in question and 'bagus' in question) or \
-       ('tips' in question and 'nilai' in question) or \
-       ('cara' in question and 'nilai' in question) or \
-       ('meningkatkan' in question and ('nilai' in question or 'skor' in question)):
-        avg_score = data['skor_mata_pelajaran'].mean()
-        top_grades = data.groupby('grade_class')['skor_mata_pelajaran'].mean().sort_values(ascending=False)
-        top_grade = top_grades.index[0] if not top_grades.empty else "A-1"
-        
-        tips = [f"Berdasarkan analisis dataset dengan rata-rata nilai {avg_score:.2f}, berikut tips mendapatkan nilai bagus:\n"]
-        tips.append("1. Datang ke setiap pertemuan kelas, siswa dengan absensi rendah umumnya mendapat nilai lebih tinggi")
-        tips.append("2. Terapkan teknik belajar aktif seperti membuat rangkuman dan mengajarkan materi ke orang lain")
-        tips.append(f"3. Siswa di kelas {top_grade} memiliki rata-rata nilai tertinggi - pelajari pola belajar mereka")
-        tips.append("4. Buat jadwal belajar rutin dengan waktu khusus untuk latihan soal")
-        tips.append("5. Minta feedback dari guru untuk area yang membutuhkan peningkatan")
-        tips.append("6. Gunakan teknik gamifikasi untuk memotivasi diri sendiri")
-        tips.append("7. Bergabung dengan study group dan diskusikan materi dengan teman")
-        
-        return "\n\n".join(tips)
-    
-    # Pertanyaan tentang rekomendasi gamifikasi
-    if re.search(r'(rekomendasi|saran|strategi) gamifikasi', question) or \
-       'gamifikasi' in question or \
-       ('strategi' in question and 'motivasi' in question):
-        # Rekomendasi berdasarkan analisis data
-        avg_score = data['skor_mata_pelajaran'].mean()
-        avg_absence = data['absensi'].mean()
-        corr = data['skor_mata_pelajaran'].corr(data['absensi'])
-        
-        recommendations = ["Berdasarkan analisis dataset, berikut rekomendasi strategi gamifikasi:\n"]
-        
-        # Rekomendasi berdasarkan skor
-        if avg_score < 70:
-            recommendations.append("1. Implementasikan sistem poin progresif dan level untuk meningkatkan motivasi belajar, karena skor rata-rata masih di bawah 70.")
-        else:
-            recommendations.append("1. Implementasikan tantangan berbasis kompetensi untuk mempertahankan skor yang sudah baik (rata-rata > 70).")
-        
-        # Rekomendasi berdasarkan absensi
-        if avg_absence > 3:
-            recommendations.append("2. Tambahkan fitur 'streak kehadiran' dengan rewards eksponensial untuk siswa yang hadir terus-menerus, karena tingkat absensi cukup tinggi.")
-        else:
-            recommendations.append("2. Berikan badge kehadiran premium untuk mempertahankan tingkat kehadiran yang sudah baik.")
-        
-        # Rekomendasi berdasarkan korelasi
-        if corr < -0.3:
-            recommendations.append("3. Fokuskan pada strategi yang mendorong kehadiran, karena data menunjukkan korelasi negatif yang signifikan antara absensi dan skor.")
-        
-        # Rekomendasi umum
-        recommendations.append("4. Implementasikan leaderboard mingguan dengan rotasi kategori (kehadiran, peningkatan skor, penyelesaian tugas) untuk mendorong kompetisi sehat.")
-        recommendations.append("5. Sistem quest harian dan mingguan yang disesuaikan dengan kelompok umur dominan.")
-        recommendations.append("6. Dashboard visual untuk orang tua dengan notifikasi pencapaian dan kemajuan siswa.")
-        
-        return "\n\n".join(recommendations)
-    
-    # Pertanyaan tentang prediksi
-    if re.search(r'(prediksi|perkiraan).*(skor|nilai).*(jika|dengan) absensi', question) or \
-       re.search(r'.*skor.*absensi (\d+)', question):
-        # Ekstrak nilai absensi dari pertanyaan
-        match = re.search(r'absensi (\d+)', question)
-        if match:
-            try:
-                absence_val = int(match.group(1))
-                if 'regresi' in analysis_results:
-                    intercept = analysis_results['regresi']['intercept']
-                    coef = analysis_results['regresi']['coef_absensi']
-                    predicted_score = intercept + coef * absence_val
-                    return f"Berdasarkan model regresi, dengan absensi {absence_val} hari, skor yang diprediksi adalah {predicted_score:.2f}."
-                else:
-                    # Jika model regresi tidak tersedia, gunakan pendekatan rata-rata
-                    similar_students = data[data['absensi'] == absence_val]
-                    if len(similar_students) > 0:
-                        avg_similar = similar_students['skor_mata_pelajaran'].mean()
-                        return f"Berdasarkan data siswa dengan absensi {absence_val} hari, skor rata-rata adalah {avg_similar:.2f}."
-                    else:
-                        return f"Tidak ada data yang cukup untuk memprediksi skor dengan absensi {absence_val} hari."
-            except:
-                pass
-    
-    # Pertanyaan tentang cluster
-    if re.search(r'(kelompok|cluster|grup) siswa', question):
-        if 'clusters' in analysis_results:
-            clusters = analysis_results['clusters']
-            response = "Berdasarkan analisis clustering, siswa dapat dikelompokkan menjadi:\n\n"
-            
-            for cluster, stats in clusters.items():
-                response += f"- {cluster.replace('_', ' ').title()}: {stats['jumlah_siswa']} siswa\n"
-                response += f"  Rata-rata skor: {stats['rata_rata_skor']:.2f}\n"
-                response += f"  Rata-rata absensi: {stats['rata_rata_absensi']:.2f} hari\n\n"
-            
-            return response
-        else:
-            return "Maaf, analisis clustering belum tersedia untuk dataset ini."
-    
-    # ===== BAGIAN 3: INTENT RECOGNITION DENGAN KEYWORD =====
-    
-    # Jika ada kata kunci pendidikan tapi tidak cocok dengan pola spesifik
-    if education_match:
-        # Pertanyaan umum tentang strategi belajar
-        if 'strategi' in keywords or 'tips' in keywords or 'cara' in keywords:
-            return """Berdasarkan analisis dataset edukasi, berikut beberapa strategi belajar yang efektif:
+        return jsonify({'answer': response})
+    except Exception as e:
+        print(f"Error in query_dataset: {e}")
+        return jsonify({'answer': 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. 😅'}), 500
 
-1. Konsistensi kehadiran sangat penting - data menunjukkan korelasi antara kehadiran dan performa akademik
-2. Belajar dalam sesi pendek dan terfokus lebih efektif daripada maraton belajar
-3. Gunakan teknik gamifikasi seperti sistem reward untuk memotivasi diri
-4. Bergabung dengan study group meningkatkan pemahaman dan retensi materi
-5. Jadwalkan waktu untuk review materi secara berkala
-6. Praktikkan active recall dengan menguji diri sendiri secara teratur
-7. Gunakan teknik visualisasi dan mind mapping untuk materi kompleks"""
+@app.route('/api/student/<nis>/analysis', methods=['GET'])
+def analyze_student(nis):
+    try:
+        data = preprocess_data()
+        student = data[data['NIS'] == str(nis)]
+        if student.empty:
+            return jsonify({'error': 'Siswa tidak ditemukan'}), 404
         
-        # Pertanyaan umum tentang performa akademik
-        if 'performa' in keywords or 'prestasi' in keywords or 'akademik' in keywords:
-            avg_score = data['skor_mata_pelajaran'].mean()
-            max_score = data['skor_mata_pelajaran'].max()
-            
-            return f"""Berdasarkan dataset {len(data)} siswa:
+        subjects = ['MTK', 'BINDO', 'BING', 'IPA', 'IPS', 'PKN', 'Seni']
+        analysis = {
+            'nama': student['Nama Lengkap'].iloc[0],
+            'nis': nis,
+            'rata_rata_kuis': {subject: float(student[f"{subject}_Quiz"].iloc[0]) for subject in subjects},
+            'rata_rata_tugas': {subject: float(student[f"{subject}_Tugas"].iloc[0]) for subject in subjects}
+        }
+        
+        # Hitung mata pelajaran terlemah dan terkuat
+        avg_scores = []
+        for subject in subjects:
+            quiz_score = student[f"{subject}_Quiz"].iloc[0]
+            tugas_score = student[f"{subject}_Tugas"].iloc[0]
+            avg_score = (quiz_score + tugas_score) / 2
+            avg_scores.append((subject, avg_score))
+        
+        weakest = min(avg_scores, key=lambda x: x[1])[0]
+        strongest = max(avg_scores, key=lambda x: x[1])[0]
+        
+        analysis['mata_pelajaran_terlemah'] = weakest
+        analysis['mata_pelajaran_terkuat'] = strongest
+        analysis['rekomendasi'] = f"Halo {analysis['nama']}! 🌱 Kamu hebat di {strongest}! Untuk {weakest}, coba latihan lebih sering ya. Ingat, belajar sedikit tapi rutin lebih baik!"
+        
+        return jsonify(analysis)
+    except Exception as e:
+        print(f"Error in analyze_student: {e}")
+        return jsonify({'error': 'Terjadi kesalahan saat menganalisis data siswa'}), 500
 
-1. Rata-rata skor siswa adalah {avg_score:.2f} dari total nilai maksimal 100
-2. Skor tertinggi yang dicapai adalah {max_score:.2f}
-3. Faktor yang paling mempengaruhi performa adalah tingkat kehadiran
-4. Siswa dengan kehadiran konsisten umumnya memiliki skor 15-20% lebih tinggi
-5. Strategi pembelajaran aktif dan partisipatif terbukti meningkatkan performa akademik
-6. Penerapan elemen gamifikasi dapat meningkatkan motivasi dan performa hingga 25%"""
-    
-    # Pertanyaan umum tentang dataset
-    if re.search(r'(ceritakan|jelaskan|informasi|gambaran).*(tentang|mengenai) dataset', question) or \
-       'dataset' in question:
-        return f"Dataset ini berisi informasi tentang {len(data)} siswa dengan data skor mata pelajaran, tingkat absensi, umur, dan grade kelas. " \
-               f"Rata-rata skor adalah {data['skor_mata_pelajaran'].mean():.2f} dengan absensi rata-rata {data['absensi'].mean():.2f} hari. " \
-               f"Rentang umur siswa adalah {data['umur'].min()}-{data['umur'].max()} tahun."
-    
-    # Respons default jika tidak ada pertanyaan yang cocok
-    return "Maaf, saya tidak dapat memahami pertanyaan Anda. Anda dapat bertanya tentang jumlah siswa, rata-rata skor, distribusi umur, korelasi skor dan absensi, tips belajar efektif, cara mendapatkan nilai bagus, atau rekomendasi strategi gamifikasi."
-
-# Route untuk API testing
 @app.route('/api/test', methods=['GET'])
 def test_api():
     return jsonify({
         'status': 'success',
-        'message': 'Backend Python berhasil terhubung!'
+        'message': 'Backend Python berhasil terhubung!',
+        'timestamp': pd.Timestamp.now().isoformat(),
+        'dataset_info': {
+            'jumlah_siswa': len(dataset),
+            'columns': list(dataset.columns)
+        }
     })
 
+def get_answer_for_question(question, data):
+    question = question.lower().strip()
+    
+    # Pertanyaan sapaan
+    if question in ['halo', 'hai', 'hi', 'hello', 'hey', 'oi', 'p', 'hei']:
+        greetings = [
+            f"Halo! Saya RoGrow, AI chatbot untuk Mindagrow. Saya bisa membantu dengan data {len(data)} siswa atau tips belajar. Apa yang ingin Anda ketahui?",
+            f"Hai! Saya siap menganalisis data dari {len(data)} siswa. Tanyakan apa saja!",
+            f"Halo! Coba tanyakan jumlah siswa, rata-rata skor mata pelajaran, atau tips belajar efektif."
+        ]
+        return random.choice(greetings)
+    
+    # Pertanyaan tentang jumlah siswa (lebih fleksibel)
+    if (
+        re.search(r'berapa (jumlah|banyak|total) siswa', question)
+        or 'jumlah siswa' in question
+        or 'total siswa' in question
+        or 'banyak siswa' in question
+    ):
+        return f"Terdapat {len(data)} siswa dalam dataset kami."
+    
+    # Pertanyaan tentang mata pelajaran
+    if 'mata pelajaran' in question or 'mapel' in question:
+        subjects = ['MTK (Matematika)', 'BINDO (Bahasa Indonesia)', 'BING (Bahasa Inggris)', 
+                   'IPA (Ilmu Pengetahuan Alam)', 'IPS (Ilmu Pengetahuan Sosial)', 
+                   'PKN (Pendidikan Kewarganegaraan)', 'Seni']
+        return f"Mata pelajaran yang tersedia: {', '.join(subjects)}"
+    
+    # Pertanyaan tentang rata-rata skor - ENHANCED HANDLING
+    if 'rata-rata' in question or 'rata rata' in question:
+        subjects_mapping = {
+            'mtk': 'MTK', 'matematika': 'MTK',
+            'bindo': 'BINDO', 'bahasa indonesia': 'BINDO',
+            'bing': 'BING', 'bahasa inggris': 'BING',
+            'ipa': 'IPA', 'ilmu pengetahuan alam': 'IPA',
+            'ips': 'IPS', 'ilmu pengetahuan sosial': 'IPS',
+            'pkn': 'PKN', 'pendidikan kewarganegaraan': 'PKN',
+            'seni': 'Seni'
+        }
+        
+        # Cek apakah ada mata pelajaran dan jenis nilai spesifik dalam query
+        detected_subject = None
+        detected_type = None
+        
+        # Deteksi mata pelajaran
+        for key, subject in subjects_mapping.items():
+            if key in question:
+                detected_subject = subject
+                break
+        
+        # Deteksi jenis nilai
+        if 'quiz' in question or 'kuis' in question:
+            detected_type = 'Quiz'
+        elif 'tugas' in question:
+            detected_type = 'Tugas'
+        
+        # Jika ada mata pelajaran dan jenis nilai spesifik (dari flow frontend)
+        if detected_subject and detected_type:
+            column_name = f"{detected_subject}_{detected_type}"
+            if column_name in data.columns:
+                avg_score = data[column_name].mean()
+                subject_name_mapping = {
+                    'MTK': 'Matematika',
+                    'BINDO': 'Bahasa Indonesia', 
+                    'BING': 'Bahasa Inggris',
+                    'IPA': 'IPA',
+                    'IPS': 'IPS', 
+                    'PKN': 'PKN',
+                    'Seni': 'Seni'
+                }
+                type_name = 'Kuis' if detected_type == 'Quiz' else 'Tugas'
+                subject_full_name = subject_name_mapping.get(detected_subject, detected_subject)
+                
+                return f"📊 **Rata-rata {type_name} {subject_full_name}** (dari {len(data)} siswa): **{avg_score:.1f}**\n\n✨ Ini adalah rata-rata dari seluruh siswa di kelas. Nilai ini bisa menjadi benchmark untuk melihat performa kelas secara keseluruhan!"
+        
+        # Jika hanya ada mata pelajaran tanpa jenis nilai spesifik
+        elif detected_subject:
+            quiz_col = f"{detected_subject}_Quiz"
+            tugas_col = f"{detected_subject}_Tugas"
+            if quiz_col in data.columns and tugas_col in data.columns:
+                avg_quiz = data[quiz_col].mean()
+                avg_tugas = data[tugas_col].mean()
+                subject_name_mapping = {
+                    'MTK': 'Matematika',
+                    'BINDO': 'Bahasa Indonesia',
+                    'BING': 'Bahasa Inggris', 
+                    'IPA': 'IPA',
+                    'IPS': 'IPS',
+                    'PKN': 'PKN',
+                    'Seni': 'Seni'
+                }
+                subject_full_name = subject_name_mapping.get(detected_subject, detected_subject)
+                return f"📊 **Rata-rata {subject_full_name}** (dari {len(data)} siswa):\n\n🎯 **Kuis**: {avg_quiz:.1f}\n📝 **Tugas**: {avg_tugas:.1f}\n\n💡 **Insight**: {'Kuis' if avg_quiz > avg_tugas else 'Tugas'} memiliki rata-rata lebih tinggi!"
+        
+        # Jika tidak ada mata pelajaran spesifik, tampilkan semua atau minta klarifikasi
+        if 'semua' in question or 'keseluruhan' in question:
+            result = "📊 **Rata-rata Semua Mata Pelajaran** (dari " + str(len(data)) + " siswa):\n\n"
+            for subject in ['MTK', 'BINDO', 'BING', 'IPA', 'IPS', 'PKN', 'Seni']:
+                quiz_col = f"{subject}_Quiz"
+                tugas_col = f"{subject}_Tugas"
+                if quiz_col in data.columns and tugas_col in data.columns:
+                    avg_quiz = data[quiz_col].mean()
+                    avg_tugas = data[tugas_col].mean()
+                    subject_name_mapping = {
+                        'MTK': 'Matematika',
+                        'BINDO': 'Bahasa Indonesia',
+                        'BING': 'Bahasa Inggris',
+                        'IPA': 'IPA', 
+                        'IPS': 'IPS',
+                        'PKN': 'PKN',
+                        'Seni': 'Seni'
+                    }
+                    subject_name = subject_name_mapping.get(subject, subject)
+                    result += f"📚 **{subject_name}**: Kuis {avg_quiz:.1f} | Tugas {avg_tugas:.1f}\n"
+            result += "\n🎯 **Tips**: Bandingkan nilai personal Anda dengan rata-rata ini untuk mengetahui area yang perlu ditingkatkan!"
+            return result
+        
+        # Default response jika tidak ada spesifikasi
+        return "📊 Ingin melihat rata-rata nilai mata pelajaran apa?\n\nPilihan:\n• Matematika (MTK)\n• Bahasa Indonesia (BINDO)\n• Bahasa Inggris (BING)\n• IPA\n• IPS\n• PKN\n• Seni\n\nContoh: 'rata-rata MTK Quiz' atau 'rata-rata IPA Tugas'"
+    
+    # Tips belajar
+    if 'tips' in question or ('belajar' in question and any(word in question for word in ['efektif', 'baik', 'bagus', 'sukses'])):
+        tips_categories = {
+            'umum': [
+                "🌟 Belajar sedikit setiap hari lebih baik daripada belajar banyak sekaligus!",
+                "👥 Ajak teman untuk belajar bersama, itu bisa membuatmu lebih semangat!",
+                "📝 Latih soal-soal untuk mata pelajaran yang sulit, latihan membuat sempurna!",
+                "🎯 Buat target kecil setiap hari, misalnya 'hari ini saya akan belajar 15 menit'",
+                "🎵 Coba gunakan lagu atau gambar untuk mengingat pelajaran yang sulit!"
+            ],
+            'matematika': [
+                "🔢 Untuk matematika: Latih soal dari yang mudah ke yang sulit",
+                "✏️ Tulis rumus-rumus penting di kertas kecil untuk dibaca ulang",
+                "🧮 Gunakan benda di sekitar untuk memahami konsep hitungan"
+            ]
+        }
+        
+        # Cek apakah ada mata pelajaran spesifik
+        if 'matematika' in question or 'mtk' in question:
+            return "\n".join(tips_categories['matematika'])
+        
+        # Tips umum
+        return "\n".join(random.sample(tips_categories['umum'], 3))
+    
+    # Pertanyaan tentang skor tertinggi/terendah
+    if 'tertinggi' in question or 'terbaik' in question:
+        subjects = ['MTK', 'BINDO', 'BING', 'IPA', 'IPS', 'PKN', 'Seni']
+        highest_scores = {}
+        for subject in subjects:
+            quiz_col = f"{subject}_Quiz"
+            tugas_col = f"{subject}_Tugas"
+            if quiz_col in data.columns and tugas_col in data.columns:
+                avg_score = (data[quiz_col].mean() + data[tugas_col].mean()) / 2
+                highest_scores[subject] = avg_score
+        
+        if highest_scores:
+            best_subject = max(highest_scores, key=highest_scores.get)
+            subject_name_mapping = {
+                'MTK': 'Matematika',
+                'BINDO': 'Bahasa Indonesia', 
+                'BING': 'Bahasa Inggris',
+                'IPA': 'IPA',
+                'IPS': 'IPS',
+                'PKN': 'PKN', 
+                'Seni': 'Seni'
+            }
+            best_subject_name = subject_name_mapping.get(best_subject, best_subject)
+            return f"🏆 **Mata pelajaran dengan rata-rata tertinggi**: {best_subject_name} ({highest_scores[best_subject]:.1f})\n\n✨ Kelas ini paling unggul di {best_subject_name}!"
+    
+    if 'terendah' in question or 'tersulit' in question:
+        subjects = ['MTK', 'BINDO', 'BING', 'IPA', 'IPS', 'PKN', 'Seni']
+        lowest_scores = {}
+        for subject in subjects:
+            quiz_col = f"{subject}_Quiz"
+            tugas_col = f"{subject}_Tugas"
+            if quiz_col in data.columns and tugas_col in data.columns:
+                avg_score = (data[quiz_col].mean() + data[tugas_col].mean()) / 2
+                lowest_scores[subject] = avg_score
+        
+        if lowest_scores:
+            worst_subject = min(lowest_scores, key=lowest_scores.get)
+            subject_name_mapping = {
+                'MTK': 'Matematika',
+                'BINDO': 'Bahasa Indonesia',
+                'BING': 'Bahasa Inggris', 
+                'IPA': 'IPA',
+                'IPS': 'IPS',
+                'PKN': 'PKN',
+                'Seni': 'Seni'
+            }
+            worst_subject_name = subject_name_mapping.get(worst_subject, worst_subject)
+            return f"📉 **Mata pelajaran yang perlu lebih banyak latihan**: {worst_subject_name} ({lowest_scores[worst_subject]:.1f})\n\n💪 Kelas perlu fokus lebih di {worst_subject_name}. Yuk semangat belajar!"
+    
+    return "Maaf, saya belum mengerti pertanyaan itu. Coba tanyakan tentang:\n• Jumlah siswa\n• Rata-rata nilai mata pelajaran\n• Tips belajar\n• Mata pelajaran tertinggi/terendah 😊"
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint tidak ditemukan'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Terjadi kesalahan server'}), 500
+
 if __name__ == '__main__':
-    print("Memulai server Flask...")
-    app.run(debug=True, port=5000)
+    print("Memulai server Flask di port 5001...")
+    print("🐍 Flask Backend - Chatbot Service")
+    print("🔗 URL: http://localhost:5001")
+    print("🔗 API Test: http://localhost:5001/api/test")
+    app.run(debug=True, port=5001, host='0.0.0.0')
