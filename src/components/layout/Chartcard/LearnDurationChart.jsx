@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
     LineChart,
     Line,
@@ -11,79 +11,140 @@ import {
     ReferenceLine,
 } from "recharts"
 import { FiDownload, FiCalendar, FiClock, FiTrendingUp, FiInfo } from "react-icons/fi"
-
-// Data dummy untuk total durasi belajar per bulan (dalam menit)
-const monthlyLearningData = [
-    { month: "Jan", duration: 720, average: 24 },
-    { month: "Feb", duration: 840, average: 30 },
-    { month: "Mar", duration: 960, average: 31 },
-    { month: "Apr", duration: 1080, average: 36 },
-    { month: "Mei", duration: 1200, average: 39 },
-    { month: "Jun", duration: 900, average: 30 },
-    { month: "Jul", duration: 780, average: 25 },
-    { month: "Agu", duration: 1020, average: 33 },
-    { month: "Sep", duration: 1320, average: 44 },
-    { month: "Okt", duration: 1500, average: 48 },
-    { month: "Nov", duration: 1680, average: 56 },
-    { month: "Des", duration: 1200, average: 39 },
-]
+import axios from 'axios'; // Pastikan Anda sudah menginstal axios (npm install axios)
 
 // Fungsi untuk memformat durasi dari menit ke jam dan menit
 const formatDuration = (minutes) => {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    return `${hours} jam ${mins} menit`
-}
+    if (minutes === null || isNaN(minutes)) return "0 jam 0 menit";
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60); // Round minutes to nearest integer
+    return `${hours} jam ${mins} menit`;
+};
 
 // Custom Tooltip untuk Recharts
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+        const durationData = payload.find(p => p.dataKey === 'duration');
+        const averageData = payload.find(p => p.dataKey === 'average');
+
         return (
             <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-lg text-xs">
                 <p className="font-semibold text-slate-800 mb-1">{label}</p>
-                <div className="flex items-center gap-1.5 text-blue-600">
-                    <FiClock className="size-3.5" />
-                    <span>Total: {formatDuration(payload[0].value)}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-emerald-600 mt-1">
-                    <FiTrendingUp className="size-3.5" />
-                    <span>Rata-rata: {payload[1].value} menit/hari</span>
-                </div>
+                {durationData && (
+                    <div className="flex items-center gap-1.5 text-blue-600">
+                        <FiClock className="size-3.5" />
+                        <span>Total: {formatDuration(durationData.value)}</span>
+                    </div>
+                )}
+                {averageData && (
+                    <div className="flex items-center gap-1.5 text-emerald-600 mt-1">
+                        <FiTrendingUp className="size-3.5" />
+                        <span>Rata-rata: {averageData.value} menit/hari</span>
+                    </div>
+                )}
             </div>
-        )
+        );
     }
-    return null
-}
+    return null;
+};
 
 export default function LearnDurationChart() {
-    const [year, setYear] = useState("2024")
+    const [year, setYear] = useState(new Date().getFullYear().toString());
+    const [monthlyLearningData, setMonthlyLearningData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Fetch data from backend
+    useEffect(() => {
+        const fetchLearningData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const token = localStorage.getItem('token'); // Asumsi token disimpan di localStorage
+                if (!token) {
+                    setError("Authentication token not found. Please log in.");
+                    setLoading(false);
+                    return;
+                }
+
+                const response = await axios.get(`http://localhost:5000/api/user/learning-duration?year=${year}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+                setMonthlyLearningData(response.data.data);
+            } catch (err) {
+                console.error("Error fetching learning data:", err);
+                setError("Failed to load learning data. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchLearningData();
+    }, [year]); // Re-fetch when year changes
+
+    // Implement heartbeat to update user activity
+    useEffect(() => {
+        const sendHeartbeat = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                if (token) {
+                    await axios.post('http://localhost:5000/api/user/activity', {}, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn("Failed to send heartbeat:", err);
+                // Handle token expiration or other errors if necessary
+            }
+        };
+
+        // Send heartbeat every 1 minute (60000 ms)
+        const intervalId = setInterval(sendHeartbeat, 60000);
+
+        // Clear interval on component unmount
+        return () => clearInterval(intervalId);
+    }, []); // Run once on component mount
 
     // Menghitung total durasi belajar dalam tahun ini
-    const totalYearlyDuration = monthlyLearningData.reduce((total, item) => total + item.duration, 0)
+    const totalYearlyDuration = monthlyLearningData.reduce((total, item) => total + item.duration, 0);
 
     // Menghitung rata-rata durasi belajar per bulan
-    const averageMonthlyDuration = Math.round(totalYearlyDuration / monthlyLearningData.length)
+    const averageMonthlyDuration = monthlyLearningData.length > 0
+        ? Math.round(totalYearlyDuration / monthlyLearningData.filter(item => item.duration > 0).length) // Only count months with activity
+        : 0;
 
     // Menghitung bulan dengan durasi tertinggi
     const maxDurationMonth = monthlyLearningData.reduce(
         (max, item) => (item.duration > max.duration ? item : max),
-        monthlyLearningData[0],
-    )
+        monthlyLearningData[0] || { month: "N/A", duration: 0, average: 0 },
+    );
 
     // Fungsi untuk mengunduh data sebagai CSV
     const downloadCSV = () => {
         const csvContent =
             "Bulan,Durasi (menit),Rata-rata Harian (menit)\n" +
-            monthlyLearningData.map((item) => `${item.month},${item.duration},${item.average}`).join("\n")
+            monthlyLearningData.map((item) => `${item.month},${item.duration},${item.average}`).join("\n");
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.setAttribute("href", url)
-        link.setAttribute("download", `durasi-belajar-${year}.csv`)
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `durasi-belajar-${year}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    if (loading) {
+        return <div className="text-center p-4">Loading learning data...</div>;
+    }
+
+    if (error) {
+        return <div className="text-center p-4 text-red-500">{error}</div>;
     }
 
     return (
@@ -102,15 +163,15 @@ export default function LearnDurationChart() {
                             onChange={(e) => setYear(e.target.value)}
                             className="bg-white border border-slate-200 text-slate-700 rounded-md px-3 py-1.5 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                            <option value="2024">2024</option>
-                            <option value="2023">2023</option>
-                            <option value="2022">2022</option>
-                            <option value="2021">2021</option>
+                            {/* Generate options for current year and a few past years */}
+                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
                         </select>
                         <button
                             onClick={downloadCSV}
-                            className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 
-                            hover:text-slate-900 shadow-sm rounded-md px-3 py-1.5 text-sm font-medium 
+                            className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50
+                            hover:text-slate-900 shadow-sm rounded-md px-3 py-1.5 text-sm font-medium
                             flex items-center gap-1.5 transition-colors"
                         >
                             <FiDownload className="size-4" />Unduh Data
@@ -126,7 +187,7 @@ export default function LearnDurationChart() {
                     <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                         <div className="flex items-center gap-2">
                             <div className="bg-blue-100 p-2 rounded-md">
-                                <FiClock className="text-blue-600 size-4" />
+                                <FiClock className="size-4 text-blue-600" />
                             </div>
                             <div>
                                 <p className="text-xs text-blue-700 font-medium">Total Durasi Tahun {year}</p>
@@ -138,7 +199,7 @@ export default function LearnDurationChart() {
                     <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
                         <div className="flex items-center gap-2">
                             <div className="bg-emerald-100 p-2 rounded-md">
-                                <FiTrendingUp className="text-emerald-600 size-4" />
+                                <FiTrendingUp className="size-4 text-emerald-600" />
                             </div>
                             <div>
                                 <p className="text-xs text-emerald-700 font-medium">Rata-rata Per Bulan</p>
@@ -212,7 +273,7 @@ export default function LearnDurationChart() {
                                             <span className="text-xs font-medium">
                                                 {value === "duration" ? "Total Durasi (menit)" : "Rata-rata Harian (menit)"}
                                             </span>
-                                        )
+                                        );
                                     }}
                                 />
                                 <ReferenceLine
@@ -263,19 +324,19 @@ export default function LearnDurationChart() {
                     <ul className="text-xs text-slate-600 space-y-1.5">
                         <li className="flex items-start gap-1.5">
                             <div className="size-2.5 rounded-full bg-blue-500 mt-1"></div>
-                            <span>Total durasi belajar dihitung dari waktu login hingga logout atau close materi</span>
+                            <span>Total durasi belajar dihitung dari waktu login hingga aktivitas terakhir yang tercatat.</span>
                         </li>
                         <li className="flex items-start gap-1.5">
                             <div className="size-2.5 rounded-full bg-emerald-500 mt-1"></div>
-                            <span>Rata-rata harian dihitung berdasarkan total durasi dibagi jumlah hari aktif dalam bulan</span>
+                            <span>Rata-rata harian dihitung berdasarkan total durasi dibagi jumlah hari aktif dalam bulan.</span>
                         </li>
                         <li className="flex items-start gap-1.5">
                             <div className="size-2.5 rounded-full bg-slate-400 mt-1"></div>
-                            <span>Garis putus-putus menunjukkan rata-rata durasi belajar sepanjang tahun</span>
+                            <span>Garis putus-putus menunjukkan rata-rata durasi belajar sepanjang tahun.</span>
                         </li>
                     </ul>
                 </div>
             </div>
         </div>
-    )
+    );
 }

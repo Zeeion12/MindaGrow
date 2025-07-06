@@ -19,21 +19,21 @@ const app = express();
 
 // CORS and middleware
 app.use(cors({
-    origin: 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+  origin: 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
 // PostgreSQL connection
 const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: 'mindagrow',
-    password: process.env.DB_PASSWORD || '',
-    port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: 'mindagrow',
+  password: process.env.DB_PASSWORD || '',
+  port: process.env.DB_PORT || 5432,
 });
 
 // Static file serving
@@ -47,9 +47,9 @@ app.use('/api/courses', coursesRouter);
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (!token) return res.status(401).json({ message: 'Akses ditolak' });
-  
+
   jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, user) => {
     if (err) return res.status(403).json({ message: 'Token tidak valid' });
     req.user = user;
@@ -80,16 +80,16 @@ const rateLimitLogin = (req, res, next) => {
   }
 
   const attempts = loginAttempts.get(ip);
-  
+
   if (now > attempts.resetTime) {
     loginAttempts.set(ip, { count: 1, resetTime: now + windowMs });
     return next();
   }
 
   if (attempts.count >= maxAttempts) {
-    return res.status(429).json({ 
-      success: false, 
-      message: 'Too many login attempts. Please try again later.' 
+    return res.status(429).json({
+      success: false,
+      message: 'Too many login attempts. Please try again later.'
     });
   }
 
@@ -101,8 +101,8 @@ const rateLimitLogin = (req, res, next) => {
 // Helper function untuk mendapatkan detail user berdasarkan role
 const getUserDetails = async (userId, role) => {
   let query, tableName;
-  
-  switch(role) {
+
+  switch (role) {
     case 'guru':
       tableName = 'guru';
       query = `
@@ -299,7 +299,7 @@ const initDB = async () => {
         CONSTRAINT unique_certificate UNIQUE (user_id, course_id)
       )
     `);
-    
+
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
       CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
@@ -388,7 +388,7 @@ const initDB = async () => {
       CREATE INDEX IF NOT EXISTS idx_login_attempts_email_created ON login_attempts(email, created_at);
       CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active ON user_sessions(user_id, is_active);
     `);
-    
+
     // Cek apakah ada admin user
     const adminExists = await pool.query(
       'SELECT * FROM users WHERE email = $1',
@@ -467,25 +467,25 @@ pool.query('SELECT NOW()', (err, res) => {
 // Admin Login - Endpoint khusus untuk admin
 app.post('/api/admin/login', async (req, res) => {
   const { email, password, remember } = req.body;
-  
+
   try {
     console.log('Admin login attempt with email:', email);
-    
+
     // Cari admin di tabel users
     const adminResult = await pool.query(
       'SELECT id, email, password, role, is_2fa_enabled FROM users WHERE email = $1 AND role = $2',
       [email, 'admin']
     );
-    
+
     if (adminResult.rows.length === 0) {
       return res.status(400).json({ message: 'Email atau password tidak valid' });
     }
-    
+
     const admin = adminResult.rows[0];
-    
+
     // Validate password
     const validPassword = await bcrypt.compare(password, admin.password);
-    
+
     if (!validPassword) {
       return res.status(400).json({ message: 'Email atau password tidak valid' });
     }
@@ -512,10 +512,10 @@ app.post('/api/admin/login', async (req, res) => {
         canSkip: false // Admin tidak boleh skip
       });
     }
-    
+
     // Update last login
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [admin.id]);
-    
+
   } catch (error) {
     console.error('Error in admin login:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
@@ -699,7 +699,7 @@ app.get('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res
     const user = userResult.rows[0];
     const userDetails = await getUserDetails(user.id, user.role);
 
-    res.json({ 
+    res.json({
       user: {
         ...user,
         details: userDetails
@@ -715,10 +715,10 @@ app.get('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res
 // Admin: Delete user
 app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const { id } = req.params;
 
     // Get user role first
@@ -734,7 +734,7 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
     const userRole = userResult.rows[0].role;
 
     // Delete from role-specific table first
-    switch(userRole) {
+    switch (userRole) {
       case 'guru':
         await client.query('DELETE FROM guru WHERE user_id = $1', [id]);
         break;
@@ -804,13 +804,13 @@ app.get('/api/admin/activities', authenticateToken, requireAdmin, async (req, re
 // Check NIK parent (for student registration)
 app.post('/api/check-nik', async (req, res) => {
   const { nik } = req.body;
-  
+
   try {
     console.log('Checking NIK:', nik);
-    
+
     const result = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
     console.log('Query result:', result.rows);
-    
+
     if (result.rows.length > 0) {
       res.json({ exists: true });
     } else {
@@ -826,29 +826,29 @@ app.post('/api/check-nik', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   const { email, password, role, nama_lengkap, no_telepon } = req.body;
   let { nis, nuptk, nik, nik_orangtua } = req.body;
-  
+
   try {
     // Start transaction
     await pool.query('BEGIN');
-    
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    
+
     // Tentukan role yang benar berdasarkan input
     let userRole = role;
     if (nis) userRole = 'siswa';
     if (nuptk) userRole = 'guru';
     if (nik && !nis && !nuptk) userRole = 'orangtua';
-    
+
     // Insert into users table with the correct role
     const userResult = await pool.query(
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id',
       [email, hashedPassword, userRole]
     );
-    
+
     const userId = userResult.rows[0].id;
-    
+
     // Insert into role-specific table
     if (userRole === 'siswa') {
       await pool.query(
@@ -863,26 +863,26 @@ app.post('/api/register', async (req, res) => {
     } else if (userRole === 'orangtua') {
       // Untuk orangtua, periksa dulu apakah NIK terdaftar di tabel siswa
       const nikCheck = await pool.query('SELECT * FROM siswa WHERE nik_orangtua = $1', [nik]);
-      
+
       if (nikCheck.rows.length === 0) {
         await pool.query('ROLLBACK');
         return res.status(400).json({ message: 'NIK tidak terdaftar oleh siswa manapun' });
       }
-      
+
       await pool.query(
         'INSERT INTO orangtua (user_id, nik, nama_lengkap, no_telepon) VALUES ($1, $2, $3, $4)',
         [userId, nik, nama_lengkap, no_telepon]
       );
     }
-    
+
     // Commit transaction
     await pool.query('COMMIT');
-    
+
     res.status(201).json({ message: 'Registrasi berhasil' });
   } catch (error) {
     await pool.query('ROLLBACK');
     console.error('Error registering user:', error);
-    
+
     if (error.code === '23505') { // Unique violation
       res.status(400).json({ message: 'Email atau nomor identitas sudah terdaftar' });
     } else {
@@ -894,7 +894,7 @@ app.post('/api/register', async (req, res) => {
 // Login
 app.post('/api/login', rateLimitLogin, async (req, res) => {
   const { identifier, password, remember } = req.body;
-  
+
   try {
     // Check dulu apakah ini admin login
     if (identifier.includes('@')) {
@@ -903,19 +903,19 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
         'SELECT id, email, password, role, is_2fa_enabled FROM users WHERE email = $1 AND role = $2',
         [identifier, 'admin']
       );
-      
+
       if (adminResult.rows.length > 0) {
         const admin = adminResult.rows[0];
-        
+
         const validPassword = await bcrypt.compare(password, admin.password);
-        
+
         if (!validPassword) {
           await logLoginAttempt(identifier, req.ip, 'login', false, 'Invalid password');
           return res.status(400).json({ message: 'Email atau password tidak valid' });
         }
-        
+
         await logLoginAttempt(identifier, req.ip, 'login', true);
-        
+
         // Check 2FA untuk admin
         if (admin.is_2fa_enabled) {
           return res.json({
@@ -939,16 +939,16 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
         }
       }
     }
-    
+
     let user;
     let roleInfo;
-    
+
     // Check in siswa table
     const siswaResult = await pool.query(
       'SELECT s.*, u.email, u.password, u.role, u.is_2fa_enabled FROM siswa s JOIN users u ON s.user_id = u.id WHERE s.nis = $1',
       [identifier]
     );
-    
+
     if (siswaResult.rows.length > 0) {
       user = siswaResult.rows[0];
       roleInfo = {
@@ -962,7 +962,7 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
         'SELECT g.*, u.email, u.password, u.role, u.is_2fa_enabled FROM guru g JOIN users u ON g.user_id = u.id WHERE g.nuptk = $1',
         [identifier]
       );
-      
+
       if (guruResult.rows.length > 0) {
         user = guruResult.rows[0];
         roleInfo = {
@@ -976,7 +976,7 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
           'SELECT o.*, u.email, u.password, u.role, u.is_2fa_enabled FROM orangtua o JOIN users u ON o.user_id = u.id WHERE o.nik = $1',
           [identifier]
         );
-        
+
         if (orangtuaResult.rows.length > 0) {
           user = orangtuaResult.rows[0];
           roleInfo = {
@@ -987,25 +987,25 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
         }
       }
     }
-    
+
     if (!user) {
       await logLoginAttempt(identifier, req.ip, 'login', false, 'User not found');
       return res.status(400).json({ message: 'NIS/NIK/NUPTK atau password tidak valid' });
     }
-    
+
     // Validate password
     const validPassword = await bcrypt.compare(password, user.password);
-    
+
     if (!validPassword) {
       await logLoginAttempt(user.email, req.ip, 'login', false, 'Invalid password');
       return res.status(400).json({ message: 'NIS/NIK/NUPTK atau password tidak valid' });
     }
-    
+
     // Update last login
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.user_id]);
 
     await logLoginAttempt(user.email, req.ip, 'login', true);
-    
+
     // Check if 2FA is enabled
     if (user.is_2fa_enabled) {
       return res.json({
@@ -1026,7 +1026,7 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
         canSkip: true // Allow skip for non-admin users
       });
     }
-    
+
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ message: 'Terjadi kesalahan server' });
@@ -1041,7 +1041,7 @@ app.post('/api/login', rateLimitLogin, async (req, res) => {
 app.post('/api/auth/setup-2fa', async (req, res) => {
   try {
     const tempToken = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (!tempToken) {
       return res.status(401).json({
         success: false,
@@ -1065,10 +1065,10 @@ app.post('/api/auth/setup-2fa', async (req, res) => {
     }
 
     const userId = tempTokenResult.rows[0].user_id;
-    
+
     // Get user email
     const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-    
+
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -1112,7 +1112,7 @@ app.post('/api/auth/setup-2fa', async (req, res) => {
 app.post('/api/auth/verify-setup', async (req, res) => {
   try {
     const { token } = req.body;
-    
+
     if (!token || !/^\d{6}$/.test(token)) {
       return res.status(400).json({
         success: false,
@@ -1172,10 +1172,10 @@ app.post('/api/auth/verify-setup', async (req, res) => {
     // Generate JWT token
     const expiresIn = '1d';
     const jwtToken = jwt.sign(
-      { 
-        id: user.id, 
+      {
+        id: user.id,
         role: user.role,
-        email: user.email 
+        email: user.email
       },
       process.env.JWT_SECRET || 'your_jwt_secret_key',
       { expiresIn }
@@ -1263,10 +1263,10 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
     // Generate JWT token
     const expiresIn = remember ? '7d' : '1d';
     const jwtToken = jwt.sign(
-      { 
-        id: user.id, 
+      {
+        id: user.id,
         role: user.role,
-        email: user.email 
+        email: user.email
       },
       process.env.JWT_SECRET || 'your_jwt_secret_key',
       { expiresIn }
@@ -1303,7 +1303,7 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
 app.post('/api/auth/skip-2fa', async (req, res) => {
   try {
     const tempToken = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (!tempToken) {
       return res.status(401).json({
         success: false,
@@ -1343,10 +1343,10 @@ app.post('/api/auth/skip-2fa', async (req, res) => {
 
     // Generate JWT token
     const jwtToken = jwt.sign(
-      { 
-        id: user.id, 
+      {
+        id: user.id,
         role: user.role,
-        email: user.email 
+        email: user.email
       },
       process.env.JWT_SECRET || 'your_jwt_secret_key',
       { expiresIn: '1d' }
@@ -1531,18 +1531,18 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
       'SELECT id, email, role, profile_picture, is_2fa_enabled FROM users WHERE id = $1',
       [req.user.id]
     );
-    
+
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'User tidak ditemukan' });
     }
-    
+
     let userData = userResult.rows[0];
-    
+
     // Konversi path profile picture menjadi full URL jika perlu
     if (userData.profile_picture && !userData.profile_picture.startsWith('http') && !userData.profile_picture.startsWith('data:')) {
       userData.profile_picture = `${req.protocol}://${req.get('host')}/${userData.profile_picture}`;
     }
-    
+
     // Gabungkan dengan data dari tabel role-specific
     if (userData.role === 'siswa') {
       const siswaResult = await pool.query(
@@ -1569,10 +1569,10 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
         userData = { ...userData, ...orangtuaResult.rows[0] };
       }
     }
-    
-    res.json({ 
+
+    res.json({
       message: 'Data berhasil diambil',
-      user: userData 
+      user: userData
     });
   } catch (error) {
     console.error('Error fetching user data:', error);
@@ -1588,12 +1588,12 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       const uploadDir = path.join(__dirname, 'uploads', 'profile-pictures');
-      
+
       // Buat direktori jika belum ada
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      
+
       cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
@@ -1623,13 +1623,13 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
     if (!req.file) {
       return res.status(400).json({ message: 'Tidak ada file yang diupload' });
     }
-    
+
     // Dapatkan data user lama untuk menghapus foto lama jika ada
     const oldUserResult = await pool.query(
       'SELECT profile_picture FROM users WHERE id = $1',
       [req.user.id]
     );
-    
+
     // Hapus foto lama jika ada
     if (oldUserResult.rows.length > 0 && oldUserResult.rows[0].profile_picture) {
       const oldPicturePath = oldUserResult.rows[0].profile_picture;
@@ -1641,35 +1641,35 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
         }
       }
     }
-    
+
     // Simpan path relatif ke database (bukan full path)
     const relativePath = `uploads/profile-pictures/${req.file.filename}`;
-    
+
     // Update profile_picture di database dengan path file
     const result = await pool.query(
       'UPDATE users SET profile_picture = $1 WHERE id = $2 RETURNING id',
       [relativePath, req.user.id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User tidak ditemukan' });
     }
-    
+
     // Update user data in response
     const userResult = await pool.query(
       'SELECT id, email, role, profile_picture FROM users WHERE id = $1',
       [req.user.id]
     );
-    
+
     let userData = null;
     if (userResult.rows.length > 0) {
       userData = userResult.rows[0];
-      
+
       // Ubah path menjadi full URL untuk response
       if (userData.profile_picture && !userData.profile_picture.startsWith('http')) {
         userData.profile_picture = `${req.protocol}://${req.get('host')}/${userData.profile_picture}`;
       }
-      
+
       if (userData.role === 'siswa') {
         const siswaResult = await pool.query(
           'SELECT nama_lengkap, nis FROM siswa WHERE user_id = $1',
@@ -1696,15 +1696,15 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
         }
       }
     }
-    
-    res.json({ 
+
+    res.json({
       message: 'Foto profil berhasil diperbarui',
       profile_picture: `${req.protocol}://${req.get('host')}/${relativePath}`,
       user: userData
     });
   } catch (error) {
     console.error('Error updating profile picture:', error);
-    
+
     // Hapus file yang sudah diupload jika terjadi error
     if (req.file && req.file.path) {
       try {
@@ -1713,7 +1713,7 @@ app.post('/api/users/profile-picture', authenticateToken, upload.single('profile
         console.error('Error deleting uploaded file:', unlinkError);
       }
     }
-    
+
     res.status(500).json({ message: 'Terjadi kesalahan server' });
   }
 });
@@ -1725,13 +1725,13 @@ app.delete('/api/users/profile-picture', authenticateToken, async (req, res) => 
       'SELECT profile_picture FROM users WHERE id = $1',
       [req.user.id]
     );
-    
+
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'User tidak ditemukan' });
     }
-    
+
     const currentPicture = userResult.rows[0].profile_picture;
-    
+
     // Hapus file foto jika ada
     if (currentPicture && !currentPicture.startsWith('data:')) {
       const filePath = path.join(__dirname, currentPicture);
@@ -1739,13 +1739,13 @@ app.delete('/api/users/profile-picture', authenticateToken, async (req, res) => 
         fs.unlinkSync(filePath);
       }
     }
-    
+
     // Update database, set profile_picture ke NULL
     await pool.query(
       'UPDATE users SET profile_picture = NULL WHERE id = $1',
       [req.user.id]
     );
-    
+
     res.json({ message: 'Foto profil berhasil dihapus' });
   } catch (error) {
     console.error('Error deleting profile picture:', error);
@@ -1763,9 +1763,9 @@ app.post('/api/auth/logout', authenticateToken, async (req, res) => {
     const { id: userId } = req.user;
     const token = req.headers.authorization?.replace('Bearer ', '');
 
-    // Deactivate current session
+    // Deactivate current session and record last activity
     await pool.query(
-      'UPDATE user_sessions SET is_active = FALSE WHERE user_id = $1 AND session_token = $2',
+      'UPDATE user_sessions SET is_active = FALSE, last_activity = CURRENT_TIMESTAMP WHERE user_id = $1 AND session_token = $2',
       [userId, token]
     );
 
@@ -1792,9 +1792,9 @@ app.get('/api/user/2fa-status', authenticateToken, async (req, res) => {
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
@@ -1816,13 +1816,118 @@ app.get('/api/user/2fa-status', authenticateToken, async (req, res) => {
 });
 
 // ===============================
+// USER ACTIVITY & ANALYTICS ENDPOINTS (NEW SECTION)
+// ===============================
+
+// Endpoint for user activity heartbeat
+app.post('/api/user/activity', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!sessionToken) {
+      return res.status(401).json({ message: 'Session token required' });
+    }
+
+    // Update last_activity for the current session
+    await pool.query(
+      'UPDATE user_sessions SET last_activity = CURRENT_TIMESTAMP, is_active = TRUE WHERE user_id = $1 AND session_token = $2',
+      [userId, sessionToken]
+    );
+
+    res.json({ success: true, message: 'Activity recorded' });
+  } catch (error) {
+    console.error('Error recording user activity:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Endpoint to get user learning duration data
+app.get('/api/user/learning-duration', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { year = new Date().getFullYear() } = req.query; // Default to current year
+
+    const result = await pool.query(
+      `
+      WITH session_durations AS (
+          SELECT
+              user_id,
+              EXTRACT(MONTH FROM created_at) as month_num,
+              created_at,
+              last_activity,
+              -- Calculate duration in minutes
+              EXTRACT(EPOCH FROM (
+                  CASE
+                      WHEN is_active = TRUE AND last_activity >= NOW() - INTERVAL '15 minutes'
+                      THEN NOW() -- If session is active and recent, use current time
+                      ELSE last_activity
+                  END - created_at
+              )) / 60 AS duration_minutes
+          FROM
+              user_sessions
+          WHERE
+              user_id = $1 AND EXTRACT(YEAR FROM created_at) = $2
+      ),
+      monthly_data AS (
+          SELECT
+              month_num,
+              SUM(duration_minutes) AS total_duration_minutes,
+              COUNT(DISTINCT DATE(created_at)) AS active_days_count
+          FROM
+              session_durations
+          GROUP BY
+              month_num
+          ORDER BY
+              month_num
+      )
+      SELECT
+          md.month_num,
+          CASE
+              WHEN md.month_num = 1 THEN 'Jan'
+              WHEN md.month_num = 2 THEN 'Feb'
+              WHEN md.month_num = 3 THEN 'Mar'
+              WHEN md.month_num = 4 THEN 'Apr'
+              WHEN md.month_num = 5 THEN 'Mei'
+              WHEN md.month_num = 6 THEN 'Jun'
+              WHEN md.month_num = 7 THEN 'Jul'
+              WHEN md.month_num = 8 THEN 'Agu'
+              WHEN md.month_num = 9 THEN 'Sep'
+              WHEN md.month_num = 10 THEN 'Okt'
+              WHEN md.month_num = 11 THEN 'Nov'
+              WHEN md.month_num = 12 THEN 'Des'
+          END as month,
+          COALESCE(md.total_duration_minutes, 0) AS duration,
+          COALESCE(ROUND(md.total_duration_minutes / NULLIF(md.active_days_count, 0)), 0) AS average
+      FROM
+          monthly_data md
+      RIGHT JOIN
+          generate_series(1, 12) AS s(month_num) ON md.month_num = s.month_num
+      ORDER BY
+          s.month_num;
+      `,
+      [userId, year]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+
+  } catch (error) {
+    console.error('Error fetching learning duration:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ===============================
 // ERROR HANDLING MIDDLEWARE
 // ===============================
 
 // Global error handler
 app.use((error, req, res, next) => {
   console.error('Global error handler:', error);
-  
+
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
@@ -1835,14 +1940,14 @@ app.use((error, req, res, next) => {
       message: 'Error uploading file: ' + error.message
     });
   }
-  
+
   if (error.message && error.message.includes('Only image files are allowed')) {
     return res.status(400).json({
       success: false,
       message: 'Hanya file gambar yang diizinkan'
     });
   }
-  
+
   res.status(500).json({
     success: false,
     message: 'Internal server error'
