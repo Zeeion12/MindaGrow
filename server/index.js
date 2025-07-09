@@ -38,14 +38,23 @@ const pool = new Pool({
 
 // Static file serving
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads', 'materials')));
 
 // Import and use courses router
 const coursesRouter = require('./routes/courses');
 app.use('/api/courses', coursesRouter);
 
+// Class Router
 const classRoutes = require('./routes/classRoutes');
 app.use('/api', classRoutes);
 
+// Assignment Router
+const assignmentRoutes = require('./routes/assignmentRoutes');
+app.use('/api', assignmentRoutes);
+
+// Material Routes
+const materialRoutes = require('./routes/materialRoutes');
+app.use('/api', materialRoutes);
 
 
 // Middleware for JWT authentication

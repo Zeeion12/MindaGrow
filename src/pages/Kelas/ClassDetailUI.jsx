@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useAuth } from "../../context/authContext"
 import axios from "axios"
+import { format } from "date-fns"
 
 import {
     LuBookOpen,
@@ -33,6 +34,10 @@ export default function EnhancedClassDetail() {
     const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
     const [showAssignmentModal, setShowAssignmentModal] = useState(false)
     const [showMaterialModal, setShowMaterialModal] = useState(false)
+    const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false);
+    const [selectedAssignment, setSelectedAssignment] = useState(null);
+    const [showMaterialDetailModal, setShowMaterialDetailModal] = useState(false);
+    const [selectedMaterial, setSelectedMaterial] = useState(null);
     const [showAddStudentModal, setShowAddStudentModal] = useState(false)
     const [showDeleteAssignmentModal, setShowDeleteAssignmentModal] = useState(null)
     const [showDeleteMaterialModal, setShowDeleteMaterialModal] = useState(null)
@@ -55,7 +60,7 @@ export default function EnhancedClassDetail() {
         dueDate: "",
         dueTime: "",
         points: "",
-        attachments: [],
+        file: null,
     })
     const [newMaterial, setNewMaterial] = useState({
         title: "",
@@ -67,6 +72,9 @@ export default function EnhancedClassDetail() {
         nis: "",
     })
     const [addStudentLoading, setAddStudentLoading] = useState(false)
+    const [assignmentLoading, setAssignmentLoading] = useState(false); // New state for assignment loading
+    const [materialLoading, setMaterialLoading] = useState(false); // New state for material loading
+
 
     // Dummy Pengumuman (masih dummy untuk sementara)
     const [announcements, setAnnouncements] = useState([
@@ -79,31 +87,9 @@ export default function EnhancedClassDetail() {
             timestamp: "2 hari yang lalu",
         },
     ])
+    const [assignments, setAssignments] = useState([]); // Akan diisi dari API
+    const [materials, setMaterials] = useState([]);   // Akan diisi dari API
 
-    // Dummy Tugas (masih dummy untuk sementara)
-    const [assignments, setAssignments] = useState([
-        {
-            id: 1,
-            title: "Tugas Analisis",
-            description: "Buatlah analisis mendalam tentang materi yang telah dipelajari",
-            dueDate: "Besok, 23:59",
-            status: "pending",
-            points: 100,
-            submitted: 5,
-            total: 10,
-        },
-    ])
-
-    // Dummy Materi (masih dummy untuk sementara)
-    const [materials, setMaterials] = useState([
-        {
-            id: 1,
-            title: "Materi Pengantar",
-            type: "pdf",
-            size: "2.5 MB",
-            uploadDate: "3 hari yang lalu",
-        },
-    ])
 
     // Function untuk fetch detail kelas dari database
     const fetchClassDetails = async () => {
@@ -141,6 +127,10 @@ export default function EnhancedClassDetail() {
                 ...assignment,
                 total: response.data.members?.length || assignment.total
             })))
+
+            // Panggil fungsi fetch tugas dan materi setelah data kelas didapatkan
+            await fetchAssignments();
+            await fetchMaterials();
 
         } catch (error) {
             console.error("Error fetching class details:", error)
@@ -227,12 +217,44 @@ export default function EnhancedClassDetail() {
         }
     }
 
+    // Fungsi untuk mengambil data tugas
+    const fetchAssignments = async () => {
+        try {
+            const token = localStorage.getItem("token");
+            const response = await axios.get(`http://localhost:5000/api/classes/${id}/assignments`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            setAssignments(response.data.assignments);
+        } catch (error) {
+            console.error("Error fetching assignments:", error);
+            // Handle error fetching assignments
+        }
+    };
+
+    // Fungsi untuk mengambil data materi
+    const fetchMaterials = async () => {
+        try {
+            const token = localStorage.getItem("token");
+            const response = await axios.get(`http://localhost:5000/api/classes/${id}/materials`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            setMaterials(response.data.materials);
+        } catch (error) {
+            console.error("Error fetching materials:", error);
+            // Handle error fetching materials
+        }
+    };
+
     // useEffect untuk fetch data saat component mount
     useEffect(() => {
         if (id) {
             fetchClassDetails()
         }
-    }, [id])
+    }, [id, user])
 
     //function to handle back navigation
     const handleBack = () => {
@@ -264,93 +286,286 @@ export default function EnhancedClassDetail() {
         }
     }
 
-    const handleCreateAssignment = () => {
-        if (newAssignment.title && newAssignment.description && newAssignment.dueDate) {
-            const assignment = {
-                id: assignments.length + 1,
+    const handleCreateAssignment = async () => {
+        if (!newAssignment.title.trim()) {
+            alert("Judul tugas wajib diisi.");
+            return;
+        }
+
+        if (!newAssignment.description.trim()) {
+            alert("Deskripsi tugas wajib diisi.");
+            return;
+        }
+
+        if (!newAssignment.dueDate) {
+            alert("Tanggal deadline tugas wajib diisi.");
+            return;
+        }
+
+        setAssignmentLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+
+            // Format tanggal dengan benar
+            const fullDueDate = newAssignment.dueDate + (newAssignment.dueTime ? `T${newAssignment.dueTime}:00` : 'T23:59:59');
+
+            const formData = new FormData();
+            formData.append("title", newAssignment.title.trim());
+            formData.append("description", newAssignment.description.trim());
+            formData.append("due_date", fullDueDate);
+            formData.append("points", newAssignment.points || 100);
+
+            // Hanya append file jika ada
+            if (newAssignment.file) {
+                formData.append("file", newAssignment.file);
+            }
+
+            console.log("Sending assignment data:", {
                 title: newAssignment.title,
                 description: newAssignment.description,
-                dueDate: `${newAssignment.dueDate}, ${newAssignment.dueTime}`,
-                status: "upcoming",
-                points: Number.parseInt(newAssignment.points) || 100,
-                submitted: 0,
-                total: classMembers.length || 10,
-            }
-            setAssignments([assignment, ...assignments])
+                due_date: fullDueDate,
+                points: newAssignment.points || 100,
+                hasFile: !!newAssignment.file
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classes/${id}/assignments`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }
+            );
+
+            console.log("Assignment created successfully:", response.data);
+            alert(response.data.message || "Tugas berhasil dibuat");
+
+            // Reset form
             setNewAssignment({
                 title: "",
                 description: "",
                 dueDate: "",
                 dueTime: "",
                 points: "",
-                attachments: [],
-            })
-            setShowAssignmentModal(false)
-        }
-    }
+                file: null,
+            });
 
-    const handleCreateMaterial = () => {
-        if (newMaterial.title && newMaterial.description) {
-            const material = {
-                id: materials.length + 1,
+            setShowAssignmentModal(false);
+            await fetchAssignments(); // Refresh daftar tugas
+
+        } catch (error) {
+            console.error("Error creating assignment:", error);
+            console.error("Error response:", error.response?.data);
+
+            const errorMessage = error.response?.data?.message || "Gagal membuat tugas. Silakan coba lagi.";
+            alert(errorMessage);
+        } finally {
+            setAssignmentLoading(false);
+        }
+    };
+
+    const handleCreateMaterial = async () => {
+        if (!newMaterial.title || !newMaterial.description || !newMaterial.file) {
+            alert("Judul, deskripsi, dan file materi wajib diisi.");
+            return;
+        }
+
+        setMaterialLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+
+            const formData = new FormData();
+            formData.append("title", newMaterial.title.trim());
+            formData.append("description", newMaterial.description.trim());
+            formData.append("file_type", newMaterial.type);
+            formData.append("file", newMaterial.file);
+
+            console.log("Sending material data:", {
                 title: newMaterial.title,
                 description: newMaterial.description,
-                type: newMaterial.type,
-                size: "1.0 MB",
-                uploadDate: "Baru saja",
-            }
-            setMaterials([material, ...materials])
+                file_type: newMaterial.type,
+                fileName: newMaterial.file.name,
+                fileSize: newMaterial.file.size
+            });
+
+            const response = await axios.post(
+                `http://localhost:5000/api/classes/${id}/materials`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }
+            );
+
+            console.log("Material created successfully:", response.data);
+            alert(response.data.message || "Materi berhasil ditambahkan");
+
+            // Reset form
             setNewMaterial({
                 title: "",
                 description: "",
                 type: "pdf",
                 file: null,
-            })
-            setShowMaterialModal(false)
+            });
+
+            setShowMaterialModal(false);
+            await fetchMaterials(); // Refresh daftar materi
+
+        } catch (error) {
+            console.error("Error creating material:", error);
+            console.error("Error response:", error.response?.data);
+
+            const errorMessage = error.response?.data?.message || "Gagal menambahkan materi. Silakan coba lagi.";
+            alert(errorMessage);
+        } finally {
+            setMaterialLoading(false);
         }
-    }
+    };
 
-    const handleDeleteAssignment = (assignmentId) => {
-        setAssignments(assignments.filter((assignment) => assignment.id !== assignmentId))
-        setShowDeleteAssignmentModal(null)
-    }
+    const handleDeleteAssignment = async (assignmentId) => {
+        if (!window.confirm("Apakah Anda yakin ingin menghapus tugas ini?")) {
+            return;
+        }
+        try {
+            const token = localStorage.getItem("token");
+            await axios.delete(`http://localhost:5000/api/assignments/${assignmentId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            alert("Tugas berhasil dihapus.");
+            setShowDeleteAssignmentModal(null);
+            fetchAssignments(); // Refresh daftar tugas
+        } catch (error) {
+            console.error("Error deleting assignment:", error);
+            alert(error.response?.data?.message || "Gagal menghapus tugas.");
+        }
+    };
 
-    const handleDeleteMaterial = (materialId) => {
-        setMaterials(materials.filter((material) => material.id !== materialId))
-        setShowDeleteMaterialModal(null)
-    }
+    const handleDeleteMaterial = async (materialId) => {
+        if (!window.confirm("Apakah Anda yakin ingin menghapus materi ini?")) {
+            return;
+        }
+        try {
+            const token = localStorage.getItem("token");
+            await axios.delete(`http://localhost:5000/api/materials/${materialId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            alert("Materi berhasil dihapus.");
+            setShowDeleteMaterialModal(null);
+            fetchMaterials(); // Refresh daftar materi
+        } catch (error) {
+            console.error("Error deleting material:", error);
+            alert(error.response?.data?.message || "Gagal menghapus materi.");
+        }
+    };
 
     // Ngambil warna status tugas
     const getStatusColor = (status) => {
         switch (status) {
-            case "pending":
-                return "bg-yellow-100 text-yellow-800 border-yellow-200"
-            case "upcoming":
-                return "bg-blue-100 text-blue-800 border-blue-200"
-            case "overdue":
-                return "bg-red-100 text-red-800 border-red-200"
+            case "active":
+                return "bg-blue-100 text-blue-800 border-blue-200";
+            case "inactive":
+                return "bg-gray-100 text-gray-800 border-gray-200";
             case "completed":
-                return "bg-green-100 text-green-800 border-green-200"
+                return "bg-green-100 text-green-800 border-green-200";
+            case "draft":
+                return "bg-yellow-100 text-yellow-800 border-yellow-200";
+            case "submitted":
+                return "bg-purple-100 text-purple-800 border-purple-200"; // Untuk submission siswa
+            case "graded":
+                return "bg-green-100 text-green-800 border-green-200"; // Untuk submission siswa
+            case "returned":
+                return "bg-orange-100 text-orange-800 border-orange-200"; // Untuk submission siswa
+            case "overdue": // Ini bisa dihitung di frontend berdasarkan due_date
+                return "bg-red-100 text-red-800 border-red-200";
             default:
-                return "bg-gray-100 text-gray-800 border-gray-200"
+                return "bg-gray-100 text-gray-800 border-gray-200";
         }
     }
 
     // Ngambil icon status tugas
     const getStatusIcon = (status) => {
         switch (status) {
-            case "pending":
-                return <LuClock className="w-4 h-4" />
-            case "upcoming":
-                return <LuCalendar className="w-4 h-4" />
-            case "overdue":
-                return <LuAlertCircle className="w-4 h-4" />
+            case "active":
+                return <LuCheckCircle2 className="w-4 h-4" />;
+            case "inactive":
+                return <LuX className="w-4 h-4" />;
             case "completed":
-                return <LuCheckCircle2 className="w-4 h-4" />
+                return <LuCheckCircle2 className="w-4 h-4" />;
+            case "draft":
+                return <LuFileText className="w-4 h-4" />;
+            case "submitted":
+                return <LuSend className="w-4 h-4" />; // Untuk submission siswa
+            case "graded":
+                return <LuCheckCircle2 className="w-4 h-4" />; // Untuk submission siswa
+            case "returned":
+                return <LuAlertCircle className="w-4 h-4" />; // Untuk submission siswa
+            case "overdue":
+                return <LuClock className="w-4 h-4" />;
             default:
-                return <LuClock className="w-4 h-4" />
+                return <LuClock className="w-4 h-4" />;
         }
     }
+
+
+    // Fungsi untuk mengunduh file
+    const handleDownloadFile = async (itemId, type) => {
+        try {
+            const token = localStorage.getItem("token");
+            let url = '';
+            if (type === 'assignment') {
+                url = `http://localhost:5000/api/assignments/${itemId}/download`;
+            } else if (type === 'material') {
+                url = `http://localhost:5000/api/materials/${itemId}/download`;
+            } else {
+                return;
+            }
+
+            const response = await axios.get(url, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+                responseType: 'blob', // Penting untuk mengunduh file
+            });
+
+            const contentDisposition = response.headers['content-disposition'];
+            let fileName = 'downloaded_file';
+            if (contentDisposition) {
+                const fileNameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                if (fileNameMatch && fileNameMatch[1]) {
+                    fileName = fileNameMatch[1];
+                }
+            }
+
+            const blob = new Blob([response.data]);
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error(`Error downloading ${type}:`, error);
+            alert(`Gagal mengunduh ${type}.`);
+        }
+    }
+
+    const handleViewAssignment = (assignment) => {
+        setSelectedAssignment(assignment);
+        setShowAssignmentDetailModal(true);
+    };
+
+    const handleViewMaterial = (material) => {
+        setSelectedMaterial(material);
+        setShowMaterialDetailModal(true);
+    };
 
     // Loading state
     if (loading) {
@@ -588,82 +803,121 @@ export default function EnhancedClassDetail() {
                         </div>
 
                         <div className="grid gap-6">
-                            {assignments.map((assignment) => (
-                                <div key={assignment.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
-                                    <div className="p-6">
-                                        <div className="flex items-start justify-between mb-4">
-                                            <div className="flex items-start space-x-4">
-                                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                    <LuFileText className="w-5 h-5 text-blue-600" />
+                            {assignments.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">Belum ada tugas di kelas ini.</div>
+                            ) : (
+                                assignments.map((assignment) => {
+                                    const now = new Date();
+                                    const dueDate = assignment.due_date ? new Date(assignment.due_date) : null;
+                                    let displayStatus = assignment.status;
+
+                                    // Logic untuk menentukan status "overdue" di frontend
+                                    if (dueDate && dueDate < now && assignment.status === 'active') {
+                                        displayStatus = 'overdue';
+                                    }
+                                    // Jika siswa, status tugas mereka mungkin berbeda dari status tugas secara umum
+                                    if (user?.role === "siswa" && assignment.my_submission_status) {
+                                        displayStatus = assignment.my_submission_status;
+                                    }
+
+
+                                    return (
+                                        <div key={assignment.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+                                            <div className="p-6">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-start space-x-4">
+                                                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                            <LuFileText className="w-5 h-5 text-blue-600" />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h3 className="text-lg font-semibold mb-2">{assignment.title}</h3>
+                                                            <p className="text-gray-600 mb-3">{assignment.description}</p>
+                                                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                                                                {dueDate && (
+                                                                    <span>Due: {format(dueDate, 'dd MMMM yyyy, HH:mm')}</span>
+                                                                )}
+                                                                <span>•</span>
+                                                                <span>{assignment.points} poin</span>
+                                                                {user?.role === "guru" && (
+                                                                    <>
+                                                                        <span>•</span>
+                                                                        <span>
+                                                                            {assignment.total_submissions || 0}/{classMembers.length} diserahkan
+                                                                        </span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {/* Status untuk guru dan siswa */}
+                                                    <span
+                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(displayStatus)}`}
+                                                    >
+                                                        {getStatusIcon(displayStatus)}
+                                                        <span className="ml-1 capitalize">{displayStatus}</span>
+                                                    </span>
                                                 </div>
-                                                <div className="flex-1">
-                                                    <h3 className="text-lg font-semibold mb-2">{assignment.title}</h3>
-                                                    <p className="text-gray-600 mb-3">{assignment.description}</p>
-                                                    <div className="flex items-center space-x-4 text-sm text-gray-500">
-                                                        <span>Due: {assignment.dueDate}</span>
-                                                        <span>•</span>
-                                                        <span>{assignment.points} poin</span>
-                                                        <span>•</span>
-                                                        <span>
-                                                            {assignment.submitted}/{assignment.total} diserahkan
-                                                        </span>
+                                                <div className="border-t border-gray-200 my-4"></div>
+
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center space-x-2">
+                                                        {user?.role === "guru" && (
+                                                            <div className="w-full bg-gray-200 rounded-full h-2 max-w-xs">
+                                                                <div
+                                                                    className="bg-blue-600 h-2 rounded-full"
+                                                                    style={{ width: `${(assignment.total_submissions / classMembers.length) * 100 || 0}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        )}
+                                                        {user?.role === "guru" && (
+                                                            <span className="text-sm text-gray-500">
+                                                                {Math.round((assignment.total_submissions / classMembers.length) * 100) || 0}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex space-x-2">
+                                                        <button
+                                                            onClick={() => handleViewAssignment(assignment)}
+                                                            className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
+                                                            <LuEye className="w-4 h-4 mr-1" />
+                                                            Lihat
+                                                        </button>
+                                                        {assignment.file_url && (
+                                                            <button
+                                                                onClick={() => handleDownloadFile(assignment.id, 'assignment')}
+                                                                className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition"
+                                                            >
+                                                                <LuDownload className="w-4 h-4 mr-1" />
+                                                                Download
+                                                            </button>
+                                                        )}
+                                                        {user?.role === "guru" && (
+                                                            <button
+                                                                onClick={() => setShowDeleteAssignmentModal(assignment.id)}
+                                                                className="flex items-center px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-sm hover:bg-red-50 transition"
+                                                            >
+                                                                <LuTrash2 className="w-4 h-4 mr-1" />
+                                                                Hapus
+                                                            </button>
+                                                        )}
+                                                        {user?.role === "siswa" && displayStatus !== "submitted" && displayStatus !== "graded" && (
+                                                            <button className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition">
+                                                                <LuPlusCircle className="w-4 h-4 mr-1" />
+                                                                Submit
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
-                                            <span
-                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}
-                                            >
-                                                {getStatusIcon(assignment.status)}
-                                                <span className="ml-1 capitalize">{assignment.status}</span>
-                                            </span>
                                         </div>
-                                        <div className="border-t border-gray-200 my-4"></div>
-
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center space-x-2">
-                                                <div className="w-full bg-gray-200 rounded-full h-2 max-w-xs">
-                                                    <div
-                                                        className="bg-blue-600 h-2 rounded-full"
-                                                        style={{ width: `${(assignment.submitted / assignment.total) * 100}%` }}
-                                                    ></div>
-                                                </div>
-                                                <span className="text-sm text-gray-500">
-                                                    {Math.round((assignment.submitted / assignment.total) * 100)}%
-                                                </span>
-                                            </div>
-
-                                            <div className="flex space-x-2">
-                                                <button className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
-                                                    <LuEye className="w-4 h-4 mr-1" />
-                                                    Lihat
-                                                </button>
-                                                <button className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
-                                                    <LuDownload className="w-4 h-4 mr-1" />
-                                                    Download
-                                                </button>
-                                                {user?.role === "guru" && (
-                                                    <button
-                                                        onClick={() => setShowDeleteAssignmentModal(assignment.id)}
-                                                        className="flex items-center px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-sm hover:bg-red-50 transition"
-                                                    >
-                                                        <LuTrash2 className="w-4 h-4 mr-1" />
-                                                        Hapus
-                                                    </button>
-                                                )}
-                                                {assignment.status === "pending" && user?.role !== "guru" && (
-                                                    <button className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition">
-                                                        <LuPlusCircle className="w-4 h-4 mr-1" />
-                                                        Submit
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
                 )}
+
 
                 {/* Materi */}
                 {activeTab === "materials" && (
@@ -682,50 +936,65 @@ export default function EnhancedClassDetail() {
                         </div>
 
                         <div className="grid gap-4">
-                            {materials.map((material) => (
-                                <div key={material.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
-                                    <div className="p-4">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                                                {material.type === "pdf" && <LuFileText className="w-6 h-6 text-green-600" />}
-                                                {material.type === "video" && <LuVideo className="w-6 h-6 text-green-600" />}
-                                                {material.type === "doc" && <LuFileText className="w-6 h-6 text-green-600" />}
-                                            </div>
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold mb-1">{material.title}</h3>
-                                                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                                                    <span>{material.type.toUpperCase()}</span>
-                                                    <span>•</span>
-                                                    <span>{material.size || material.duration}</span>
-                                                    <span>•</span>
-                                                    <span>{material.uploadDate}</span>
+                            {materials.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">Belum ada materi di kelas ini.</div>
+                            ) : (
+                                materials.map((material) => (
+                                    <div key={material.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+                                        <div className="p-4">
+                                            <div className="flex items-center space-x-4">
+                                                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                                    {material.file_type === "pdf" && <LuFileText className="w-6 h-6 text-green-600" />}
+                                                    {material.file_type && material.file_type.startsWith("video") && <LuVideo className="w-6 h-6 text-green-600" />}
+                                                    {(material.file_type === "doc" || material.file_type === "docx") && <LuFileText className="w-6 h-6 text-green-600" />}
+                                                    {/* Tambahkan icon lain sesuai kebutuhan */}
+                                                    {!material.file_type && <LuFileText className="w-6 h-6 text-green-600" />}
                                                 </div>
-                                            </div>
-                                            <div className="flex space-x-2">
-                                                <button className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
-                                                    <LuEye className="w-4 h-4 mr-1" />
-                                                    Lihat
-                                                </button>
-                                                <button className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
-                                                    <LuDownload className="w-4 h-4 mr-1" />
-                                                    Download
-                                                </button>
-                                                {user?.role === "guru" && (
+                                                <div className="flex-1">
+                                                    <h3 className="font-semibold mb-1">{material.title}</h3>
+                                                    <p className="text-gray-600 text-sm mb-2">{material.description}</p>
+                                                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                                                        <span>{material.file_type?.toUpperCase() || 'FILE'}</span>
+                                                        <span>•</span>
+                                                        <span>{material.file_size || 'Ukuran tidak diketahui'}</span>
+                                                        <span>•</span>
+                                                        <span>{format(new Date(material.uploaded_at), 'dd MMMM yyyy')}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex space-x-2">
                                                     <button
-                                                        onClick={() => setShowDeleteMaterialModal(material.id)}
-                                                        className="flex items-center px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-sm hover:bg-red-50 transition"
-                                                    >
-                                                        <LuTrash2 className="w-4 h-4" />
+                                                        onClick={() => handleViewMaterial(material)}
+                                                        className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition">
+                                                        <LuEye className="w-4 h-4 mr-1" />
+                                                        Lihat
                                                     </button>
-                                                )}
+                                                    {material.file_url && (
+                                                        <button
+                                                            onClick={() => handleDownloadFile(material.id, 'material')}
+                                                            className="flex items-center px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 transition"
+                                                        >
+                                                            <LuDownload className="w-4 h-4 mr-1" />
+                                                            Download
+                                                        </button>
+                                                    )}
+                                                    {user?.role === "guru" && (
+                                                        <button
+                                                            onClick={() => setShowDeleteMaterialModal(material.id)}
+                                                            className="flex items-center px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-sm hover:bg-red-50 transition"
+                                                        >
+                                                            <LuTrash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
+
 
                 {/* Anggota */}
                 {activeTab === "people" && (
@@ -872,7 +1141,7 @@ export default function EnhancedClassDetail() {
                 </div>
             )}
 
-            {/* Modal Buat Tugas */}
+            {/* Modal Buat Tugas - IMPROVED VERSION */}
             {showAssignmentModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -885,88 +1154,159 @@ export default function EnhancedClassDetail() {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Judul Tugas</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Judul Tugas <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
                                     value={newAssignment.title}
                                     onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
                                     placeholder="Masukkan judul tugas"
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={assignmentLoading}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Deskripsi <span className="text-red-500">*</span>
+                                </label>
                                 <textarea
                                     value={newAssignment.description}
                                     onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
-                                    placeholder="Jelaskan instruksi tugas..."
+                                    placeholder="Jelaskan instruksi tugas dengan detail..."
                                     rows={4}
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                    disabled={assignmentLoading}
                                 />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Deadline</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tanggal Deadline <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="date"
                                         value={newAssignment.dueDate}
                                         onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
-                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        min={new Date().toISOString().split('T')[0]} // Tidak boleh kurang dari hari ini
+                                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={assignmentLoading}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Waktu Deadline</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Waktu Deadline
+                                    </label>
                                     <input
                                         type="time"
                                         value={newAssignment.dueTime}
                                         onChange={(e) => setNewAssignment({ ...newAssignment, dueTime: e.target.value })}
-                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        disabled={assignmentLoading}
                                     />
+                                    <p className="text-xs text-gray-500 mt-1">Kosongkan untuk 23:59</p>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Poin</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Poin
+                                </label>
                                 <input
                                     type="number"
                                     value={newAssignment.points}
                                     onChange={(e) => setNewAssignment({ ...newAssignment, points: e.target.value })}
                                     placeholder="100"
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    min="1"
+                                    max="1000"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={assignmentLoading}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Lampiran</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                                    <LuPaperclip className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-500">Klik untuk menambahkan file</p>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Lampiran (Opsional)
+                                </label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        id="assignment-file-upload"
+                                        onChange={(e) => setNewAssignment({ ...newAssignment, file: e.target.files[0] })}
+                                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp4,.avi,.mkv,.mov,.webm,.zip,.rar,.7z"
+                                        disabled={assignmentLoading}
+                                    />
+                                    <label htmlFor="assignment-file-upload" className="cursor-pointer">
+                                        <div className="flex flex-col items-center">
+                                            <LuPaperclip className="w-8 h-8 text-gray-400 mb-3" />
+                                            {newAssignment.file ? (
+                                                <div className="text-center">
+                                                    <p className="text-sm font-medium text-gray-900 mb-1">
+                                                        {newAssignment.file.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {(newAssignment.file.size / 1024 / 1024).toFixed(2)} MB
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center">
+                                                    <p className="text-sm text-gray-600 mb-2">
+                                                        Klik untuk menambahkan file atau drag & drop
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mb-3">
+                                                        Maksimal 10MB
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <span className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm">
+                                                {newAssignment.file ? 'Ganti File' : 'Pilih File'}
+                                            </span>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500">
+                                    <p className="font-medium mb-1">File yang didukung:</p>
+                                    <p>📄 Dokumen: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT</p>
+                                    <p>🖼️ Gambar: JPG, JPEG, PNG, GIF, WEBP</p>
+                                    <p>🎥 Video: MP4, AVI, MKV, MOV, WEBM</p>
+                                    <p>📦 Arsip: ZIP, RAR, 7Z</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-end space-x-3 mt-6">
+                        <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
                             <button
                                 onClick={() => setShowAssignmentModal(false)}
                                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                disabled={assignmentLoading}
                             >
                                 Batal
                             </button>
                             <button
                                 onClick={handleCreateAssignment}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={assignmentLoading}
                             >
-                                Buat Tugas
+                                {assignmentLoading ? (
+                                    <div className="flex items-center">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                        Membuat...
+                                    </div>
+                                ) : (
+                                    "Buat Tugas"
+                                )}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Modal Tambah Materi */}
+
+            {/* Modal Tambah Materi - IMPROVED VERSION */}
             {showMaterialModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -979,70 +1319,130 @@ export default function EnhancedClassDetail() {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Judul Materi</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Judul Materi <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
                                     value={newMaterial.title}
                                     onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
-                                    placeholder="Masukkan judul materi"
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                    placeholder="Masukkan judul materi pembelajaran"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                    disabled={materialLoading}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Deskripsi <span className="text-red-500">*</span>
+                                </label>
                                 <textarea
                                     value={newMaterial.description}
                                     onChange={(e) => setNewMaterial({ ...newMaterial, description: e.target.value })}
-                                    placeholder="Jelaskan tentang materi ini..."
+                                    placeholder="Jelaskan tentang materi pembelajaran ini..."
                                     rows={3}
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                                    disabled={materialLoading}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Materi</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Kategori Materi
+                                </label>
                                 <select
                                     value={newMaterial.type}
                                     onChange={(e) => setNewMaterial({ ...newMaterial, type: e.target.value })}
-                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                    disabled={materialLoading}
                                 >
-                                    <option value="pdf">PDF</option>
-                                    <option value="video">Video</option>
-                                    <option value="doc">Dokumen</option>
-                                    <option value="ppt">Presentasi</option>
+                                    <option value="pdf">📄 PDF Document</option>
+                                    <option value="video">🎥 Video</option>
+                                    <option value="doc">📝 Dokumen Word</option>
+                                    <option value="ppt">📊 Presentasi</option>
+                                    <option value="image">🖼️ Gambar</option>
+                                    <option value="other">📁 Lainnya</option>
                                 </select>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Upload File</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                                    <LuPaperclip className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-500 mb-2">Drag & drop file atau klik untuk browse</p>
-                                    <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
-                                        Pilih File
-                                    </button>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Upload File <span className="text-red-500">*</span>
+                                </label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-green-400 transition-colors">
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        id="material-file-upload"
+                                        onChange={(e) => setNewMaterial({ ...newMaterial, file: e.target.files[0] })}
+                                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.webp,.mp4,.avi,.mkv,.mov,.webm,.zip,.rar,.7z"
+                                        disabled={materialLoading}
+                                    />
+                                    <label htmlFor="material-file-upload" className="cursor-pointer">
+                                        <div className="flex flex-col items-center">
+                                            <LuPaperclip className="w-8 h-8 text-gray-400 mb-3" />
+                                            {newMaterial.file ? (
+                                                <div className="text-center">
+                                                    <p className="text-sm font-medium text-gray-900 mb-1">
+                                                        {newMaterial.file.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {(newMaterial.file.size / 1024 / 1024).toFixed(2)} MB
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center">
+                                                    <p className="text-sm text-gray-600 mb-2">
+                                                        Drag & drop file atau klik untuk browse
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mb-3">
+                                                        Maksimal 10MB
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <span className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm">
+                                                {newMaterial.file ? 'Ganti File' : 'Pilih File'}
+                                            </span>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500">
+                                    <p className="font-medium mb-1">File yang didukung:</p>
+                                    <p>📄 Dokumen: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT</p>
+                                    <p>🖼️ Gambar: JPG, JPEG, PNG, GIF, WEBP</p>
+                                    <p>🎥 Video: MP4, AVI, MKV, MOV, WEBM</p>
+                                    <p>📦 Arsip: ZIP, RAR, 7Z</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-end space-x-3 mt-6">
+                        <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
                             <button
                                 onClick={() => setShowMaterialModal(false)}
                                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                disabled={materialLoading}
                             >
                                 Batal
                             </button>
                             <button
                                 onClick={handleCreateMaterial}
-                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={materialLoading}
                             >
-                                Tambah Materi
+                                {materialLoading ? (
+                                    <div className="flex items-center">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                        Menambahkan...
+                                    </div>
+                                ) : (
+                                    "Tambah Materi"
+                                )}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+
 
             {/* Modal Tambah Siswa */}
             {showAddStudentModal && (
@@ -1258,6 +1658,140 @@ export default function EnhancedClassDetail() {
                                 className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50 text-gray-700"
                             >
                                 Tidak
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Detail Tugas */}
+            {showAssignmentDetailModal && selectedAssignment && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold">{selectedAssignment.title}</h3>
+                            <button onClick={() => setShowAssignmentDetailModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                                <LuX className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 text-gray-700">
+                            <div>
+                                <p className="font-medium">Deskripsi:</p>
+                                <p>{selectedAssignment.description}</p>
+                            </div>
+                            {selectedAssignment.due_date && (
+                                <div>
+                                    <p className="font-medium">Jatuh Tempo:</p>
+                                    <p>{format(new Date(selectedAssignment.due_date), 'dd MMMM yyyy, HH:mm')}</p>
+                                </div>
+                            )}
+                            <div>
+                                <p className="font-medium">Poin:</p>
+                                <p>{selectedAssignment.points || 100}</p>
+                            </div>
+                            {selectedAssignment.file_url && (
+                                <div>
+                                    <p className="font-medium">Lampiran:</p>
+                                    <a
+                                        href={selectedAssignment.file_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:underline flex items-center"
+                                    >
+                                        <LuPaperclip className="w-4 h-4 mr-1" />
+                                        Lihat Lampiran
+                                    </a>
+                                </div>
+                            )}
+                            {user?.role === "guru" && (
+                                <div>
+                                    <p className="font-medium">Status Tugas:</p>
+                                    <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(selectedAssignment.status)}`}
+                                    >
+                                        {getStatusIcon(selectedAssignment.status)}
+                                        <span className="ml-1 capitalize">{selectedAssignment.status}</span>
+                                    </span>
+                                </div>
+                            )}
+                            {user?.role === "siswa" && selectedAssignment.my_submission_status && (
+                                <div>
+                                    <p className="font-medium">Status Pengiriman Anda:</p>
+                                    <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(selectedAssignment.my_submission_status)}`}
+                                    >
+                                        {getStatusIcon(selectedAssignment.my_submission_status)}
+                                        <span className="ml-1 capitalize">{selectedAssignment.my_submission_status}</span>
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end space-x-3 mt-6">
+                            <button
+                                onClick={() => setShowAssignmentDetailModal(false)}
+                                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                            >
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Detail Materi */}
+            {showMaterialDetailModal && selectedMaterial && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold">{selectedMaterial.title}</h3>
+                            <button onClick={() => setShowMaterialDetailModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                                <LuX className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 text-gray-700">
+                            <div>
+                                <p className="font-medium">Deskripsi:</p>
+                                <p>{selectedMaterial.description}</p>
+                            </div>
+                            <div>
+                                <p className="font-medium">Tipe File:</p>
+                                <p>{selectedMaterial.file_type?.toUpperCase() || 'Tidak Diketahui'}</p>
+                            </div>
+                            {selectedMaterial.file_size && (
+                                <div>
+                                    <p className="font-medium">Ukuran File:</p>
+                                    <p>{selectedMaterial.file_size}</p>
+                                </div>
+                            )}
+                            <div>
+                                <p className="font-medium">Diunggah Pada:</p>
+                                <p>{format(new Date(selectedMaterial.uploaded_at), 'dd MMMM yyyy, HH:mm')}</p>
+                            </div>
+                            {selectedMaterial.file_url && (
+                                <div>
+                                    <p className="font-medium">File Materi:</p>
+                                    <a
+                                        href={selectedMaterial.file_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:underline flex items-center"
+                                    >
+                                        <LuPaperclip className="w-4 h-4 mr-1" />
+                                        Lihat File
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end space-x-3 mt-6">
+                            <button
+                                onClick={() => setShowMaterialDetailModal(false)}
+                                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                            >
+                                Tutup
                             </button>
                         </div>
                     </div>
