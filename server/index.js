@@ -43,6 +43,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const coursesRouter = require('./routes/courses');
 app.use('/api/courses', coursesRouter);
 
+const classRoutes = require('./routes/classRoutes');
+app.use('/api', classRoutes);
+
+
+
 // Middleware for JWT authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
