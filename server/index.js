@@ -9,6 +9,7 @@ const fs = require('fs');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const Joi = require('joi');
+const session = require('express-session');
 
 const TwoFactorService = require('./services/TwoFactorService');
 
@@ -26,6 +27,23 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Session middleware (tambahkan sebelum passport)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'mindagrow-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Passport configuration (setelah session)
+const passport = require('./config/passport');
+app.use(passport.initialize());
+app.use(passport.session());
+
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -439,12 +457,17 @@ const generateTempToken = async (userId) => {
 
 const logLoginAttempt = async (email, ipAddress, attemptType, success, errorMessage = null) => {
   try {
+    // Pastikan attemptType menggunakan enum yang valid
+    const validAttemptTypes = ['login', '2fa_verify']; // Hapus 'google_oauth' sementara
+    const finalAttemptType = validAttemptTypes.includes(attemptType) ? attemptType : 'login';
+    
     await pool.query(
       'INSERT INTO login_attempts (email, ip_address, attempt_type, success, error_message) VALUES ($1, $2, $3, $4, $5)',
-      [email, ipAddress, attemptType, success, errorMessage]
+      [email, ipAddress, finalAttemptType, success, errorMessage]
     );
   } catch (error) {
     console.error('Error logging login attempt:', error);
+    // Jangan throw error agar tidak mengganggu proses utama
   }
 };
 
@@ -473,6 +496,391 @@ pool.query('SELECT NOW()', (err, res) => {
     initDB(); // Initialize database after successful connection
   }
 });
+
+app.get('/api/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/api/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login?error=oauth_failed` }),
+  async (req, res) => {
+    try {
+      const user = req.user;
+      
+      console.log('OAuth Callback - User data:', {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        role_selected: user.role_selected
+      });
+
+      // Generate temporary token untuk OAuth flow
+      const tempToken = jwt.sign(
+        { 
+          id: user.id, 
+          email: user.email,
+          oauth: true
+        },
+        process.env.JWT_SECRET || 'your_jwt_secret_key',
+        { expiresIn: '1h' }
+      );
+
+      // Log login attempt dengan validasi enum
+      try {
+        await logLoginAttempt(user.email, req.ip, 'login', true); // Gunakan 'login' sebagai fallback
+      } catch (logError) {
+        console.error('Login attempt logging failed:', logError.message);
+        // Lanjutkan proses meskipun logging gagal
+      }
+
+      // Cek apakah user sudah pernah memilih role dan setup lengkap
+      if (user.role && user.role_selected === true) {
+        // Cek apakah data profil sudah lengkap
+        let profileComplete = false;
+        
+        try {
+          if (user.role === 'siswa') {
+            const siswaCheck = await pool.query('SELECT id FROM siswa WHERE user_id = $1', [user.id]);
+            profileComplete = siswaCheck.rows.length > 0;
+          } else if (user.role === 'guru') {
+            const guruCheck = await pool.query('SELECT id FROM guru WHERE user_id = $1', [user.id]);
+            profileComplete = guruCheck.rows.length > 0;
+          } else if (user.role === 'orangtua') {
+            const orangtuaCheck = await pool.query('SELECT id FROM orangtua WHERE user_id = $1', [user.id]);
+            profileComplete = orangtuaCheck.rows.length > 0;
+          }
+        } catch (checkError) {
+          console.error('Profile check error:', checkError);
+          profileComplete = false;
+        }
+
+        if (profileComplete) {
+          // User sudah setup lengkap, langsung ke dashboard
+          const token = jwt.sign(
+            { 
+              id: user.id, 
+              email: user.email, 
+              role: user.role 
+            },
+            process.env.JWT_SECRET || 'your_jwt_secret_key',
+            { expiresIn: '24h' }
+          );
+
+          const refreshToken = jwt.sign(
+            { id: user.id },
+            process.env.REFRESH_TOKEN_SECRET || 'your_refresh_secret',
+            { expiresIn: '7d' }
+          );
+
+          await saveSession(user.id, token, refreshToken, req);
+          
+          console.log('Redirecting to dashboard - role:', user.role);
+          res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/oauth-success?token=${token}&refreshToken=${refreshToken}&role=${user.role}&returning=true`);
+          return;
+        }
+      }
+
+      // User perlu memilih role dan input nomor induk
+      console.log('Redirecting to role setup');
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/oauth-role-setup?tempToken=${tempToken}&email=${encodeURIComponent(user.email)}&returning=${user.role_selected ? 'true' : 'false'}`);
+      
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/login?error=oauth_callback_failed`);
+    }
+  }
+);
+
+// Endpoint untuk menyimpan role selection dan nomor induk setelah OAuth
+app.post('/api/auth/oauth-complete-setup', async (req, res) => {
+  try {
+    console.log('=== Raw Request Body ===');
+    console.log('Full body:', req.body);
+    
+    const { tempToken, role, nomorInduk, namaLengkap, nikOrangtua } = req.body;
+
+    console.log('=== Destructured Values ===');
+    console.log('tempToken:', tempToken ? 'EXISTS (length: ' + tempToken.length + ')' : 'MISSING');
+    console.log('role:', role, '(type:', typeof role, ')');
+    console.log('nomorInduk:', nomorInduk, '(type:', typeof nomorInduk, ')');
+    console.log('namaLengkap:', namaLengkap, '(type:', typeof namaLengkap, ')');
+    console.log('nikOrangtua:', nikOrangtua, '(type:', typeof nikOrangtua, ')');
+
+    // Validasi input step by step
+    if (!tempToken) {
+      console.log('❌ VALIDATION FAILED: Missing tempToken');
+      return res.status(400).json({ message: 'Token tidak valid' });
+    }
+
+    if (!role) {
+      console.log('❌ VALIDATION FAILED: Missing role');
+      return res.status(400).json({ message: 'Role wajib diisi' });
+    }
+
+    if (!nomorInduk) {
+      console.log('❌ VALIDATION FAILED: Missing nomorInduk');
+      return res.status(400).json({ message: 'Nomor induk wajib diisi' });
+    }
+
+    if (!namaLengkap) {
+      console.log('❌ VALIDATION FAILED: Missing namaLengkap');
+      return res.status(400).json({ message: 'Nama lengkap wajib diisi' });
+    }
+
+    console.log('✅ Basic validation passed');
+
+    // Validate role
+    if (!['siswa', 'guru', 'orangtua'].includes(role)) {
+      console.log('❌ VALIDATION FAILED: Invalid role:', role);
+      return res.status(400).json({ message: 'Role tidak valid' });
+    }
+
+    // Role-specific validation
+    if (role === 'siswa') {
+      if (!nikOrangtua) {
+        console.log('❌ VALIDATION FAILED: Missing nikOrangtua for siswa');
+        return res.status(400).json({ message: 'NIK orang tua wajib diisi untuk siswa' });
+      }
+      
+      if (typeof nikOrangtua !== 'string' || nikOrangtua.trim() === '') {
+        console.log('❌ VALIDATION FAILED: Invalid nikOrangtua format');
+        return res.status(400).json({ message: 'Format NIK orang tua tidak valid' });
+      }
+      
+      const cleanNik = nikOrangtua.trim();
+      if (cleanNik.length < 15 || cleanNik.length > 16 || !/^\d+$/.test(cleanNik)) {
+        console.log('❌ VALIDATION FAILED: NIK format validation failed');
+        console.log('NIK length:', cleanNik.length, 'NIK value:', cleanNik);
+        return res.status(400).json({ message: 'NIK orang tua harus 15-16 digit angka' });
+      }
+      
+      console.log('✅ Siswa-specific validation passed');
+    }
+
+    // Verify temp token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET || 'your_jwt_secret_key');
+      console.log('✅ Token verified for user:', decoded.id);
+    } catch (tokenError) {
+      console.log('❌ Token verification failed:', tokenError.message);
+      return res.status(400).json({ message: 'Token tidak valid atau expired' });
+    }
+    
+    if (!decoded.oauth) {
+      console.log('❌ Not an OAuth token');
+      return res.status(400).json({ message: 'Token bukan untuk OAuth' });
+    }
+
+    const userId = decoded.id;
+
+    console.log('🔄 Starting database transaction...');
+    await pool.query('BEGIN');
+
+    // Update user role dan status
+    await pool.query(
+      'UPDATE users SET role = $1, role_selected = $2, role_confirmation_date = CURRENT_TIMESTAMP WHERE id = $3',
+      [role, true, userId]
+    );
+    console.log('✅ User role updated');
+
+    // Insert ke tabel role-specific
+    if (role === 'siswa') {
+      // Cek apakah NIS sudah ada
+      const existingNis = await pool.query('SELECT id FROM siswa WHERE nis = $1', [nomorInduk]);
+      if (existingNis.rows.length > 0) {
+        console.log('❌ NIS already exists:', nomorInduk);
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ message: 'NIS sudah terdaftar' });
+      }
+
+      // Insert siswa dengan data lengkap
+      console.log('Inserting siswa data:', { userId, nomorInduk, namaLengkap, nikOrangtua });
+      await pool.query(
+        `INSERT INTO siswa (user_id, nis, nama_lengkap, nik_orangtua, registration_method) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId, nomorInduk, namaLengkap, nikOrangtua.trim(), 'oauth']
+      );
+      console.log('✅ Siswa data inserted successfully');
+
+    } else if (role === 'guru') {
+      const existingNuptk = await pool.query('SELECT id FROM guru WHERE nuptk = $1', [nomorInduk]);
+      if (existingNuptk.rows.length > 0) {
+        console.log('❌ NUPTK already exists:', nomorInduk);
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ message: 'NUPTK sudah terdaftar' });
+      }
+
+      await pool.query(
+        `INSERT INTO guru (user_id, nuptk, nama_lengkap, registration_method) 
+         VALUES ($1, $2, $3, $4)`,
+        [userId, nomorInduk, namaLengkap, 'oauth']
+      );
+      console.log('✅ Guru data inserted');
+
+    } else if (role === 'orangtua') {
+      const cleanNikOrangtua = nomorInduk.trim();
+      
+      const existingNikOrangtua = await pool.query('SELECT id FROM orangtua WHERE nik = $1', [cleanNikOrangtua]);
+      if (existingNikOrangtua.rows.length > 0) {
+        console.log('❌ NIK already exists in orangtua:', cleanNikOrangtua);
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ message: 'NIK sudah terdaftar sebagai orang tua' });
+      }
+
+      const nikRegisteredBySiswa = await pool.query('SELECT id, nama_lengkap FROM siswa WHERE nik_orangtua = $1', [cleanNikOrangtua]);
+      if (nikRegisteredBySiswa.rows.length === 0) {
+        console.log('❌ NIK not registered by any student:', cleanNikOrangtua);
+        await pool.query('ROLLBACK');
+        return res.status(400).json({ message: 'NIK tidak terdaftar oleh siswa manapun. Pastikan anak Anda sudah mendaftar terlebih dahulu.' });
+      }
+
+      await pool.query(
+        `INSERT INTO orangtua (user_id, nik, nama_lengkap, registration_method) 
+         VALUES ($1, $2, $3, $4)`,
+        [userId, cleanNikOrangtua, namaLengkap, 'oauth']
+      );
+      console.log('✅ Orangtua data inserted');
+    }
+
+    await pool.query('COMMIT');
+    console.log('✅ Transaction committed successfully');
+
+    // Generate final tokens
+    const token = jwt.sign(
+      { id: userId, email: decoded.email, role: role },
+      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      { expiresIn: '24h' }
+    );
+
+    const refreshToken = jwt.sign(
+      { id: userId },
+      process.env.REFRESH_TOKEN_SECRET || 'your_refresh_secret',
+      { expiresIn: '7d' }
+    );
+
+    console.log('✅ Tokens generated');
+
+    // Save session
+    await saveSession(userId, token, refreshToken, req);
+
+    console.log('🎉 OAuth setup completed successfully!');
+
+    res.json({
+      success: true,
+      token,
+      refreshToken,
+      role,
+      message: 'Setup berhasil! Selamat datang di MindaGrow.'
+    });
+
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('💥 OAuth complete setup error:', error);
+    
+    if (error.code === '23505') {
+      res.status(400).json({ message: 'Nomor induk sudah terdaftar' });
+    } else if (error.code === '23502') {
+      res.status(400).json({ message: 'Data wajib tidak lengkap - database constraint' });
+    } else if (error.name === 'JsonWebTokenError') {
+      res.status(400).json({ message: 'Token tidak valid' });
+    } else if (error.name === 'TokenExpiredError') {
+      res.status(400).json({ message: 'Token sudah expired, silakan login ulang' });
+    } else {
+      res.status(500).json({ message: 'Terjadi kesalahan server: ' + error.message });
+    }
+  }
+});
+
+// Endpoint untuk cek NIK orang tua (untuk validasi)
+app.post('/api/auth/check-nik-orangtua', async (req, res) => {
+  try {
+    const { nik } = req.body;
+
+    if (!nik) {
+      return res.status(400).json({ message: 'NIK wajib diisi' });
+    }
+
+    console.log('Checking NIK:', nik);
+
+    // Cek apakah NIK sudah terdaftar oleh siswa
+    const result = await pool.query(
+      'SELECT id, nama_lengkap, nis FROM siswa WHERE nik_orangtua = $1', 
+      [nik]
+    );
+    
+    if (result.rows.length > 0) {
+      res.json({ 
+        exists: true, 
+        message: 'NIK terdaftar oleh siswa',
+        siswa: result.rows.map(row => ({ 
+          id: row.id, 
+          nama: row.nama_lengkap,
+          nis: row.nis 
+        }))
+      });
+    } else {
+      res.json({ 
+        exists: false, 
+        message: 'NIK tidak terdaftar oleh siswa manapun' 
+      });
+    }
+  } catch (error) {
+    console.error('Error checking NIK orang tua:', error);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
+});
+
+// Helper functions untuk email notifications
+const sendVerificationCode = async (email, userId) => {
+  try {
+    const verificationCode = Math.floor(100000 + Math.random() * 900000); // 6 digit code
+    
+    // Simpan kode verifikasi di database (gunakan tabel temp_2fa_tokens sementara)
+    await pool.query(
+      'INSERT INTO temp_2fa_tokens (user_id, temp_token, expires_at) VALUES ($1, $2, $3)',
+      [userId, verificationCode.toString(), new Date(Date.now() + 10 * 60 * 1000)] // 10 menit
+    );
+
+    // TODO: Implementasi pengiriman email dengan service provider (SendGrid, Nodemailer, dll)
+    console.log(`Verification code for ${email}: ${verificationCode}`);
+    
+    // Untuk sementara simpan di notifications table
+    await pool.query(
+      'INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)',
+      [
+        userId,
+        'Kode Verifikasi Login Google',
+        `Kode verifikasi Anda: ${verificationCode}. Berlaku selama 10 menit.`,
+        'verification'
+      ]
+    );
+
+  } catch (error) {
+    console.error('Error sending verification code:', error);
+  }
+};
+
+const sendWelcomeEmail = async (email, user) => {
+  try {
+    // TODO: Implementasi pengiriman welcome email
+    console.log(`Welcome email sent to ${email}`);
+    
+    // Simpan di notifications
+    await pool.query(
+      'INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)',
+      [
+        user.id,
+        'Selamat Datang di MindaGrow!',
+        `Halo! Selamat datang di platform MindaGrow. Akun Anda telah berhasil terhubung dengan Google.`,
+        'welcome'
+      ]
+    );
+
+  } catch (error) {
+    console.error('Error sending welcome email:', error);
+  }
+};
 
 // ===============================
 // ADMIN ENDPOINTS

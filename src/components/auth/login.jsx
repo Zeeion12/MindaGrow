@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import TwoFactorSetup from './TwoFactorSetup';
 import TwoFactorVerify from './TwoFactorVerify';
 import LoginImage from '../../assets/login mindagrow.jpg';
+import GoogleLogin from './GoogleLogin';
 
 const Login = () => {
   const { login } = useAuth();
@@ -351,25 +352,28 @@ const Login = () => {
           </form>
 
           <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+            <div className="mt-4">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-gray-50 text-gray-500">Atau</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">
-                  Atau
-                </span>
-              </div>
-            </div>
 
-            <div className="mt-6">
-              <button
-                type="button"
-                className="w-full inline-flex justify-center items-center py-2 px-4 border border-gray-300 rounded-full shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-              >
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" className="h-5 w-5 mr-2" />
-                Masuk dengan Google
-              </button>
+              <div className="mt-4">
+                <GoogleLogin 
+                  onSuccess={(data) => {
+                    console.log('Google login success:', data);
+                  }}
+                  onError={(error) => {
+                    console.error('Google login error:', error);
+                    setError('Gagal masuk dengan Google. Silakan coba lagi.');
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
             </div>
 
             <div className="mt-6 text-center">
