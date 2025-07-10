@@ -176,4 +176,11 @@ router.get('/classes/:classId/assignments',
     assignmentController.getAssignmentsByClass
 );
 
+// Download assignment file
+router.get('/assignments/:assignmentId/download',
+    authenticateToken,
+    requireTeacherOrStudent,
+    assignmentController.downloadAssignment
+);
+
 module.exports = router;

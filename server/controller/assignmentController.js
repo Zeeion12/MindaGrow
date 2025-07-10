@@ -1,5 +1,9 @@
 const { Pool } = require('pg');
 const fs = require('fs');
+const path = require('path');
+
+
+
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
     host: process.env.DB_HOST || 'localhost',
@@ -497,7 +501,8 @@ exports.getAssignmentsByClass = async (req, res) => {
                     my_s.id as my_submission_id,
                     my_s.status as my_submission_status,
                     my_s.submitted_at as my_submitted_at,
-                    my_s.score as my_score
+                    my_s.score as my_score,
+                    my_s.file_url as my_submission_file_url
                 FROM assignments a
                 LEFT JOIN submissions s ON a.id = s.assignment_id
                 LEFT JOIN submissions my_s ON a.id = my_s.assignment_id AND my_s.student_id = $2
@@ -526,5 +531,152 @@ exports.getAssignmentsByClass = async (req, res) => {
             success: false,
             message: 'Terjadi kesalahan server saat mengambil daftar tugas.'
         });
+    }
+};
+
+// Download assignment file - FIXED VERSION
+exports.downloadAssignment = async (req, res) => {
+    const { assignmentId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    try {
+        // Get assignment info
+        const assignmentResult = await pool.query(`
+            SELECT 
+                a.*,
+                c.teacher_id
+            FROM assignments a
+            JOIN classes c ON a.class_id = c.id
+            WHERE a.id = $1 AND a.status = 'active'
+        `, [assignmentId]);
+
+        if (assignmentResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Tugas tidak ditemukan.'
+            });
+        }
+
+        const assignment = assignmentResult.rows[0];
+
+        // Validasi akses
+        let hasAccess = false;
+        if (userRole === 'guru' && assignment.teacher_id === userId) {
+            hasAccess = true;
+        } else if (userRole === 'siswa') {
+            const memberCheck = await pool.query(
+                'SELECT id FROM class_members WHERE class_id = $1 AND user_id = $2',
+                [assignment.class_id, userId]
+            );
+            hasAccess = memberCheck.rows.length > 0;
+        }
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: 'Anda tidak memiliki akses untuk mengunduh tugas ini.'
+            });
+        }
+
+        // Check if file exists
+        if (!assignment.file_url) {
+            return res.status(404).json({
+                success: false,
+                message: 'File tugas tidak tersedia.'
+            });
+        }
+
+        const filePath = path.join(__dirname, '..', assignment.file_url);
+
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'File tidak ditemukan di server.'
+            });
+        }
+
+        // Get original filename dan set proper headers
+        const stats = fs.statSync(filePath);
+        const originalFileName = path.basename(filePath);
+        const fileExtension = path.extname(originalFileName).toLowerCase();
+
+        // Set proper Content-Type based on file extension
+        let contentType = 'application/octet-stream';
+        switch (fileExtension) {
+            case '.pdf':
+                contentType = 'application/pdf';
+                break;
+            case '.doc':
+                contentType = 'application/msword';
+                break;
+            case '.docx':
+                contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                break;
+            case '.ppt':
+                contentType = 'application/vnd.ms-powerpoint';
+                break;
+            case '.pptx':
+                contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                break;
+            case '.jpg':
+            case '.jpeg':
+                contentType = 'image/jpeg';
+                break;
+            case '.png':
+                contentType = 'image/png';
+                break;
+            case '.gif':
+                contentType = 'image/gif';
+                break;
+            case '.zip':
+                contentType = 'application/zip';
+                break;
+            case '.rar':
+                contentType = 'application/x-rar-compressed';
+                break;
+            default:
+                contentType = 'application/octet-stream';
+        }
+
+        // Set headers untuk download yang benar
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${originalFileName.replace(/"/g, '\\"')}"`);
+        res.setHeader('Content-Length', stats.size);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+
+
+        // Send file
+        res.sendFile(filePath, {
+            headers: {
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${originalFileName.replace(/"/g, '\\"')}"`,
+                'Content-Length': stats.size,
+                'Cache-Control': 'no-cache'
+            }
+        }, (err) => {
+            if (err) {
+                console.error('Error sending assignment file:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        success: false,
+                        message: 'Terjadi kesalahan saat mengunduh file.'
+                    });
+                }
+            } else {
+                console.log('Assignment file downloaded successfully:', originalFileName);
+            }
+        });
+
+    } catch (error) {
+        console.error('Error downloading assignment:', error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: 'Terjadi kesalahan server saat mengunduh tugas.'
+            });
+        }
     }
 };

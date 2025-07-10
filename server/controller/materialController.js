@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 
+
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
     host: process.env.DB_HOST || 'localhost',
@@ -549,7 +550,7 @@ exports.getMaterialsByClass = async (req, res) => {
     }
 };
 
-// Download material file
+// Download material file - FIXED VERSION
 exports.downloadMaterial = async (req, res) => {
     const { materialId } = req.params;
     const userId = req.user.id;
@@ -611,22 +612,107 @@ exports.downloadMaterial = async (req, res) => {
             });
         }
 
-        // Set headers untuk download
-        const fileName = path.basename(filePath);
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        res.setHeader('Content-Type', 'application/octet-stream');
+        // Get original filename dan set proper headers
+        const stats = fs.statSync(filePath);
+        const originalFileName = path.basename(filePath);
+        const fileExtension = path.extname(originalFileName).toLowerCase();
 
-        // Stream file
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
+        // Set proper Content-Type based on file extension
+        let contentType = 'application/octet-stream';
+        switch (fileExtension) {
+            case '.pdf':
+                contentType = 'application/pdf';
+                break;
+            case '.doc':
+                contentType = 'application/msword';
+                break;
+            case '.docx':
+                contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                break;
+            case '.ppt':
+                contentType = 'application/vnd.ms-powerpoint';
+                break;
+            case '.pptx':
+                contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                break;
+            case '.xls':
+                contentType = 'application/vnd.ms-excel';
+                break;
+            case '.xlsx':
+                contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                break;
+            case '.txt':
+                contentType = 'text/plain';
+                break;
+            case '.jpg':
+            case '.jpeg':
+                contentType = 'image/jpeg';
+                break;
+            case '.png':
+                contentType = 'image/png';
+                break;
+            case '.gif':
+                contentType = 'image/gif';
+                break;
+            case '.webp':
+                contentType = 'image/webp';
+                break;
+            case '.mp4':
+                contentType = 'video/mp4';
+                break;
+            case '.avi':
+                contentType = 'video/x-msvideo';
+                break;
+            case '.mkv':
+                contentType = 'video/x-matroska';
+                break;
+            case '.mov':
+                contentType = 'video/quicktime';
+                break;
+            case '.webm':
+                contentType = 'video/webm';
+                break;
+            case '.zip':
+                contentType = 'application/zip';
+                break;
+            case '.rar':
+                contentType = 'application/x-rar-compressed';
+                break;
+            case '.7z':
+                contentType = 'application/x-7z-compressed';
+                break;
+            default:
+                contentType = 'application/octet-stream';
+        }
 
-        fileStream.on('error', (error) => {
-            console.error('Error streaming file:', error);
-            if (!res.headersSent) {
-                res.status(500).json({
-                    success: false,
-                    message: 'Terjadi kesalahan saat mengunduh file.'
-                });
+
+        // Set headers untuk download yang benar
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${originalFileName.replace(/"/g, '\\"')}"`);
+        res.setHeader('Content-Length', stats.size);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+
+
+        // Send file
+        res.sendFile(filePath, {
+            headers: {
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${originalFileName.replace(/"/g, '\\"')}"`,
+                'Content-Length': stats.size,
+                'Cache-Control': 'no-cache'
+            }
+        }, (err) => {
+            if (err) {
+                console.error('Error sending material file:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        success: false,
+                        message: 'Terjadi kesalahan saat mengunduh file.'
+                    });
+                }
+            } else {
+                console.log('Material file downloaded successfully:', originalFileName);
             }
         });
 

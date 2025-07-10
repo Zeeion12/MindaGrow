@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useAuth } from "../../context/authContext"
 import axios from "axios"
-import { format } from "date-fns" //npm install date-fns
+import { format } from "date-fns"
 
 import {
     LuBookOpen,
@@ -44,6 +44,13 @@ export default function EnhancedClassDetail() {
     const [showRemoveStudentModal, setShowRemoveStudentModal] = useState(null)
     const navigate = useNavigate()
     const { user } = useAuth()
+    const [showSubmissionModal, setShowSubmissionModal] = useState(false)
+    const [submissionForm, setSubmissionForm] = useState({
+        assignmentId: null,
+        comment: "",
+        file: null,
+    })
+    const [submissionLoading, setSubmissionLoading] = useState(false)
 
     // State untuk data kelas dari database
     const [classData, setClassData] = useState(null)
@@ -217,7 +224,7 @@ export default function EnhancedClassDetail() {
         }
     }
 
-    // Fungsi untuk mengambil data tugas
+    // Fungsi untuk mengambil data tugas - IMPROVED VERSION
     const fetchAssignments = async () => {
         try {
             const token = localStorage.getItem("token");
@@ -226,10 +233,46 @@ export default function EnhancedClassDetail() {
                     Authorization: `Bearer ${token}`,
                 },
             });
-            setAssignments(response.data.assignments);
+
+            console.log("Assignments response:", response.data); // Debug log
+
+            // Process assignments untuk siswa - tambahkan info submission
+            const assignmentsWithSubmissionInfo = response.data.assignments.map(assignment => {
+                let displayStatus = assignment.status;
+                let submissionInfo = null;
+
+                // Untuk siswa, cek status submission mereka
+                if (user?.role === "siswa") {
+                    // Cek apakah ada data submission dari backend
+                    if (assignment.my_submission_id) {
+                        submissionInfo = {
+                            id: assignment.my_submission_id,
+                            status: assignment.my_submission_status,
+                            submitted_at: assignment.my_submitted_at,
+                            score: assignment.my_score,
+                            file_url: assignment.my_submission_file_url // Jika ada
+                        };
+                        displayStatus = assignment.my_submission_status;
+                    } else {
+                        // Belum submit, cek apakah deadline sudah lewat
+                        const now = new Date();
+                        const dueDate = assignment.due_date ? new Date(assignment.due_date) : null;
+                        if (dueDate && dueDate < now && assignment.status === 'active') {
+                            displayStatus = 'overdue';
+                        }
+                    }
+                }
+
+                return {
+                    ...assignment,
+                    my_submission: submissionInfo,
+                    my_submission_status: displayStatus
+                };
+            });
+
+            setAssignments(assignmentsWithSubmissionInfo);
         } catch (error) {
             console.error("Error fetching assignments:", error);
-            // Handle error fetching assignments
         }
     };
 
@@ -247,6 +290,13 @@ export default function EnhancedClassDetail() {
             console.error("Error fetching materials:", error);
             // Handle error fetching materials
         }
+    };
+
+    // TAMBAHKAN function helper untuk file URL
+    const getFullFileUrl = (fileUrl) => {
+        if (!fileUrl) return null;
+        if (fileUrl.startsWith('http')) return fileUrl;
+        return `http://localhost:5000/${fileUrl}`;
     };
 
     // useEffect untuk fetch data saat component mount
@@ -354,6 +404,7 @@ export default function EnhancedClassDetail() {
 
             setShowAssignmentModal(false);
             await fetchAssignments(); // Refresh daftar tugas
+
 
         } catch (error) {
             console.error("Error creating assignment:", error);
@@ -466,6 +517,65 @@ export default function EnhancedClassDetail() {
         }
     };
 
+    // Handle submission assignment oleh siswa
+    const handleSubmitAssignment = (assignmentId) => {
+        setSubmissionForm({
+            assignmentId: assignmentId,
+            comment: "",
+            file: null,
+        })
+        setShowSubmissionModal(true)
+    }
+
+    const handleCreateSubmission = async () => {
+        if (!submissionForm.comment.trim()) {
+            alert("Komentar wajib diisi.");
+            return;
+        }
+
+        setSubmissionLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+
+            const formData = new FormData();
+            formData.append("comment", submissionForm.comment.trim());
+
+            if (submissionForm.file) {
+                formData.append("file", submissionForm.file);
+            }
+
+            const response = await axios.post(
+                `http://localhost:5000/api/assignments/${submissionForm.assignmentId}/submit`,
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }
+            );
+
+            alert(response.data.message || "Tugas berhasil dikumpulkan");
+
+            // Reset form
+            setSubmissionForm({
+                assignmentId: null,
+                comment: "",
+                file: null,
+            });
+
+            setShowSubmissionModal(false);
+            await fetchAssignments(); // Refresh daftar tugas
+
+        } catch (error) {
+            console.error("Error submitting assignment:", error);
+            const errorMessage = error.response?.data?.message || "Gagal mengumpulkan tugas. Silakan coba lagi.";
+            alert(errorMessage);
+        } finally {
+            setSubmissionLoading(false);
+        }
+    };
+
     // Ngambil warna status tugas
     const getStatusColor = (status) => {
         switch (status) {
@@ -515,47 +625,80 @@ export default function EnhancedClassDetail() {
     }
 
 
-    // Fungsi untuk mengunduh file
+    // Fungsi untuk mengunduh file - FIXED VERSION
     const handleDownloadFile = async (itemId, type) => {
         try {
             const token = localStorage.getItem("token");
             let url = '';
+
             if (type === 'assignment') {
                 url = `http://localhost:5000/api/assignments/${itemId}/download`;
             } else if (type === 'material') {
                 url = `http://localhost:5000/api/materials/${itemId}/download`;
+            } else if (type === 'submission') {
+                url = `http://localhost:5000/api/submissions/${itemId}/download`;
             } else {
+                console.error('Unknown download type:', type);
                 return;
             }
 
-            const response = await axios.get(url, {
+            console.log('Downloading from:', url);
+
+            // Gunakan fetch dengan proper headers untuk download
+            const response = await fetch(url, {
+                method: 'GET',
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    'Authorization': `Bearer ${token}`,
                 },
-                responseType: 'blob', // Penting untuk mengunduh file
             });
 
-            const contentDisposition = response.headers['content-disposition'];
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Get filename from Content-Disposition header
+            const contentDisposition = response.headers.get('content-disposition');
             let fileName = 'downloaded_file';
+
             if (contentDisposition) {
-                const fileNameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                const fileNameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
                 if (fileNameMatch && fileNameMatch[1]) {
-                    fileName = fileNameMatch[1];
+                    fileName = fileNameMatch[1].replace(/['"]/g, '');
                 }
             }
 
-            const blob = new Blob([response.data]);
+            // Get blob dari response
+            const blob = await response.blob();
+
+            // Create download link
             const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
+            const objectUrl = window.URL.createObjectURL(blob);
+            link.href = objectUrl;
             link.download = fileName;
+
+            // Trigger download
             document.body.appendChild(link);
             link.click();
+
+            // Cleanup
             document.body.removeChild(link);
+            window.URL.revokeObjectURL(objectUrl);
+
+            console.log('File downloaded successfully:', fileName);
+
         } catch (error) {
             console.error(`Error downloading ${type}:`, error);
-            alert(`Gagal mengunduh ${type}.`);
+
+            let errorMessage = `Gagal mengunduh ${type}.`;
+            if (error.message.includes('404')) {
+                errorMessage = `File ${type} tidak ditemukan.`;
+            } else if (error.message.includes('403')) {
+                errorMessage = `Anda tidak memiliki akses untuk mengunduh ${type} ini.`;
+            }
+
+            alert(errorMessage);
         }
-    }
+    };
 
     const handleViewAssignment = (assignment) => {
         setSelectedAssignment(assignment);
@@ -673,6 +816,7 @@ export default function EnhancedClassDetail() {
                             >
                                 Tugas Kelas
                             </button>
+
                             <button
                                 onClick={() => setActiveTab("materials")}
                                 className={`flex items-center justify-center font-medium ${activeTab === "materials" ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600" : "text-gray-600"}`}
@@ -883,6 +1027,8 @@ export default function EnhancedClassDetail() {
                                                             <LuEye className="w-4 h-4 mr-1" />
                                                             Lihat
                                                         </button>
+
+                                                        {/* DOWNLOAD ASSIGNMENT FILE - FIXED */}
                                                         {assignment.file_url && (
                                                             <button
                                                                 onClick={() => handleDownloadFile(assignment.id, 'assignment')}
@@ -892,6 +1038,8 @@ export default function EnhancedClassDetail() {
                                                                 Download
                                                             </button>
                                                         )}
+
+                                                        {/* GURU ACTIONS */}
                                                         {user?.role === "guru" && (
                                                             <button
                                                                 onClick={() => setShowDeleteAssignmentModal(assignment.id)}
@@ -901,11 +1049,39 @@ export default function EnhancedClassDetail() {
                                                                 Hapus
                                                             </button>
                                                         )}
-                                                        {user?.role === "siswa" && displayStatus !== "submitted" && displayStatus !== "graded" && (
-                                                            <button className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition">
-                                                                <LuPlusCircle className="w-4 h-4 mr-1" />
-                                                                Submit
-                                                            </button>
+
+                                                        {/* SISWA ACTIONS - FIXED LOGIC */}
+                                                        {user?.role === "siswa" && (
+                                                            <>
+                                                                {/* JIKA BELUM SUBMIT DAN BELUM OVERDUE */}
+                                                                {!assignment.my_submission && assignment.my_submission_status !== "overdue" && (
+                                                                    <button
+                                                                        onClick={() => handleSubmitAssignment(assignment.id)}
+                                                                        className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition"
+                                                                    >
+                                                                        <LuPlusCircle className="w-4 h-4 mr-1" />
+                                                                        Submit
+                                                                    </button>
+                                                                )}
+
+                                                                {/* JIKA SUDAH SUBMIT - DOWNLOAD SUBMISSION */}
+                                                                {assignment.my_submission && assignment.my_submission.file_url && (
+                                                                    <button
+                                                                        onClick={() => handleDownloadFile(assignment.my_submission.id, 'submission')}
+                                                                        className="flex items-center px-3 py-1.5 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 transition"
+                                                                    >
+                                                                        <LuDownload className="w-4 h-4 mr-1" />
+                                                                        My Submission
+                                                                    </button>
+                                                                )}
+
+                                                                {/* JIKA OVERDUE DAN BELUM SUBMIT */}
+                                                                {!assignment.my_submission && assignment.my_submission_status === "overdue" && (
+                                                                    <span className="text-xs text-red-600 px-3 py-1.5 bg-red-50 rounded-md border border-red-200">
+                                                                        Deadline terlewat
+                                                                    </span>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1693,15 +1869,24 @@ export default function EnhancedClassDetail() {
                             {selectedAssignment.file_url && (
                                 <div>
                                     <p className="font-medium">Lampiran:</p>
-                                    <a
-                                        href={selectedAssignment.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline flex items-center"
-                                    >
-                                        <LuPaperclip className="w-4 h-4 mr-1" />
-                                        Lihat Lampiran
-                                    </a>
+                                    <div className="flex space-x-2">
+                                        <a
+                                            href={getFullFileUrl(selectedAssignment.file_url)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline flex items-center"
+                                        >
+                                            <LuPaperclip className="w-4 h-4 mr-1" />
+                                            Lihat Lampiran
+                                        </a>
+                                        <button
+                                            onClick={() => handleDownloadFile(selectedAssignment.id, 'assignment')}
+                                            className="text-green-600 hover:underline flex items-center"
+                                        >
+                                            <LuDownload className="w-4 h-4 mr-1" />
+                                            Download
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                             {user?.role === "guru" && (
@@ -1773,15 +1958,24 @@ export default function EnhancedClassDetail() {
                             {selectedMaterial.file_url && (
                                 <div>
                                     <p className="font-medium">File Materi:</p>
-                                    <a
-                                        href={selectedMaterial.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline flex items-center"
-                                    >
-                                        <LuPaperclip className="w-4 h-4 mr-1" />
-                                        Lihat File
-                                    </a>
+                                    <div className="flex space-x-2">
+                                        <a
+                                            href={getFullFileUrl(selectedMaterial.file_url)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline flex items-center"
+                                        >
+                                            <LuPaperclip className="w-4 h-4 mr-1" />
+                                            Lihat File
+                                        </a>
+                                        <button
+                                            onClick={() => handleDownloadFile(selectedMaterial.id, 'material')}
+                                            className="text-green-600 hover:underline flex items-center"
+                                        >
+                                            <LuDownload className="w-4 h-4 mr-1" />
+                                            Download
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1792,6 +1986,104 @@ export default function EnhancedClassDetail() {
                                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                             >
                                 Tutup
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Submit Assignment untuk Siswa */}
+            {showSubmissionModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold">Submit Tugas</h3>
+                            <button onClick={() => setShowSubmissionModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                                <LuX className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Komentar/Jawaban <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={submissionForm.comment}
+                                    onChange={(e) => setSubmissionForm({ ...submissionForm, comment: e.target.value })}
+                                    placeholder="Tulis jawaban atau komentar untuk tugas ini..."
+                                    rows={4}
+                                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                    disabled={submissionLoading}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Lampiran File (Opsional)
+                                </label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        id="submission-file-upload"
+                                        onChange={(e) => setSubmissionForm({ ...submissionForm, file: e.target.files[0] })}
+                                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z"
+                                        disabled={submissionLoading}
+                                    />
+                                    <label htmlFor="submission-file-upload" className="cursor-pointer">
+                                        <div className="flex flex-col items-center">
+                                            <LuPaperclip className="w-8 h-8 text-gray-400 mb-3" />
+                                            {submissionForm.file ? (
+                                                <div className="text-center">
+                                                    <p className="text-sm font-medium text-gray-900 mb-1">
+                                                        {submissionForm.file.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {(submissionForm.file.size / 1024 / 1024).toFixed(2)} MB
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center">
+                                                    <p className="text-sm text-gray-600 mb-2">
+                                                        Klik untuk menambahkan file pendukung
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mb-3">
+                                                        Maksimal 10MB
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <span className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm">
+                                                {submissionForm.file ? 'Ganti File' : 'Pilih File'}
+                                            </span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                            <button
+                                onClick={() => setShowSubmissionModal(false)}
+                                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                disabled={submissionLoading}
+                            >
+                                Batal
+                            </button>
+                            <button
+                                onClick={handleCreateSubmission}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={submissionLoading}
+                            >
+                                {submissionLoading ? (
+                                    <div className="flex items-center">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                        Mengirim...
+                                    </div>
+                                ) : (
+                                    "Submit Tugas"
+                                )}
                             </button>
                         </div>
                     </div>

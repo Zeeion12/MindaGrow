@@ -11,6 +11,7 @@ const QRCode = require('qrcode');
 const Joi = require('joi');
 const session = require('express-session');
 
+
 const TwoFactorService = require('./services/TwoFactorService');
 
 require('dotenv').config();
@@ -55,7 +56,52 @@ const pool = new Pool({
 });
 
 // Static file serving
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, path, stat) => {
+    // Set proper Content-Type berdasarkan file extension
+    const ext = require('path').extname(path).toLowerCase();
+
+    switch (ext) {
+      case '.pdf':
+        res.setHeader('Content-Type', 'application/pdf');
+        break;
+      case '.jpg':
+      case '.jpeg':
+        res.setHeader('Content-Type', 'image/jpeg');
+        break;
+      case '.png':
+        res.setHeader('Content-Type', 'image/png');
+        break;
+      case '.gif':
+        res.setHeader('Content-Type', 'image/gif');
+        break;
+      case '.webp':
+        res.setHeader('Content-Type', 'image/webp');
+        break;
+      case '.mp4':
+        res.setHeader('Content-Type', 'video/mp4');
+        break;
+      case '.doc':
+        res.setHeader('Content-Type', 'application/msword');
+        break;
+      case '.docx':
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        break;
+      default:
+        res.setHeader('Content-Type', 'application/octet-stream');
+    }
+
+    // Untuk file yang bisa dibuka di browser (PDF, gambar, video)
+    if (['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4'].includes(ext)) {
+      res.setHeader('Content-Disposition', 'inline');
+    } else {
+      // Untuk file lain, trigger download
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+  }
+}));
 app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads', 'materials')));
 
 // Import and use courses router
@@ -73,6 +119,21 @@ app.use('/api', assignmentRoutes);
 // Material Routes
 const materialRoutes = require('./routes/materialRoutes');
 app.use('/api', materialRoutes);
+
+// Submission Routes
+const submissionRoutes = require('./routes/submissionRoutes');
+app.use('/api', submissionRoutes);
+
+// Serve static files untuk uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Error handler untuk file tidak ditemukan
+app.use('/uploads/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'File tidak ditemukan'
+  });
+});
 
 
 // Middleware for JWT authentication

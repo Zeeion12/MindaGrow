@@ -227,6 +227,7 @@ CREATE TABLE public.assignments (
     file_url character varying(500),
     status character varying(50) DEFAULT 'active'::character varying,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    allow_late_submission boolean DEFAULT true,
     CONSTRAINT chk_assignment_status CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'completed'::character varying, 'draft'::character varying])::text[])))
 );
 
@@ -807,19 +808,18 @@ CREATE TABLE public.submissions (
     id integer NOT NULL,
     assignment_id integer NOT NULL,
     student_id integer NOT NULL,
-    title character varying(255),
-    description text,
+    comment text NOT NULL,
     file_url character varying(500),
-    file_size character varying(20),
-    submitted_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     status character varying(50) DEFAULT 'submitted'::character varying,
     score integer,
     feedback text,
-    graded_at timestamp with time zone,
-    graded_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_score CHECK (((score >= 0) AND (score <= 100))),
+    submitted_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    graded_at timestamp without time zone,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    file_size character varying(20),
+    title character varying(255),
+    description text,
     CONSTRAINT chk_submission_status CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'submitted'::character varying, 'graded'::character varying, 'returned'::character varying])::text[])))
 );
 
@@ -1270,7 +1270,8 @@ INSERT INTO public.admin (id, nama, email, password, role, created_at, updated_a
 -- Data for Name: assignments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at) VALUES (1, 3, 14, 'test', 'test', '2025-07-11 23:00:00+07', 100, '2025-07-09 21:13:50.386394+07', 'uploads/assignments/assignment_1752070427027-320438278.pdf', 'active', '2025-07-09 21:13:50.386394+07');
+INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at, allow_late_submission) VALUES (1, 3, 14, 'test', 'test', '2025-07-11 23:00:00+07', 100, '2025-07-09 21:13:50.386394+07', 'uploads/assignments/assignment_1752070427027-320438278.pdf', 'inactive', '2025-07-10 09:19:09.057495+07', true);
+INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at, allow_late_submission) VALUES (2, 3, 14, 'Tugas Membuat Rangkuman IPA', 'Buka Halaman 24 dan rangkum sampai 27', '2025-07-10 23:00:00+07', 99, '2025-07-10 09:20:26.433382+07', 'uploads/assignments/assignment_1752114026069-649293788.pdf', 'active', '2025-07-10 09:20:26.433382+07', true);
 
 
 --
@@ -1707,6 +1708,17 @@ INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success,
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (341, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-09 16:39:51.39578');
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (342, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-09 17:32:23.795676');
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (343, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-09 17:32:35.092217');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (344, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-09 21:32:45.435958');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (345, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-09 21:32:57.956229');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (346, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-10 07:50:35.652958');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (347, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-10 07:50:48.613655');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (348, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-10 08:36:12.458221');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (349, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-10 09:15:05.400027');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (350, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-10 09:15:30.318665');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (351, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-10 09:18:49.83401');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (352, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-10 09:18:56.316266');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (353, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-10 09:22:58.589974');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (354, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-10 09:23:05.55014');
 
 
 --
@@ -1714,7 +1726,8 @@ INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success,
 --
 
 INSERT INTO public.materials (id, class_id, teacher_id, title, description, file_url, file_type, uploaded_at, status, updated_at, file_size) VALUES (1, 3, 14, 'Mikroba Dan Organisme', 'Test', 'uploads/materials/material_1752057241567-529112644.pdf', 'pdf', '2025-07-09 17:34:01.663+07', 'inactive', '2025-07-09 17:34:50.471943+07', '66.51 KB');
-INSERT INTO public.materials (id, class_id, teacher_id, title, description, file_url, file_type, uploaded_at, status, updated_at, file_size) VALUES (2, 3, 14, 'Test', 'test', 'uploads/materials/material_1752070547752-705730260.pdf', 'pdf', '2025-07-09 21:15:47.892329+07', 'active', '2025-07-09 21:15:47.892329+07', '66.51 KB');
+INSERT INTO public.materials (id, class_id, teacher_id, title, description, file_url, file_type, uploaded_at, status, updated_at, file_size) VALUES (2, 3, 14, 'Test', 'test', 'uploads/materials/material_1752070547752-705730260.pdf', 'pdf', '2025-07-09 21:15:47.892329+07', 'inactive', '2025-07-10 09:19:18.120578+07', '66.51 KB');
+INSERT INTO public.materials (id, class_id, teacher_id, title, description, file_url, file_type, uploaded_at, status, updated_at, file_size) VALUES (3, 3, 14, 'Materi IPA: Organisme dalam kehidupan', 'Kali ini kita akan belajar mengenai berbagai organisme dalam kehidupan disekitar kita', 'uploads/materials/material_1752114126157-465176162.pdf', 'pdf', '2025-07-10 09:22:06.274638+07', 'active', '2025-07-10 09:22:06.274638+07', '66.51 KB');
 
 
 --
@@ -1906,12 +1919,17 @@ INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (135, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUxOTY5OTI4LCJleHAiOjE3NTIwNTYzMjh9.gS2xdEOrqri5-ZEEcN9-CUokCuvjlzbAjSVTq8ACS9M', NULL, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36 Edg/138.0.0.0', '2025-07-09 17:18:48.669', '2025-07-08 17:18:48.670806', '2025-07-08 17:18:48.670806', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (136, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUxOTcwNDIwLCJleHAiOjE3NTIwNTY4MjB9.N3sZDo9u171e3KvxPbO-X722iAPV6ZigWBVj2gdt0FQ', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-09 17:27:00.226', '2025-07-08 17:27:00.235794', '2025-07-08 18:28:35.438054', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (137, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTE5NzQxNDUsImV4cCI6MTc1MjA2MDU0NX0.SE-CsyEj4fm_pStIfTbj799gvcnjC1eh1W9255aAZ1c', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-09 18:29:05.764', '2025-07-08 18:29:05.766429', '2025-07-08 18:29:05.766429', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (144, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMDcxNTc3LCJleHAiOjE3NTIxNTc5Nzd9.lbZPzXiywtJFvQnJypqgwZIB1PDyf4s6naOXf09cX9U', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 21:32:57.995', '2025-07-09 21:32:57.997213', '2025-07-09 21:32:57.997213', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (145, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMTA4NjQ4LCJleHAiOjE3NTIxOTUwNDh9.ofKorRjq_FzgsBgoIj3l4iBi21dbGSMuxswprcrA-68', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 07:50:48.621', '2025-07-10 07:50:48.623677', '2025-07-10 07:50:48.623677', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (138, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMDI4MzEyLCJleHAiOjE3NTIxMTQ3MTJ9.sZnJXlCXr-jMD9CZMESTA3-FVSO55LDoeH9QXz-9d_A', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 09:31:52.614', '2025-07-09 09:31:52.619572', '2025-07-09 11:24:23.878409', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (139, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMDQxNzEwLCJleHAiOjE3NTIxMjgxMTB9.4kqL4HCy8dHEy6u1D_FUOUpKbciLKXXeYoXft9r9AbE', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 13:15:10.351', '2025-07-09 13:15:10.352651', '2025-07-09 13:16:22.349991', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (140, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTIwNDI2MzcsImV4cCI6MTc1MjEyOTAzN30.F08oPJ_jGYEAaP3YGDVybzbYicpzdVJhfYq_4LZQFCM', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 13:30:37.882', '2025-07-09 13:30:37.883577', '2025-07-09 15:39:02.627149', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (141, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMDUwNDM2LCJleHAiOjE3NTIxMzY4MzZ9.udMHscoEcEjZU7V4__vmyQ9iiiAco4KzMVG1jj1ZlfA', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 15:40:36.338', '2025-07-09 15:40:36.340644', '2025-07-09 15:40:36.340644', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (142, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMDUzOTkxLCJleHAiOjE3NTIxNDAzOTF9.mYuWSHf79_O7sKa3j8F401WUlToaBsWq9pvnHPLP6ME', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 16:39:51.401', '2025-07-09 16:39:51.402104', '2025-07-09 17:32:19.826526', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (143, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTIwNTcxNTUsImV4cCI6MTc1MjE0MzU1NX0._AtKMbHSWPZcFJIiqwFQ_-hVLiyfpNcrafcaUk3X1wg', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-10 17:32:35.098', '2025-07-09 17:32:35.100224', '2025-07-09 17:32:35.100224', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (146, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMTEzNzMwLCJleHAiOjE3NTIyMDAxMzB9.Yk4VjmuA4_5Npf1AzQ6zOp_UPJW1xnYL57kfv_QS3eA', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 09:15:30.328', '2025-07-10 09:15:30.330577', '2025-07-10 09:18:43.955124', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (147, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTIxMTM5MzYsImV4cCI6MTc1MjIwMDMzNn0.USYTb5rJ_VbGa78hER6Q-_yKUHXC3y1P-0yND5kAbn4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 09:18:56.322', '2025-07-10 09:18:56.323837', '2025-07-10 09:22:51.738256', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (148, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMTE0MTg1LCJleHAiOjE3NTIyMDA1ODV9.LDWNU7AmSMSEERv60Sr0v80YAvCHe5661vqCujKRwPg', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 09:23:05.554', '2025-07-10 09:23:05.555296', '2025-07-10 09:23:05.555296', true);
 
 
 --
@@ -1932,8 +1950,8 @@ INSERT INTO public.users (id, email, password, role, created_at, last_login, pro
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (5, 'ros@gmail.com', '$2b$10$Uc4yBIVgBocnkP6W/3ituel4Z.8ypaJeKn.avWfOc8.dl/ZfCF5Py', 'guru', '2025-05-09 11:44:14.150172+07', '2025-06-26 22:39:25.178667+07', NULL, true, 'NVFXCTKGLBGEEMDDIVBXEQDIFFGES6KWGQ6HOMTHIIYUA4COPV3A', NULL, NULL);
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (1, 'dimasrizky822@gmail.com', '$2b$10$3UaVMWehk2G7irXhlLw7I.9xnDXqIZqBzKRAhoTpr9IG/s73qW4hS', 'siswa', '2025-05-07 20:48:22.124923+07', '2025-06-29 14:48:42.179288+07', 'uploads/profile-pictures/profile_1_1750688863556.jpeg', true, 'JRKXEOSBJJFWINJPIA4CSQROIEXE2T3ZMV2X23JGMRYSMWRDMFYQ', NULL, '2025-06-29 14:48:42.179288');
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (6, 'nafis@gmail.com', '$2b$10$Q4Vuf/yYl6SOisWi5fP7yu32E1PTfO0UNnzp87aKKKGBi/Vg03AyK', 'siswa', '2025-05-11 02:21:14.196755+07', '2025-06-16 07:55:37.582099+07', NULL, false, NULL, NULL, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (2, 'tio@gmail.com', '$2b$10$7LULZ7RBZftd/M9t9zyJdu7ywx8qifCYEqMzuGp2l/oJ9Okqzm4fu', 'siswa', '2025-05-08 15:12:19.104442+07', '2025-07-09 16:39:51.391453+07', 'uploads/profile-pictures/profile_2_1751815244629.png', true, 'M5CUUUZ6HFQV26B6FFTXGOJMMRPHINCWHY4TSRKIJQYUWN3DKRFQ', NULL, '2025-07-09 16:39:51.391453');
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (14, 'Siti.Amh123@gmail.com', '$2b$10$uXPVa/lQuEbZs3RR8naQReGdN2sfNeuxoROdu/qK1INRLVC6JvXxK', 'guru', '2025-07-06 23:10:42.212824+07', '2025-07-09 17:32:35.087634+07', NULL, true, 'INZE6UTSFQUWCR3LKQXT6QZONVNE6KSCLZYVONKDN4VEM3J2OBVQ', NULL, '2025-07-09 17:32:35.087634');
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (14, 'Siti.Amh123@gmail.com', '$2b$10$uXPVa/lQuEbZs3RR8naQReGdN2sfNeuxoROdu/qK1INRLVC6JvXxK', 'guru', '2025-07-06 23:10:42.212824+07', '2025-07-10 09:18:56.314109+07', NULL, true, 'INZE6UTSFQUWCR3LKQXT6QZONVNE6KSCLZYVONKDN4VEM3J2OBVQ', NULL, '2025-07-10 09:18:56.314109');
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify) VALUES (2, 'tio@gmail.com', '$2b$10$7LULZ7RBZftd/M9t9zyJdu7ywx8qifCYEqMzuGp2l/oJ9Okqzm4fu', 'siswa', '2025-05-08 15:12:19.104442+07', '2025-07-10 09:23:05.546088+07', 'uploads/profile-pictures/profile_2_1751815244629.png', true, 'M5CUUUZ6HFQV26B6FFTXGOJMMRPHINCWHY4TSRKIJQYUWN3DKRFQ', NULL, '2025-07-10 09:23:05.546088');
 
 
 --
@@ -1961,7 +1979,7 @@ SELECT pg_catalog.setval('public.admin_id_seq', 4, true);
 -- Name: assignments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.assignments_id_seq', 1, true);
+SELECT pg_catalog.setval('public.assignments_id_seq', 2, true);
 
 
 --
@@ -2038,14 +2056,14 @@ SELECT pg_catalog.setval('public.lessons_id_seq', 1, false);
 -- Name: login_attempts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.login_attempts_id_seq', 343, true);
+SELECT pg_catalog.setval('public.login_attempts_id_seq', 354, true);
 
 
 --
 -- Name: materials_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.materials_id_seq', 2, true);
+SELECT pg_catalog.setval('public.materials_id_seq', 3, true);
 
 
 --
@@ -2073,7 +2091,7 @@ SELECT pg_catalog.setval('public.siswa_id_seq', 4, true);
 -- Name: submissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.submissions_id_seq', 1, false);
+SELECT pg_catalog.setval('public.submissions_id_seq', 2, true);
 
 
 --
@@ -2101,7 +2119,7 @@ SELECT pg_catalog.setval('public.user_achievements_id_seq', 1, false);
 -- Name: user_sessions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.user_sessions_id_seq', 143, true);
+SELECT pg_catalog.setval('public.user_sessions_id_seq', 148, true);
 
 
 --
@@ -2351,6 +2369,14 @@ ALTER TABLE ONLY public.temp_2fa_tokens
 
 
 --
+-- Name: submissions unique_assignment_student; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id);
+
+
+--
 -- Name: certificates unique_certificate; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2412,14 +2438,6 @@ ALTER TABLE ONLY public.modules
 
 ALTER TABLE ONLY public.user_sessions
     ADD CONSTRAINT unique_session_token UNIQUE (session_token);
-
-
---
--- Name: submissions unique_submission; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT unique_submission UNIQUE (assignment_id, student_id);
 
 
 --
@@ -2570,31 +2588,17 @@ CREATE INDEX idx_modules_course ON public.modules USING btree (course_id);
 
 
 --
--- Name: idx_submissions_assignment; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_submissions_assignment_student; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_submissions_assignment ON public.submissions USING btree (assignment_id);
-
-
---
--- Name: idx_submissions_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_submissions_status ON public.submissions USING btree (status);
+CREATE INDEX idx_submissions_assignment_student ON public.submissions USING btree (assignment_id, student_id);
 
 
 --
--- Name: idx_submissions_student; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_submissions_status_created; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_submissions_student ON public.submissions USING btree (student_id);
-
-
---
--- Name: idx_submissions_submitted_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_submissions_submitted_at ON public.submissions USING btree (submitted_at);
+CREATE INDEX idx_submissions_status_created ON public.submissions USING btree (status, created_at);
 
 
 --
@@ -2707,13 +2711,6 @@ CREATE TRIGGER update_materials_updated_at BEFORE UPDATE ON public.materials FOR
 --
 
 CREATE TRIGGER update_modules_updated_at BEFORE UPDATE ON public.modules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: submissions update_submissions_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER update_submissions_updated_at BEFORE UPDATE ON public.submissions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -2946,14 +2943,6 @@ ALTER TABLE ONLY public.siswa
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT submissions_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
-
-
---
--- Name: submissions submissions_graded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_graded_by_fkey FOREIGN KEY (graded_by) REFERENCES public.users(id);
 
 
 --
