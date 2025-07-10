@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import TwoFactorSetup from './TwoFactorSetup';
 import TwoFactorVerify from './TwoFactorVerify';
 import LoginImage from '../../assets/login mindagrow.jpg';
-import GoogleLogin from './GoogleLogin';
 
 const Login = () => {
   const { login } = useAuth();
@@ -352,27 +351,9 @@ const Login = () => {
           </form>
 
           <div className="mt-6">
-            <div className="mt-4">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-gray-50 text-gray-500">Atau</span>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <GoogleLogin 
-                  onSuccess={(data) => {
-                    console.log('Google login success:', data);
-                  }}
-                  onError={(error) => {
-                    console.error('Google login error:', error);
-                    setError('Gagal masuk dengan Google. Silakan coba lagi.');
-                  }}
-                  disabled={isLoading}
-                />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
               </div>
             </div>
 

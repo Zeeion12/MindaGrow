@@ -6,8 +6,6 @@ import Register from './components/auth/Register';
 import Login from './components/auth/Login';
 import DashboardSiswa from './components/dashboard/DashboardSiswa';
 import DashboardLayout from './components/layout/DashboardLayout';
-import OAuthSuccess from './pages/OAuthSuccess';
-import OAuthRoleSetup from './pages/OAuthRoleSetup';
 
 //Import Khusus 2FA
 import TwoFactorSetup from './components/auth/TwoFactorSetup';
@@ -77,8 +75,6 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/2fa-setup" element={<TwoFactorSetup />} />
         <Route path="/2fa-verify" element={<TwoFactorVerify />} />
-        <Route path="/oauth-success" element={<OAuthSuccess />} />
-        <Route path="/oauth-role-setup" element={<OAuthRoleSetup />} />
 
 
         <Route path="/" element={<DashboardLayout />}>
