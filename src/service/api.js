@@ -1,81 +1,71 @@
-// src/services/api.js - FIXED VERSION
+// src/service/api.js - Updated with OpenAI Integration
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// URL untuk Flask backend (port 5001)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const CHATBOT_API_URL = 'http://localhost:5001/api';
 
-// Simplified interceptors - only log errors
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Create axios instance
+const api = axios.create({
+  baseURL: `${API_BASE_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json'
   }
-  return config;
 });
 
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status >= 400) {
-      console.error('❌ API Error:', error.response.status, error.config?.url);
-    }
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      localStorage.removeItem('user');
       window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
 
-// Course API - CLEAN VERSION
-export const courseAPI = {
-  getAllCourses: (params = {}) => api.get('/courses', { params }),
-  getCategories: () => api.get('/courses/categories'),
-  getCourseById: (id) => api.get(`/courses/${id}`),
-  enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
-  unenrollCourse: (courseId) => api.delete(`/courses/${courseId}/unenroll`),
-  getMyEnrolledCourses: () => api.get('/courses/my/enrolled'),
-  getMyCreatedCourses: () => api.get('/courses/my/created'),
-  createCourse: (courseData) => api.post('/courses', courseData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  updateCourse: (id, courseData) => api.put(`/courses/${id}`, courseData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  deleteCourse: (id) => api.delete(`/courses/${id}`),
-};
-
 // Auth API
 export const authAPI = {
-  login: (credentials) => api.post('/login', credentials),
-  register: (userData) => api.post('/register', userData),
-  validateSession: () => api.post('/auth/validate-session'),
+  login: (credentials) => api.post('/auth/login', credentials),
+  register: (userData) => api.post('/auth/register', userData),
   logout: () => api.post('/auth/logout'),
-  setup2FA: (tempToken) => api.post('/auth/setup-2fa', {}, { headers: { Authorization: `Bearer ${tempToken}` } }),
-  verifySetup: (token, tempToken) => api.post('/auth/verify-setup', { token }, { headers: { Authorization: `Bearer ${tempToken}` } }),
-  verify2FA: (data) => api.post('/auth/verify-2fa', data),
-  skip2FA: (tempToken) => api.post('/auth/skip-2fa', {}, { headers: { Authorization: `Bearer ${tempToken}` } }),
-  disable2FA: (data) => api.post('/auth/disable-2fa', data),
-  get2FAStatus: () => api.get('/user/2fa-status'),
-  checkNIK: (nik) => api.post('/check-nik', { nik }),
+  refreshToken: () => api.post('/auth/refresh'),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
+};
+
+// Course API
+export const courseAPI = {
+  getAllCourses: (filters = {}) => api.get('/courses', { params: filters }),
+  getCourseById: (id) => api.get(`/courses/${id}`),
+  createCourse: (courseData) => api.post('/courses', courseData),
+  updateCourse: (id, courseData) => api.put(`/courses/${id}`, courseData),
+  deleteCourse: (id) => api.delete(`/courses/${id}`),
+  enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
+  getEnrolledCourses: () => api.get('/courses/enrolled'),
 };
 
 // Admin API
 export const adminAPI = {
-  getUsers: () => api.get('/admin/users'),
+  getUsers: (params) => api.get('/admin/users', { params }),
   getUserById: (id) => api.get(`/admin/users/${id}`),
+  updateUser: (id, userData) => api.put(`/admin/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
   getStats: () => api.get('/admin/stats'),
-  getCourseStats: () => api.get('/admin/course-stats'),
   getActivities: () => api.get('/admin/activities'),
 };
 
@@ -92,11 +82,35 @@ export const userAPI = {
   deleteProfilePicture: () => api.delete('/users/profile-picture'),
 };
 
-// Chatbot API
+// Enhanced Chatbot API with OpenAI
 export const chatbotAPI = {
-  queryDataset: (question) => api.post('/dataset/query', { question }),
-  analyzeStudent: (nis) => api.get(`/student/${nis}/analysis`),
-  testConnection: () => api.get('/test')
+  // Chat dengan OpenAI
+  chatWithOpenAI: (messages, nis = null) => 
+    fetch(`${CHATBOT_API_URL}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, nis })
+    }).then(res => res.json()),
+  
+  // Query dataset
+  queryDataset: (question) => 
+    fetch(`${CHATBOT_API_URL}/dataset/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    }).then(res => res.json()),
+  
+  // Analisis siswa detail
+  analyzeStudent: (nis) => 
+    fetch(`${CHATBOT_API_URL}/student/${nis}/analysis`).then(res => res.json()),
+  
+  // Prediksi dan rekomendasi
+  getStudentPredictions: (nis) => 
+    fetch(`${CHATBOT_API_URL}/student/${nis}/predictions`).then(res => res.json()),
+  
+  // Test connection
+  testConnection: () => 
+    fetch(`${CHATBOT_API_URL}/test`).then(res => res.json())
 };
 
 // Fungsi untuk mengecek apakah pertanyaan adalah tentang dataset
@@ -104,7 +118,7 @@ export const isDatasetQuestion = (question) => {
   const datasetKeywords = [
     'siswa', 'skor', 'nilai', 'rata-rata', 'kuis', 'tugas', 'jumlah',
     'analisis', 'performa', 'mata pelajaran', 'mapel', 'tertinggi', 'terendah',
-    'statistik', 'data', 'berapa', 'semua', 'keseluruhan'
+    'statistik', 'data', 'berapa', 'semua', 'keseluruhan', 'prediksi'
   ];
   return datasetKeywords.some(keyword => question.toLowerCase().includes(keyword));
 };
@@ -112,20 +126,8 @@ export const isDatasetQuestion = (question) => {
 // Fungsi untuk query dataset ke Flask backend
 export const queryDataset = async (question) => {
   try {
-    const response = await fetch(`${CHATBOT_API_URL}/dataset/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ question })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.answer;
+    const response = await chatbotAPI.queryDataset(question);
+    return response.answer || 'Maaf, tidak dapat memproses pertanyaan saat ini.';
   } catch (error) {
     console.error('Error querying dataset:', error);
     return 'Maaf, tidak dapat mengakses data saat ini. Sistem sedang offline. 🔧';
@@ -135,29 +137,61 @@ export const queryDataset = async (question) => {
 // Fungsi untuk analisis siswa ke Flask backend
 export const analyzeStudent = async (nis) => {
   try {
-    const response = await fetch(`${CHATBOT_API_URL}/student/${nis}/analysis`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return { error: 'Siswa tidak ditemukan' };
-      }
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const response = await chatbotAPI.analyzeStudent(nis);
+    
+    if (!response.success) {
+      return { error: response.error || 'Siswa tidak ditemukan' };
     }
-
-    const data = await response.json();
-    return data;
+    
+    return {
+      success: true,
+      data: response.data,
+      formatted_response: response.formatted_response
+    };
   } catch (error) {
     console.error('Error analyzing student:', error);
     return { error: 'Maaf, terjadi kesalahan saat menganalisis data siswa.' };
   }
 };
 
-// Fungsi fallback untuk respon offline
+// Fungsi untuk mendapatkan prediksi siswa
+export const getStudentPredictions = async (nis) => {
+  try {
+    const response = await chatbotAPI.getStudentPredictions(nis);
+    
+    if (!response.success) {
+      return { error: response.error || 'Gagal mendapatkan prediksi' };
+    }
+    
+    return {
+      success: true,
+      predictions: response.predictions,
+      chart_recommendations: response.chart_recommendations,
+      formatted_response: response.formatted_response
+    };
+  } catch (error) {
+    console.error('Error getting predictions:', error);
+    return { error: 'Maaf, terjadi kesalahan saat menganalisis prediksi.' };
+  }
+};
+
+// Enhanced function dengan OpenAI
+export const sendMessageToOpenAI = async (messages, nis = null) => {
+  try {
+    const response = await chatbotAPI.chatWithOpenAI(messages, nis);
+    
+    if (!response.success) {
+      return getOfflineResponse(messages[messages.length - 1]?.content || '');
+    }
+    
+    return response.response;
+  } catch (error) {
+    console.error('Error with OpenAI:', error);
+    return getOfflineResponse(messages[messages.length - 1]?.content || '');
+  }
+};
+
+// Fungsi fallback untuk respon offline yang lebih baik
 const getOfflineResponse = (userMessage) => {
   const message = userMessage.toLowerCase();
 
@@ -168,7 +202,9 @@ const getOfflineResponse = (userMessage) => {
       "📚 Buat catatan kecil dengan kata-kata kunci untuk mudah diingat.",
       "🎯 Tetapkan target kecil setiap hari, seperti 'hari ini saya akan memahami 1 konsep baru'.",
       "👥 Belajar bersama teman bisa membuat proses belajar lebih menyenangkan!",
-      "🔄 Ulangi materi yang sudah dipelajari sebelumnya untuk memperkuat ingatan."
+      "🔄 Ulangi materi yang sudah dipelajari sebelumnya untuk memperkuat ingatan.",
+      "⏰ Gunakan teknik Pomodoro: 25 menit belajar, 5 menit istirahat!",
+      "🧠 Coba metode mind mapping untuk menghubungkan konsep-konsep yang dipelajari."
     ];
     return tips[Math.floor(Math.random() * tips.length)];
   }
@@ -179,62 +215,52 @@ const getOfflineResponse = (userMessage) => {
       "🔢 Untuk matematika: Mulai dari soal yang mudah, lalu naik ke yang lebih sulit.",
       "✏️ Tulis rumus-rumus penting di kartu kecil untuk sering dibaca.",
       "🧮 Gunakan benda di sekitar untuk memahami konsep hitungan.",
-      "📐 Latihan soal adalah kunci sukses matematika. Semakin banyak latihan, semakin paham!"
+      "📐 Latihan soal adalah kunci sukses matematika. Semakin banyak latihan, semakin paham!",
+      "🎯 Pahami konsep dasar dulu sebelum mengerjakan soal yang rumit.",
+      "👥 Diskusi dengan teman tentang cara menyelesaikan soal matematika."
     ];
     return mathTips[Math.floor(Math.random() * mathTips.length)];
   }
 
-  // Respon untuk sapaan
-  if (['halo', 'hai', 'hi', 'hello', 'hey'].includes(message.trim())) {
-    return "Halo! Saya RoGrow 🌱 Meski sedang offline, saya tetap bisa berbagi tips belajar yang menyenangkan! Tanyakan apa saja tentang belajar ya!";
+  // Respon untuk analisis/prediksi
+  if (message.includes('analisis') || message.includes('prediksi') || message.includes('performa')) {
+    return "📊 Untuk analisis dan prediksi yang akurat, masukkan NIS kamu dulu ya! Setelah itu saya bisa memberikan:\n• Analisis performa detail\n• Prediksi pola belajar\n• Rekomendasi berdasarkan chart dashboard\n• Tips personal sesuai kemampuan 🎯";
   }
 
-  // Respon default
+  // Respon untuk sapaan
+  if (['halo', 'hai', 'hi', 'hello', 'hey', 'p', 'hei'].includes(message.trim())) {
+    return "Halo! Saya RoGrow dengan teknologi OpenAI! 🤖✨\n\nMeski sedang offline, saya tetap bisa:\n• Berbagi tips belajar yang efektif\n• Memberikan motivasi belajar\n• Membantu dengan strategi pembelajaran\n\nTanyakan apa saja tentang belajar ya! 🌱";
+  }
+
+  // Respon untuk NIS
+  if (/^\d{6,8}$/.test(message.trim())) {
+    return `✅ NIS ${message.trim()} tercatat! Setelah sistem online, saya akan memberikan:\n🔍 Analisis performa lengkap\n📈 Prediksi berdasarkan chart dashboard\n🎯 Rekomendasi personal\n💡 Tips belajar yang disesuaikan\n\nSementara itu, tanyakan tips belajar ya! 📚`;
+  }
+
+  // Respon default yang lebih engaging
   const fallbackResponses = [
-    'Saya RoGrow! 🌱 Meski sedang offline, coba tanyakan tips belajar atau masukkan NIS untuk nanti dianalisis.',
-    'Halo! Sistem sedang offline, tapi saya bisa berbagi tips belajar yang menyenangkan! 📚',
-    'Yuk belajar bersama! Tanyakan tips untuk mata pelajaran apa pun. ✨',
-    'Wah, saya sedang offline nih! Tapi tetap bisa kasih tips belajar yang keren! 🤖'
+    'Saya RoGrow dengan AI OpenAI! 🤖 Meski offline, coba tanyakan tips belajar atau strategi pembelajaran efektif!',
+    'Halo! Sistem AI sedang offline, tapi saya bisa berbagi tips belajar yang amazing! 📚✨',
+    'Yuk belajar bersama! Tanyakan tips untuk mata pelajaran apa pun atau cara belajar yang fun! 🌟',
+    'Wah, saya sedang offline nih! Tapi tetap bisa kasih motivasi dan tips belajar yang keren! 🚀',
+    'AI OpenAI sedang istirahat, tapi semangat belajar jangan istirahat ya! Tanyakan tips belajar! 💪'
   ];
   return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
 };
 
-// Fungsi untuk menggunakan AI lokal (offline) - HAPUS GROQ API
-export const sendMessageToGroq = async (messages) => {
-  try {
-    // Ambil pesan user terakhir
-    const userMessage = messages[messages.length - 1]?.content || '';
-
-    // Gunakan respon offline yang sudah disediakan
-    return getOfflineResponse(userMessage);
-
-  } catch (error) {
-    console.error('Error in local AI response:', error);
-    return getOfflineResponse('');
-  }
-};
+// Backward compatibility (untuk komponen yang masih menggunakan nama lama)
+export const sendMessageToGroq = sendMessageToOpenAI;
 
 // Test koneksi ke Flask backend
 export const testFlaskConnection = async () => {
   try {
-    const response = await fetch(`${CHATBOT_API_URL}/test`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ Flask connection test:', data);
-    return data;
+    const response = await chatbotAPI.testConnection();
+    return response;
   } catch (error) {
-    console.error('❌ Flask connection failed:', error);
-    return null;
+    console.error('Flask connection test failed:', error);
+    return { status: 'error', message: 'Connection failed' };
   }
 };
 
+// Export default API instance
 export default api;

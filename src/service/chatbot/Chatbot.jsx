@@ -1,6 +1,6 @@
 "use client"
 
-import { sendMessageToGroq, isDatasetQuestion, queryDataset, analyzeStudent, testFlaskConnection } from '../api';
+import { sendMessageToOpenAI, isDatasetQuestion, queryDataset, analyzeStudent, getStudentPredictions, testFlaskConnection } from '../api';
 import { useState, useRef, useEffect } from "react"
 
 const Chatbot = ({ onClose }) => {
@@ -9,10 +9,11 @@ const Chatbot = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [nis, setNis] = useState(null)
   const [flaskConnected, setFlaskConnected] = useState(false)
+  const [studentData, setStudentData] = useState(null)
   const messagesEndRef = useRef(null)
-  const [pendingAvg, setPendingAvg] = useState(null); // { step: 1|2, subject: '', type: '' }
+  const [pendingAction, setPendingAction] = useState(null) // { type: 'analysis', 'predictions', 'subject_avg', data: {} }
 
-  // Daftar mapel dan jenis nilai untuk keperluan rata-rata nilai
+  // Daftar mata pelajaran
   const subjects = [
     { key: "mtk", label: "Matematika", backend: "MTK" },
     { key: "bindo", label: "Bahasa Indonesia", backend: "BINDO" },
@@ -20,12 +21,20 @@ const Chatbot = ({ onClose }) => {
     { key: "ipa", label: "IPA", backend: "IPA" },
     { key: "ips", label: "IPS", backend: "IPS" },
     { key: "pkn", label: "PKN", backend: "PKN" },
-    { key: "seni", label: "Seni", backend: "Seni" },
+    { key: "seni", label: "Seni Budaya", backend: "Seni" },
   ];
 
   const nilaiTypes = [
     { key: "quiz", label: "Kuis", backend: "Quiz" },
     { key: "tugas", label: "Tugas", backend: "Tugas" },
+  ];
+
+  // Quick actions untuk user
+  const quickActions = [
+    { icon: "🔍", text: "Analisis Performa", action: "analysis", disabled: !nis },
+    { icon: "🔮", text: "Prediksi Belajar", action: "predictions", disabled: !nis },
+    { icon: "📊", text: "Rata-rata Nilai", action: "average", disabled: false },
+    { icon: "💡", text: "Tips Belajar", action: "tips", disabled: false }
   ];
 
   // Auto-scroll ke pesan terbaru
@@ -40,7 +49,7 @@ const Chatbot = ({ onClose }) => {
         const result = await testFlaskConnection();
         if (result && result.status === 'success') {
           setFlaskConnected(true);
-          console.log('✅ Flask backend connected successfully:', result.message);
+          console.log('✅ Flask backend connected:', result.message);
         } else {
           setFlaskConnected(false);
           console.log('❌ Flask backend not connected');
@@ -53,9 +62,9 @@ const Chatbot = ({ onClose }) => {
 
     testConnection();
 
-    // Tambahkan pesan selamat datang
+    // Tambahkan pesan selamat datang yang lebih informatif
     const welcomeMessage = {
-      text: "Halo! Saya RoGrow, asisten AI Anda! 🌱\n\nSilakan:\n• Masukkan NIS Anda (contoh: 202301) untuk analisis personal\n• Tanyakan tentang data siswa dan pembelajaran (contoh: rata-rata nilai)\n• Minta tips belajar yang efektif\n\nApa yang ingin Anda ketahui?",
+      text: "Halo! Saya RoGrow dengan teknologi OpenAI! 🤖✨\n\n🌟 **Fitur Baru:**\n• Analisis performa siswa mendalam\n• Prediksi pola belajar berdasarkan chart\n• Rekomendasi personal untuk setiap mata pelajaran\n• Tips belajar yang disesuaikan dengan kemampuan\n\n📝 **Mulai dengan:**\n• Masukkan NIS Anda untuk analisis personal\n• Tanyakan tentang data siswa atau pembelajaran\n• Minta tips belajar yang efektif\n\nApa yang ingin Anda ketahui?",
       sender: "bot",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
     }
@@ -70,228 +79,248 @@ const Chatbot = ({ onClose }) => {
     try {
       const cleanMessage = userMessage.trim();
 
-      // Cek apakah input adalah NIS (format angka 6-8 digit)
+      // === NIS DETECTION & VALIDATION ===
       if (!nis && /^\d{6,8}$/.test(cleanMessage)) {
         setNis(cleanMessage)
-        return `✅ NIS ${cleanMessage} berhasil disimpan!\n\n🎯 Sekarang Anda bisa:\n• Ketik "analisis saya" atau "performa saya" untuk melihat hasil belajar\n• Tanyakan tips belajar untuk mata pelajaran tertentu\n• Tanyakan tentang data siswa secara umum`
+        
+        // Load student data jika Flask connected
+        if (flaskConnected) {
+          try {
+            const analysis = await analyzeStudent(cleanMessage);
+            if (analysis.success) {
+              setStudentData(analysis.data);
+              return `✅ **NIS ${cleanMessage} berhasil diidentifikasi!**\n\n👤 **Siswa:** ${analysis.data.nama}\n🎓 **Kelas:** ${analysis.data.kelas}\n\n🎯 **Sekarang Anda bisa:**\n• Ketik "analisis saya" untuk performa lengkap\n• Ketik "prediksi saya" untuk rekomendasi berdasarkan chart\n• Tanyakan tips belajar personal\n• Tanyakan tentang mata pelajaran tertentu\n\n✨ **AI OpenAI siap membantu pembelajaran Anda!**`;
+            }
+          } catch (error) {
+            console.error('Error loading student data:', error);
+          }
+        }
+        
+        return `✅ **NIS ${cleanMessage} tersimpan!**\n\n🎯 **Anda sekarang bisa:**\n• Ketik "analisis saya" untuk melihat performa lengkap\n• Ketik "prediksi saya" untuk rekomendasi chart-based\n• Tanyakan tips belajar yang dipersonalisasi\n• Tanyakan tentang mata pelajaran spesifik\n\n${flaskConnected ? '🟢 Sistem analisis online!' : '🟡 Mode terbatas - analisis akan tersedia saat sistem online'}`;
       }
 
       // === FLOW RATA-RATA NILAI ===
-      // Step 1: User tanya rata-rata nilai
-      if (pendingAvg?.step !== 2 && (
-        userMessage.toLowerCase().includes('rata-rata nilai') ||
-        userMessage.toLowerCase().includes('rata rata nilai') ||
-        userMessage.toLowerCase().includes('nilai rata-rata') ||
-        userMessage.toLowerCase().includes('nilai rata rata') ||
-        (userMessage.toLowerCase().includes('rata') && userMessage.toLowerCase().includes('nilai'))
-      )) {
-        if (!flaskConnected) {
-          return '⚠️ Maaf, sistem data sedang offline. Coba tanyakan tips belajar saja dulu ya! 📚\n\nContoh: "tips belajar matematika" atau "cara belajar efektif"'
-        }
-
-        setPendingAvg({ step: 1 });
-        return `📊 Rata-rata nilai mata pelajaran apa yang ingin Anda lihat?\n\nPilih salah satu:\n${subjects.map((s, index) => `${index + 1}. ${s.label}`).join('\n')}\n\nAtau ketik nama mata pelajarannya langsung! 😊`;
-      }
-
-      // Step 2: User pilih mapel
-      if (pendingAvg?.step === 1) {
+      if (pendingAction?.type === 'subject_selection') {
         let selectedSubject = null;
-
-        // Cek berdasarkan nomor
-        const num = parseInt(userMessage.trim());
+        const num = parseInt(cleanMessage);
+        
         if (num >= 1 && num <= subjects.length) {
           selectedSubject = subjects[num - 1];
         } else {
-          // Cek berdasarkan nama mata pelajaran
           selectedSubject = subjects.find(s =>
-            userMessage.toLowerCase().includes(s.key) ||
-            userMessage.toLowerCase().includes(s.label.toLowerCase()) ||
-            userMessage.toLowerCase().includes(s.backend.toLowerCase())
+            cleanMessage.toLowerCase().includes(s.key) ||
+            cleanMessage.toLowerCase().includes(s.label.toLowerCase()) ||
+            cleanMessage.toLowerCase().includes(s.backend.toLowerCase())
           );
         }
 
         if (selectedSubject) {
-          setPendingAvg({ step: 2, subject: selectedSubject });
-          return `📚 Anda memilih **${selectedSubject.label}**\n\nIngin melihat rata-rata nilai untuk:\n1. Kuis\n2. Tugas\n\nPilih nomor atau ketik "kuis" atau "tugas"! 📝`;
+          setPendingAction({ type: 'value_type_selection', subject: selectedSubject });
+          return `📚 **${selectedSubject.label} dipilih!**\n\nTipe nilai apa yang ingin dilihat?\n\n1. Kuis\n2. Tugas\n\nPilih nomor atau ketik "kuis"/"tugas"! 📝`;
         } else {
-          return `❌ Mata pelajaran tidak dikenali.\n\nSilakan pilih dengan mengetik:\n• Nomor (1-${subjects.length})\n• Nama mata pelajaran\n\nDaftar mata pelajaran:\n${subjects.map((s, index) => `${index + 1}. ${s.label}`).join('\n')}`;
+          return `❌ Mata pelajaran tidak dikenali.\n\nSilakan pilih:\n${subjects.map((s, index) => `${index + 1}. ${s.label}`).join('\n')}\n\nAtau ketik nama mata pelajarannya! 📚`;
         }
       }
 
-      // Step 3: User pilih jenis nilai
-      if (pendingAvg?.step === 2 && pendingAvg.subject) {
+      if (pendingAction?.type === 'value_type_selection') {
         let selectedType = null;
-
-        // Cek berdasarkan nomor
-        const num = parseInt(userMessage.trim());
-        if (num === 1) {
-          selectedType = nilaiTypes[0]; // Kuis
-        } else if (num === 2) {
-          selectedType = nilaiTypes[1]; // Tugas
-        } else {
-          // Cek berdasarkan nama
+        const num = parseInt(cleanMessage);
+        
+        if (num === 1) selectedType = nilaiTypes[0];
+        else if (num === 2) selectedType = nilaiTypes[1];
+        else {
           selectedType = nilaiTypes.find(t =>
-            userMessage.toLowerCase().includes(t.key) ||
-            userMessage.toLowerCase().includes(t.label.toLowerCase())
+            cleanMessage.toLowerCase().includes(t.key) ||
+            cleanMessage.toLowerCase().includes(t.label.toLowerCase())
           );
         }
 
         if (selectedType) {
-          const subject = pendingAvg.subject;
-          setPendingAvg(null); // Reset flow
+          const subject = pendingAction.subject;
+          setPendingAction(null);
 
-          // Query ke backend untuk rata-rata dari 30 siswa
+          if (!flaskConnected) {
+            return `📊 **${selectedType.label} ${subject.label}**\n\n⚠️ Sistem sedang offline, tidak bisa mengakses data real-time.\n\nTapi saya bisa memberikan tips belajar ${subject.label}! 💡`;
+          }
+
           try {
             const query = `rata-rata ${subject.backend} ${selectedType.backend} semua siswa`;
             const answer = await queryDataset(query);
-            return `📊 **Rata-rata ${selectedType.label} ${subject.label}** (dari 30 siswa):\n\n${answer}\n\n💡 **Tips**: Nilai ini adalah rata-rata dari seluruh siswa di dataset. Untuk melihat nilai personal, masukkan NIS Anda!`;
+            return `📊 **Rata-rata ${selectedType.label} ${subject.label}** (30 siswa):\n\n${answer}\n\n💡 **Info:** Data ini mencakup seluruh siswa. Untuk analisis personal, gunakan "analisis saya"!`;
           } catch (error) {
-            console.error('Error getting average:', error);
-            return `❌ Maaf, terjadi kesalahan saat mengambil data rata-rata ${selectedType.label} ${subject.label}. Coba lagi nanti ya! 🔧`;
+            return `❌ Gagal mengambil data ${selectedType.label} ${subject.label}. Coba lagi nanti! 🔧`;
           }
         } else {
-          return `❌ Jenis nilai tidak dikenali.\n\nSilakan pilih:\n1. Kuis\n2. Tugas\n\nAtau ketik "kuis" atau "tugas"`;
+          return `❌ Pilihan tidak dikenali.\n\nSilakan pilih:\n1. Kuis\n2. Tugas\n\nAtau ketik "kuis" atau "tugas"`;
         }
       }
-      // === END FLOW RATA-RATA NILAI ===
 
-      // Jika sudah ada NIS dan menanyakan performa/analisis personal
-      if (nis && (userMessage.toLowerCase().includes('performa') ||
-        userMessage.toLowerCase().includes('nilai saya') ||
-        userMessage.toLowerCase().includes('analisis saya') ||
-        userMessage.toLowerCase().includes('hasil saya'))) {
-
+      // === ANALISIS PERSONAL SISWA ===
+      if (nis && (cleanMessage.toLowerCase().includes('analisis saya') ||
+        cleanMessage.toLowerCase().includes('performa saya') ||
+        cleanMessage.toLowerCase().includes('hasil saya'))) {
+        
         if (!flaskConnected) {
-          return '⚠️ Maaf, sistem analisis sedang offline. Coba lagi nanti ya! 🔧\n\nSementara itu, saya bisa memberikan tips belajar umum!'
+          return '⚠️ **Sistem analisis sedang offline**\n\nSementara itu saya bisa:\n• Memberikan tips belajar umum\n• Berbagi strategi pembelajaran\n• Motivasi belajar\n\nTanyakan tips untuk mata pelajaran tertentu! 📚✨'
         }
 
         try {
           const analysis = await analyzeStudent(nis);
-
           if (analysis.error) {
-            return `❌ Maaf, ${analysis.error}.\n\nPastikan NIS sudah benar atau coba lagi nanti! 🤔`
+            return `❌ **${analysis.error}**\n\nPastikan NIS sudah benar atau coba lagi nanti! 🤔`;
           }
 
-          // Format response yang ramah untuk anak
-          let response = `📊 **Analisis Belajar untuk ${analysis.nama}**\n`;
-          response += `🆔 NIS: ${analysis.nis}\n\n`;
-          response += `🌟 **Mata Pelajaran Terkuat**: ${analysis.mata_pelajaran_terkuat}\n`;
-          response += `💪 **Perlu Ditingkatkan**: ${analysis.mata_pelajaran_terlemah}\n\n`;
-          response += `💡 **Saran Personal**:\n${analysis.rekomendasi}\n\n`;
-          response += `🎯 **Tips Tambahan**: Fokus pada ${analysis.mata_pelajaran_terlemah} dengan latihan rutin 15 menit setiap hari!`;
-
-          return response;
+          setStudentData(analysis.data);
+          return analysis.formatted_response;
         } catch (error) {
-          console.error('Error getting student analysis:', error);
+          console.error('Error getting analysis:', error);
           return '❌ Terjadi kesalahan saat menganalisis data. Coba lagi nanti ya! 🔧';
         }
       }
 
-      // Pertanyaan tentang dataset/data siswa umum (kecuali rata-rata yang sudah dihandle)
-      if (isDatasetQuestion(userMessage) && !userMessage.toLowerCase().includes('rata')) {
+      // === PREDIKSI BERDASARKAN CHART ===
+      if (nis && (cleanMessage.toLowerCase().includes('prediksi saya') ||
+        cleanMessage.toLowerCase().includes('prediksi belajar') ||
+        cleanMessage.toLowerCase().includes('rekomendasi chart'))) {
+        
         if (!flaskConnected) {
-          return '⚠️ Maaf, sistem data sedang offline. Coba tanyakan tips belajar saja dulu ya! 📚\n\nContoh: "tips belajar matematika" atau "cara belajar efektif"'
+          return '⚠️ **Sistem prediksi sedang offline**\n\nSementara itu, tips umum berdasarkan chart dashboard:\n\n📊 **Total Durasi Belajar:** Usahakan konsisten 45-60 menit/hari\n📈 **Rata-rata Skor:** Review materi yang skornya di bawah 75\n📚 **Mata Pelajaran Sering Diakses:** Variasikan dengan mapel yang jarang dibuka\n\nTanyakan tips spesifik ya! 💡'
         }
 
         try {
-          const answer = await queryDataset(userMessage);
-          return answer || '❌ Maaf, saya tidak bisa memproses pertanyaan tersebut saat ini.';
+          const predictions = await getStudentPredictions(nis);
+          if (predictions.error) {
+            return `❌ **${predictions.error}**\n\nCoba lagi nanti atau minta analisis umum dulu! 🤔`;
+          }
+
+          return predictions.formatted_response;
+        } catch (error) {
+          console.error('Error getting predictions:', error);
+          return '❌ Terjadi kesalahan saat menganalisis prediksi. Coba lagi nanti! 🔧';
+        }
+      }
+
+      // === RATA-RATA NILAI TRIGGER ===
+      if ((cleanMessage.toLowerCase().includes('rata-rata nilai') ||
+        cleanMessage.toLowerCase().includes('rata rata nilai') ||
+        cleanMessage.toLowerCase().includes('nilai rata-rata')) &&
+        !pendingAction) {
+        
+        setPendingAction({ type: 'subject_selection' });
+        return `📊 **Rata-rata nilai mata pelajaran mana yang ingin dilihat?**\n\n${subjects.map((s, index) => `${index + 1}. ${s.label}`).join('\n')}\n\nPilih nomor atau ketik nama mata pelajarannya! 😊`;
+      }
+
+      // === DATASET QUESTIONS ===
+      if (isDatasetQuestion(cleanMessage)) {
+        if (!flaskConnected) {
+          return '⚠️ **Sistem data sedang offline**\n\nSementara itu coba:\n• Tanyakan tips belajar\n• Minta motivasi pembelajaran\n• Strategi belajar efektif\n\nContoh: "tips belajar matematika" 📚✨'
+        }
+
+        try {
+          const answer = await queryDataset(cleanMessage);
+          return answer || '❌ Maaf, tidak bisa memproses pertanyaan tersebut saat ini.';
         } catch (error) {
           console.error('Error querying dataset:', error);
           return '❌ Terjadi kesalahan saat mengakses data. Coba lagi nanti! 🔧';
         }
       }
 
-      // Pertanyaan umum - gunakan AI assistant atau fallback responses
-      const response = await sendMessageToGroq([
-        {
-          role: 'system',
-          content: `You are RoGrow, a friendly AI learning assistant for Mindagrow educational platform. 
-          You help children aged 5-12 with learning guidance and study tips. 
-          Always respond in Indonesian, use encouraging language, and include relevant emojis. 
-          Never give direct answers to homework - instead provide learning strategies and tips.
-          Keep responses concise and child-friendly. Focus on motivation and learning techniques.`
-        },
-        { role: 'user', content: userMessage }
-      ]);
+      // === OPENAI CHAT UNTUK PERTANYAAN UMUM ===
+      const conversationHistory = messages.slice(-4).map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+      
+      conversationHistory.push({
+        role: 'user',
+        content: cleanMessage
+      });
 
+      const response = await sendMessageToOpenAI(conversationHistory, nis);
       return response;
 
     } catch (error) {
       console.error('Error getting bot response:', error)
-      return 'Maaf, saya sedang belajar juga! 🤖 Coba tanya yang lain ya!\n\nAtau ketik NIS Anda untuk analisis personal!'
+      return 'Maaf, saya sedang belajar juga! 🤖 Coba tanya yang lain ya!\n\n💡 **Saran:**\n• Masukkan NIS untuk analisis personal\n• Tanyakan tips belajar\n• Minta prediksi berdasarkan chart'
     }
   }
 
   const handleSendMessage = async (e) => {
     e.preventDefault()
-
-    if (input.trim() === "") return
+    if (!input.trim() || isLoading) return
 
     const userMessage = {
-      text: input,
+      text: input.trim(),
       sender: "user",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
     }
-    setMessages((prevMessages) => [...prevMessages, userMessage])
 
-    const currentInput = input;
+    setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
 
     try {
-      const botResponse = await getBotResponse(currentInput)
+      const botResponse = await getBotResponse(input.trim())
       const botMessage = {
         text: botResponse,
         sender: "bot",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       }
-      setMessages((prevMessages) => [...prevMessages, botMessage])
+      setMessages((prev) => [...prev, botMessage])
     } catch (error) {
-      console.error("Error:", error)
       const errorMessage = {
-        text: "Waduh, saya lagi bingung nih! 😅 Coba tanya yang lain ya!\n\nContoh pertanyaan:\n• Masukkan NIS (angka 6-8 digit)\n• Tips belajar matematika\n• Berapa jumlah siswa?\n• Rata-rata nilai",
+        text: "Maaf, terjadi kesalahan! Coba lagi ya! 😅",
         sender: "bot",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       }
-      setMessages((prevMessages) => [...prevMessages, errorMessage])
+      setMessages((prev) => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Quick action buttons
-  const quickActions = [
-    { text: "Tips Belajar", icon: "📚" },
-    { text: "Analisis Saya", icon: "📊", disabled: !nis },
-    { text: "Jumlah Siswa", icon: "👥" },
-    { text: "Rata-rata Nilai", icon: "📈" }
-  ];
+  const handleQuickAction = async (action) => {
+    let message = "";
+    
+    switch (action) {
+      case 'analysis':
+        message = "analisis saya";
+        break;
+      case 'predictions':
+        message = "prediksi saya";
+        break;
+      case 'average':
+        message = "rata-rata nilai";
+        break;
+      case 'tips':
+        message = "tips belajar efektif";
+        break;
+      default:
+        return;
+    }
 
-  const handleQuickAction = (actionText) => {
-    if (actionText === "Analisis Saya" && !nis) return;
-
-    setInput(actionText.toLowerCase());
-    // Auto submit after short delay
+    setInput(message);
+    // Auto-send the message
+    const syntheticEvent = { preventDefault: () => {} };
+    setInput(message);
     setTimeout(() => {
-      const fakeEvent = { preventDefault: () => { } };
-      handleSendMessage(fakeEvent);
+      handleSendMessage(syntheticEvent);
     }, 100);
-  };
+  }
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header Chatbot */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-400 text-white px-6 py-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center">
-          <div className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mr-4 shadow-lg">
-            <span className="text-2xl">🤖</span>
+    <div className="flex flex-col h-[600px] w-[400px] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-teal-600 text-white p-4 flex justify-between items-center">
+        <div className="flex items-center space-x-3">
+          <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+            🤖
           </div>
           <div>
-            <h3 className="font-bold text-lg">RoGrow AI Assistant</h3>
+            <h3 className="font-semibold text-lg">RoGrow AI</h3>
             <div className="flex items-center text-sm opacity-90">
               <div className={`h-2 w-2 ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'} rounded-full mr-2 animate-pulse`}></div>
-              <span>{flaskConnected ? 'Online & Ready' : 'Limited Mode'}</span>
+              <span>{flaskConnected ? 'OpenAI Ready' : 'Limited Mode'}</span>
               {nis && <span className="ml-2 bg-white/20 px-2 py-1 rounded-full text-xs">NIS: {nis}</span>}
             </div>
           </div>
@@ -308,40 +337,49 @@ const Chatbot = ({ onClose }) => {
 
       {/* Quick Actions */}
       {!isLoading && messages.length <= 2 && (
-        <div className="p-4 border-b border-gray-200 bg-white/50">
-          <p className="text-sm text-gray-600 mb-3">Aksi Cepat:</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+          <p className="text-sm text-gray-600 mb-3 font-medium">⚡ Aksi Cepat:</p>
+          <div className="grid grid-cols-2 gap-2">
             {quickActions.map((action, index) => (
               <button
                 key={index}
-                onClick={() => handleQuickAction(action.text)}
+                onClick={() => handleQuickAction(action.action)}
                 disabled={action.disabled}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-full text-sm transition-all duration-200 ${action.disabled
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200 hover:scale-105'
-                  }`}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+                  action.disabled
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-blue-100 hover:text-blue-700 shadow-sm hover:shadow-md hover:scale-105'
+                }`}
               >
                 <span>{action.icon}</span>
-                <span>{action.text}</span>
+                <span className="font-medium">{action.text}</span>
               </button>
             ))}
           </div>
+          {!nis && (
+            <div className="mt-3 p-2 bg-blue-100 rounded-lg">
+              <p className="text-xs text-blue-700">💡 Masukkan NIS untuk membuka fitur analisis personal!</p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Area Chat */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-4">
+      <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50">
         {messages.map((message, index) => (
           <div key={index} className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`flex items-end space-x-2 max-w-xs lg:max-w-md xl:max-w-lg ${message.sender === "user" ? "flex-row-reverse space-x-reverse" : ""}`}
+              className={`flex items-end space-x-2 max-w-xs lg:max-w-md xl:max-w-lg ${
+                message.sender === "user" ? "flex-row-reverse space-x-reverse" : ""
+              }`}
             >
               {/* Avatar */}
               <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.sender === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gradient-to-br from-green-400 to-blue-500 text-white"
-                  }`}
+                className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  message.sender === "user"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gradient-to-br from-purple-500 to-teal-500 text-white shadow-md"
+                }`}
               >
                 {message.sender === "user" ? "👤" : "🤖"}
               </div>
@@ -349,17 +387,88 @@ const Chatbot = ({ onClose }) => {
               {/* Message Bubble */}
               <div className="flex flex-col">
                 <div
-                  className={`px-4 py-3 rounded-2xl shadow-md ${message.sender === "user"
-                    ? "bg-blue-600 text-white rounded-br-md"
-                    : "bg-white text-gray-800 rounded-bl-md border border-gray-100"
-                    }`}
+                  className={`px-4 py-3 rounded-2xl shadow-md ${
+                    message.sender === "user"
+                      ? "bg-blue-600 text-white rounded-br-md"
+                      : "bg-white text-gray-800 rounded-bl-md border border-gray-100"
+                  }`}
                 >
                   <p className="text-sm leading-relaxed whitespace-pre-line">
-                    {message.text}
+                    {message.text.split('\n').map((line, index) => {
+                      // Format markdown-style text
+                      if (line.includes('**') && line.includes('**')) {
+                        // Bold text
+                        const parts = line.split('**');
+                        return (
+                          <span key={index}>
+                            {parts.map((part, i) => 
+                              i % 2 === 1 ? (
+                                <strong key={i} className="font-bold text-blue-700">{part}</strong>
+                              ) : (
+                                <span key={i}>{part}</span>
+                              )
+                            )}
+                            <br />
+                          </span>
+                        );
+                      }
+                      
+                      // Chart analysis headers
+                      if (line.includes('📊') || line.includes('📈') || line.includes('🔮')) {
+                        return (
+                          <div key={index} className="font-semibold text-purple-700 mt-2 mb-1">
+                            {line}
+                          </div>
+                        );
+                      }
+                      
+                      // Insights and actions
+                      if (line.includes('💡') || line.includes('🎯') || line.includes('⏱️')) {
+                        return (
+                          <div key={index} className="ml-3 text-gray-700 mb-1">
+                            {line}
+                          </div>
+                        );
+                      }
+                      
+                      // Subject details
+                      if (line.includes('🔢') || line.includes('📚') || line.includes('🌍') || 
+                          line.includes('🧪') || line.includes('🌏') || line.includes('🏛️') || 
+                          line.includes('🎨')) {
+                        return (
+                          <div key={index} className="bg-gray-50 p-2 rounded my-1 border-l-2 border-blue-300">
+                            {line}
+                          </div>
+                        );
+                      }
+                      
+                      // Priority items
+                      if (line.includes('• **Prioritas') || line.includes('• **Pertahankan')) {
+                        return (
+                          <div key={index} className="ml-4 p-2 bg-yellow-50 rounded border-l-2 border-yellow-400 my-1">
+                            {line}
+                          </div>
+                        );
+                      }
+                      
+                      // Target items
+                      if (line.includes('• Naikkan') || line.includes('• Konsisten') || line.includes('• Selesaikan')) {
+                        return (
+                          <div key={index} className="ml-4 p-2 bg-green-50 rounded border-l-2 border-green-400 my-1">
+                            {line}
+                          </div>
+                        );
+                      }
+                      
+                      // Regular line
+                      return <div key={index} className="mb-1">{line}</div>;
+                    })}
                   </p>
                 </div>
                 <span
-                  className={`text-xs text-gray-500 mt-1 ${message.sender === "user" ? "text-right" : "text-left"}`}
+                  className={`text-xs text-gray-500 mt-1 ${
+                    message.sender === "user" ? "text-right" : "text-left"
+                  }`}
                 >
                   {message.timestamp}
                 </span>
@@ -372,18 +481,18 @@ const Chatbot = ({ onClose }) => {
         {isLoading && (
           <div className="flex justify-start">
             <div className="flex items-end space-x-2 max-w-xs">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 text-white flex items-center justify-center flex-shrink-0">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
                 🤖
               </div>
               <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-md border border-gray-100">
                 <div className="flex space-x-1">
-                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce"></div>
                   <div
                     className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
                     style={{ animationDelay: "0.2s" }}
                   ></div>
                   <div
-                    className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
+                    className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"
                     style={{ animationDelay: "0.4s" }}
                   ></div>
                 </div>
@@ -393,6 +502,22 @@ const Chatbot = ({ onClose }) => {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Student Info Bar (jika ada data siswa) */}
+      {studentData && (
+        <div className="px-4 py-2 bg-gradient-to-r from-green-100 to-blue-100 border-t border-gray-200">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-2">
+              <span className="text-green-600 font-medium">📚 {studentData.nama}</span>
+              <span className="text-gray-500">•</span>
+              <span className="text-blue-600">🎯 {studentData.terkuat}</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              Avg: {studentData.overall_stats?.rata_rata_keseluruhan?.toFixed(1) || 'N/A'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form Input */}
       <div className="p-4 bg-white border-t border-gray-200">
@@ -404,37 +529,44 @@ const Chatbot = ({ onClose }) => {
               onChange={(e) => setInput(e.target.value)}
               placeholder={
                 nis
-                  ? "Tanyakan 'analisis saya', tips belajar, atau data siswa..."
-                  : "Masukkan NIS (6-8 digit), 'rata-rata nilai', atau tanyakan tips belajar..."
+                  ? "Tanyakan analisis, prediksi, atau tips belajar..."
+                  : "Masukkan NIS atau tanyakan sesuatu..."
               }
-              className="w-full py-3 px-4 pr-12 bg-gray-50 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
               disabled={isLoading}
             />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <span className="text-gray-400 text-sm">💬</span>
-            </div>
+            {!flaskConnected && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="h-2 w-2 bg-yellow-400 rounded-full animate-pulse" title="Limited Mode"></div>
+              </div>
+            )}
           </div>
           <button
             type="submit"
-            disabled={isLoading || input.trim() === ""}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
+            disabled={isLoading || !input.trim()}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-md hover:shadow-lg"
           >
-            <span>Kirim</span>
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+            {isLoading ? (
+              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            )}
           </button>
         </form>
-
+        
         {/* Status Info */}
-        <div className="mt-2 text-center">
-          <p className="text-xs text-gray-500">
-            {flaskConnected ? (
-              <span className="text-green-600">🟢 Sistem online - Semua fitur tersedia</span>
-            ) : (
-              <span className="text-yellow-600">🟡 Mode terbatas - Tips belajar tersedia</span>
-            )}
-          </p>
+        <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center space-x-2">
+            <span className={`h-2 w-2 rounded-full ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+            <span>{flaskConnected ? 'OpenAI + Data Analytics Ready' : 'Basic AI Mode (Tips & General Help)'}</span>
+          </div>
+          {nis && (
+            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
+              Student Mode Active
+            </span>
+          )}
         </div>
       </div>
     </div>
