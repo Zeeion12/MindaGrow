@@ -62,9 +62,9 @@ const Chatbot = ({ onClose }) => {
 
     testConnection();
 
-    // Tambahkan pesan selamat datang yang lebih informatif
+    // Tambahkan pesan selamat datang yang lebih ringkas
     const welcomeMessage = {
-      text: "Halo! Saya RoGrow dengan teknologi OpenAI! 🤖✨\n\n🌟 **Fitur Baru:**\n• Analisis performa siswa mendalam\n• Prediksi pola belajar berdasarkan chart\n• Rekomendasi personal untuk setiap mata pelajaran\n• Tips belajar yang disesuaikan dengan kemampuan\n\n📝 **Mulai dengan:**\n• Masukkan NIS Anda untuk analisis personal\n• Tanyakan tentang data siswa atau pembelajaran\n• Minta tips belajar yang efektif\n\nApa yang ingin Anda ketahui?",
+      text: "Halo! Saya RoGrow dengan teknologi OpenAI! 🤖✨\n\n🎯 **Mulai dengan:**\n• Masukkan NIS Anda untuk analisis personal\n• Tanyakan tentang data siswa atau pembelajaran\n• Minta tips belajar yang efektif\n\nApa yang ingin Anda ketahui?",
       sender: "bot",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
     }
@@ -309,264 +309,269 @@ const Chatbot = ({ onClose }) => {
   }
 
   return (
-    <div className="flex flex-col h-[600px] w-[400px] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-teal-600 text-white p-4 flex justify-between items-center">
-        <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
-            🤖
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">RoGrow AI</h3>
-            <div className="flex items-center text-sm opacity-90">
-              <div className={`h-2 w-2 ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'} rounded-full mr-2 animate-pulse`}></div>
-              <span>{flaskConnected ? 'OpenAI Ready' : 'Limited Mode'}</span>
-              {nis && <span className="ml-2 bg-white/20 px-2 py-1 rounded-full text-xs">NIS: {nis}</span>}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="flex flex-col h-[90vh] max-h-[700px] w-full max-w-[550px] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-teal-600 text-white p-4 flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
+              🤖
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">RoGrow AI</h3>
+              <div className="flex items-center text-sm opacity-90">
+                <div className={`h-2 w-2 ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'} rounded-full mr-2 animate-pulse`}></div>
+                <span>{flaskConnected ? 'OpenAI Ready' : 'Limited Mode'}</span>
+                {nis && <span className="ml-2 bg-white/20 px-2 py-1 rounded-full text-xs">NIS: {nis}</span>}
+              </div>
             </div>
           </div>
+          <button
+            onClick={onClose}
+            className="h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors duration-200"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors duration-200"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
 
-      {/* Quick Actions */}
-      {!isLoading && messages.length <= 2 && (
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
-          <p className="text-sm text-gray-600 mb-3 font-medium">⚡ Aksi Cepat:</p>
-          <div className="grid grid-cols-2 gap-2">
-            {quickActions.map((action, index) => (
-              <button
-                key={index}
-                onClick={() => handleQuickAction(action.action)}
-                disabled={action.disabled}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                  action.disabled
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-white text-gray-700 hover:bg-blue-100 hover:text-blue-700 shadow-sm hover:shadow-md hover:scale-105'
+        {/* Quick Actions - Wider Version */}
+        {!isLoading && messages.length <= 2 && (
+          <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+            <p className="text-sm text-gray-600 mb-3 font-medium">⚡ Aksi Cepat:</p>
+            <div className="grid grid-cols-4 gap-3">
+              {quickActions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleQuickAction(action.action)}
+                  disabled={action.disabled}
+                  className={`flex flex-col items-center space-y-1 px-3 py-3 rounded-lg text-sm transition-all duration-200 ${
+                    action.disabled
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-white text-gray-700 hover:bg-blue-100 hover:text-blue-700 shadow-sm hover:shadow-md hover:scale-105'
+                  }`}
+                >
+                  <span className="text-lg">{action.icon}</span>
+                  <span className="font-medium text-xs text-center leading-tight">{action.text}</span>
+                </button>
+              ))}
+            </div>
+            {!nis && (
+              <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+                <p className="text-sm text-blue-700">💡 Masukkan NIS untuk membuka fitur analisis personal!</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Area Chat - Wider */}
+        <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50">
+          {messages.map((message, index) => (
+            <div key={index} className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`flex items-end space-x-3 max-w-[90%] ${
+                  message.sender === "user" ? "flex-row-reverse space-x-reverse" : ""
                 }`}
               >
-                <span>{action.icon}</span>
-                <span className="font-medium">{action.text}</span>
-              </button>
-            ))}
-          </div>
-          {!nis && (
-            <div className="mt-3 p-2 bg-blue-100 rounded-lg">
-              <p className="text-xs text-blue-700">💡 Masukkan NIS untuk membuka fitur analisis personal!</p>
+                {/* Avatar - Normal Size */}
+                <div
+                  className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    message.sender === "user"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gradient-to-br from-purple-500 to-teal-500 text-white shadow-md"
+                  }`}
+                >
+                  {message.sender === "user" ? "👤" : "🤖"}
+                </div>
+
+                {/* Message Bubble - Wider */}
+                <div className="flex flex-col max-w-[450px]">
+                  <div
+                    className={`px-4 py-3 rounded-2xl shadow-md ${
+                      message.sender === "user"
+                        ? "bg-blue-600 text-white rounded-br-md"
+                        : "bg-white text-gray-800 rounded-bl-md border border-gray-100"
+                    }`}
+                  >
+                    <div className="text-sm leading-relaxed">
+                      {message.text.split('\n').map((line, lineIndex) => {
+                        // Format markdown-style text
+                        if (line.includes('**') && line.includes('**')) {
+                          // Bold text
+                          const parts = line.split('**');
+                          return (
+                            <div key={lineIndex} className="mb-2">
+                              {parts.map((part, i) => 
+                                i % 2 === 1 ? (
+                                  <span key={i} className={`font-bold ${message.sender === "user" ? "text-blue-100" : "text-blue-700"}`}>{part}</span>
+                                ) : (
+                                  <span key={i}>{part}</span>
+                                )
+                              )}
+                            </div>
+                          );
+                        }
+                        
+                        // Chart analysis headers
+                        if (line.includes('📊') || line.includes('📈') || line.includes('🔮')) {
+                          return (
+                            <div key={lineIndex} className={`font-semibold mt-3 mb-2 text-base ${message.sender === "user" ? "text-blue-100" : "text-purple-700"}`}>
+                              {line}
+                            </div>
+                          );
+                        }
+                        
+                        // Insights and actions
+                        if (line.includes('💡') || line.includes('🎯') || line.includes('⏱️')) {
+                          return (
+                            <div key={lineIndex} className={`ml-3 mb-2 ${message.sender === "user" ? "text-blue-100" : "text-gray-700"}`}>
+                              {line}
+                            </div>
+                          );
+                        }
+                        
+                        // Subject details - only for bot messages
+                        if (message.sender === "bot" && (line.includes('🔢') || line.includes('📚') || line.includes('🌍') || 
+                            line.includes('🧪') || line.includes('🌏') || line.includes('🏛️') || 
+                            line.includes('🎨'))) {
+                          return (
+                            <div key={lineIndex} className="bg-blue-50 p-3 rounded-lg my-2 border-l-4 border-blue-300">
+                              {line}
+                            </div>
+                          );
+                        }
+                        
+                        // Priority items - only for bot messages
+                        if (message.sender === "bot" && (line.includes('• **Prioritas') || line.includes('• **Pertahankan'))) {
+                          return (
+                            <div key={lineIndex} className="ml-3 p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-400 my-2">
+                              {line}
+                            </div>
+                          );
+                        }
+                        
+                        // Target items - only for bot messages
+                        if (message.sender === "bot" && (line.includes('• Naikkan') || line.includes('• Konsisten') || line.includes('• Selesaikan'))) {
+                          return (
+                            <div key={lineIndex} className="ml-3 p-3 bg-green-50 rounded-lg border-l-4 border-green-400 my-2">
+                              {line}
+                            </div>
+                          );
+                        }
+                        
+                        // Regular line
+                        return <div key={lineIndex} className="mb-1">{line}</div>;
+                      })}
+                    </div>
+                  </div>
+                  <span
+                    className={`text-xs text-gray-500 mt-1 ${
+                      message.sender === "user" ? "text-right" : "text-left"
+                    }`}
+                  >
+                    {message.timestamp}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Loading Animation */}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="flex items-end space-x-3 max-w-xs">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+                  🤖
+                </div>
+                <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-md border border-gray-100">
+                  <div className="flex space-x-1">
+                    <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce"></div>
+                    <div
+                      className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    ></div>
+                    <div
+                      className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.4s" }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
-      )}
 
-      {/* Area Chat */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50">
-        {messages.map((message, index) => (
-          <div key={index} className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`flex items-end space-x-2 max-w-xs lg:max-w-md xl:max-w-lg ${
-                message.sender === "user" ? "flex-row-reverse space-x-reverse" : ""
-              }`}
-            >
-              {/* Avatar */}
-              <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.sender === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gradient-to-br from-purple-500 to-teal-500 text-white shadow-md"
-                }`}
-              >
-                {message.sender === "user" ? "👤" : "🤖"}
+        {/* Student Info Bar - Wider */}
+        {studentData && (
+          <div className="px-4 py-3 bg-gradient-to-r from-green-100 to-blue-100 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-green-600 font-medium">📚 {studentData.nama}</span>
+                <span className="text-gray-500">•</span>
+                <span className="text-blue-600">🎯 Terkuat: {studentData.terkuat}</span>
+                <span className="text-gray-500">•</span>
+                <span className="text-orange-600">💪 Focus: {studentData.terlemah}</span>
               </div>
-
-              {/* Message Bubble */}
-              <div className="flex flex-col">
-                <div
-                  className={`px-4 py-3 rounded-2xl shadow-md ${
-                    message.sender === "user"
-                      ? "bg-blue-600 text-white rounded-br-md"
-                      : "bg-white text-gray-800 rounded-bl-md border border-gray-100"
-                  }`}
-                >
-                  <p className="text-sm leading-relaxed whitespace-pre-line">
-                    {message.text.split('\n').map((line, index) => {
-                      // Format markdown-style text
-                      if (line.includes('**') && line.includes('**')) {
-                        // Bold text
-                        const parts = line.split('**');
-                        return (
-                          <span key={index}>
-                            {parts.map((part, i) => 
-                              i % 2 === 1 ? (
-                                <strong key={i} className="font-bold text-blue-700">{part}</strong>
-                              ) : (
-                                <span key={i}>{part}</span>
-                              )
-                            )}
-                            <br />
-                          </span>
-                        );
-                      }
-                      
-                      // Chart analysis headers
-                      if (line.includes('📊') || line.includes('📈') || line.includes('🔮')) {
-                        return (
-                          <div key={index} className="font-semibold text-purple-700 mt-2 mb-1">
-                            {line}
-                          </div>
-                        );
-                      }
-                      
-                      // Insights and actions
-                      if (line.includes('💡') || line.includes('🎯') || line.includes('⏱️')) {
-                        return (
-                          <div key={index} className="ml-3 text-gray-700 mb-1">
-                            {line}
-                          </div>
-                        );
-                      }
-                      
-                      // Subject details
-                      if (line.includes('🔢') || line.includes('📚') || line.includes('🌍') || 
-                          line.includes('🧪') || line.includes('🌏') || line.includes('🏛️') || 
-                          line.includes('🎨')) {
-                        return (
-                          <div key={index} className="bg-gray-50 p-2 rounded my-1 border-l-2 border-blue-300">
-                            {line}
-                          </div>
-                        );
-                      }
-                      
-                      // Priority items
-                      if (line.includes('• **Prioritas') || line.includes('• **Pertahankan')) {
-                        return (
-                          <div key={index} className="ml-4 p-2 bg-yellow-50 rounded border-l-2 border-yellow-400 my-1">
-                            {line}
-                          </div>
-                        );
-                      }
-                      
-                      // Target items
-                      if (line.includes('• Naikkan') || line.includes('• Konsisten') || line.includes('• Selesaikan')) {
-                        return (
-                          <div key={index} className="ml-4 p-2 bg-green-50 rounded border-l-2 border-green-400 my-1">
-                            {line}
-                          </div>
-                        );
-                      }
-                      
-                      // Regular line
-                      return <div key={index} className="mb-1">{line}</div>;
-                    })}
-                  </p>
-                </div>
-                <span
-                  className={`text-xs text-gray-500 mt-1 ${
-                    message.sender === "user" ? "text-right" : "text-left"
-                  }`}
-                >
-                  {message.timestamp}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {/* Loading Animation */}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="flex items-end space-x-2 max-w-xs">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
-                🤖
-              </div>
-              <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-md shadow-md border border-gray-100">
-                <div className="flex space-x-1">
-                  <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce"></div>
-                  <div
-                    className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.2s" }}
-                  ></div>
-                  <div
-                    className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0.4s" }}
-                  ></div>
-                </div>
+              <div className="text-sm text-gray-600">
+                Rata-rata: {studentData.overall_stats?.rata_rata_keseluruhan?.toFixed(1) || 'N/A'}
               </div>
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Student Info Bar (jika ada data siswa) */}
-      {studentData && (
-        <div className="px-4 py-2 bg-gradient-to-r from-green-100 to-blue-100 border-t border-gray-200">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-2">
-              <span className="text-green-600 font-medium">📚 {studentData.nama}</span>
-              <span className="text-gray-500">•</span>
-              <span className="text-blue-600">🎯 {studentData.terkuat}</span>
+        {/* Form Input - Wider */}
+        <div className="p-4 bg-white border-t border-gray-200">
+          <form onSubmit={handleSendMessage} className="flex space-x-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={
+                  nis
+                    ? "Tanyakan analisis, prediksi, atau tips belajar..."
+                    : "Masukkan NIS atau tanyakan sesuatu..."
+                }
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                disabled={isLoading}
+              />
+              {!flaskConnected && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="h-2 w-2 bg-yellow-400 rounded-full animate-pulse" title="Limited Mode"></div>
+                </div>
+              )}
             </div>
-            <div className="text-xs text-gray-500">
-              Avg: {studentData.overall_stats?.rata_rata_keseluruhan?.toFixed(1) || 'N/A'}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Form Input */}
-      <div className="p-4 bg-white border-t border-gray-200">
-        <form onSubmit={handleSendMessage} className="flex space-x-3">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                nis
-                  ? "Tanyakan analisis, prediksi, atau tips belajar..."
-                  : "Masukkan NIS atau tanyakan sesuatu..."
-              }
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-              disabled={isLoading}
-            />
-            {!flaskConnected && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                <div className="h-2 w-2 bg-yellow-400 rounded-full animate-pulse" title="Limited Mode"></div>
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+            >
+              {isLoading ? (
+                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
+            </button>
+          </form>
+          
+          {/* Status Info - Enhanced */}
+          <div className="mt-3 flex items-center justify-between text-sm text-gray-500">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <span className={`h-2 w-2 rounded-full ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+                <span>{flaskConnected ? 'OpenAI + Data Analytics Ready' : 'Basic AI Mode (Tips & General Help)'}</span>
               </div>
+            </div>
+            {nis && (
+              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+                Student Mode Active
+              </span>
             )}
           </div>
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-md hover:shadow-lg"
-          >
-            {isLoading ? (
-              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            )}
-          </button>
-        </form>
-        
-        {/* Status Info */}
-        <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center space-x-2">
-            <span className={`h-2 w-2 rounded-full ${flaskConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
-            <span>{flaskConnected ? 'OpenAI + Data Analytics Ready' : 'Basic AI Mode (Tips & General Help)'}</span>
-          </div>
-          {nis && (
-            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-medium">
-              Student Mode Active
-            </span>
-          )}
         </div>
       </div>
     </div>

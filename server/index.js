@@ -10,7 +10,6 @@ const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const Joi = require('joi');
 
-
 const TwoFactorService = require('./services/TwoFactorService');
 
 require('dotenv').config();
@@ -27,6 +26,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -117,6 +117,8 @@ app.use('/uploads/*', (req, res) => {
   });
 });
 
+const gameRoutes = require('./routes/gameRoutes');
+app.use('/api/games', gameRoutes);
 
 // Middleware for JWT authentication
 const authenticateToken = (req, res, next) => {

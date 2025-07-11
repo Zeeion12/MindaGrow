@@ -21,8 +21,7 @@ import ClassMainUI from './pages/kelas/ClassMainUI';
 import ClassDetailUI from './pages/kelas/ClassDetailUI';
 
 // Import komponen game
-import GameMainUI from './pages/games/GameMainUI';
-import GameContainer from './pages/games/GameContainer';
+import GamePage from './pages/games/GamePage';
 
 // Import komponen notifikasi siswa
 import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
@@ -134,17 +133,7 @@ function App() {
           } />
 
           {/* Route khusus game */}
-          <Route path="/game" element={
-            <ProtectedRoute allowedRoles={['siswa']}>
-              <GameMainUI />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/game/:gameId" element={
-            <ProtectedRoute allowedRoles={['siswa']}>
-              <GameContainer />
-            </ProtectedRoute>
-          } />
+          <Route path="/game" element={<GamePage />} />
 
           {/*Route khusus Noitf Siswa*/}
           <Route path="/notifikasi" element={
