@@ -1,4 +1,4 @@
-import { useAuth } from '../../context/authContext';
+import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -100,8 +100,6 @@ export default function ClassMainUI() {
                     'Content-Type': 'application/json'
                 }
             })
-
-            console.log("Student classes response:", response.data)
 
             // Map data backend ke struktur frontend
             const mappedClasses = response.data.classes.map(cls => {

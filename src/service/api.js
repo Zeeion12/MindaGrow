@@ -51,12 +51,21 @@ export const authAPI = {
 // Course API
 export const courseAPI = {
   getAllCourses: (filters = {}) => api.get('/courses', { params: filters }),
+  getCategories: () => {
+    return api.get('/courses/categories');
+  },
   getCourseById: (id) => api.get(`/courses/${id}`),
   createCourse: (courseData) => api.post('/courses', courseData),
   updateCourse: (id, courseData) => api.put(`/courses/${id}`, courseData),
   deleteCourse: (id) => api.delete(`/courses/${id}`),
   enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
   getEnrolledCourses: () => api.get('/courses/enrolled'),
+};
+
+export const gameAPI = {
+  getProgress: () => api.get('/games/progress'),
+  completeGame: (data) => api.post('/games/complete', data),
+  getUserStreak: () => api.get('/users/streak')
 };
 
 // Admin API

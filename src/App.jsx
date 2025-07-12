@@ -50,7 +50,7 @@ import AdminCourseManagement from './pages/Admin/AdminCoursesManagement';
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
 import Chatbot from './service/chatbot/Chatbot'
-import { AuthProvider, useAuth } from './context/authContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
