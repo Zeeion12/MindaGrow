@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/authContext';
 import Header from '../layout/layoutParts/Header';
 import axios from 'axios';
+
 
 const DashboardGuru = () => {
   const { user } = useAuth();
@@ -12,27 +13,66 @@ const DashboardGuru = () => {
   const [recentMessages, setRecentMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // TAMBAHKAN STATE BARU INI:
+  const [dashboardStats, setDashboardStats] = useState({
+    totalClasses: 0,
+    totalStudents: 0,
+    pendingGrades: 0,
+    unreadMessages: 0
+  });
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        
-        // Dalam implementasi sebenarnya, ini akan menjadi panggilan API
-        // const [coursesRes, studentsRes, assignmentsRes, messagesRes] = await Promise.all([
-        //   axios.get('/api/teacher/courses'),
-        //   axios.get('/api/teacher/students'),
-        //   axios.get('/api/teacher/assignments/pending'),
-        //   axios.get('/api/teacher/messages/recent')
-        // ]);
-        
-        // Untuk demo, kita gunakan data dummy
-        setCourses([
-          { id: 1, title: 'Matematika - Aljabar', students_count: 32, progress_avg: 78, image: 'https://via.placeholder.com/150?text=Matematika' },
-          { id: 2, title: 'Biologi - Reproduksi Manusia', students_count: 28, progress_avg: 65, image: 'https://via.placeholder.com/150?text=Biologi' },
-          { id: 3, title: 'Fisika - Hukum Newton', students_count: 25, progress_avg: 72, image: 'https://via.placeholder.com/150?text=Fisika' },
-          { id: 4, title: 'Matematika - Trigonometri', students_count: 30, progress_avg: 81, image: 'https://via.placeholder.com/150?text=Trigonometri' }
-        ]);
-        
+        const token = localStorage.getItem("token");
+
+        // Fetch data assignments dari API yang sesungguhnya
+        const assignmentsResponse = await axios.get('http://localhost:5000/api/teacher/assignments', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (assignmentsResponse.data.success) {
+          const assignments = assignmentsResponse.data.assignments;
+
+          // Filter assignments yang memiliki submissions belum dinilai
+          const pendingAssignmentsData = assignments.filter(assignment => {
+            const totalSubmissions = assignment.total_submissions || 0;
+            // Anggap ada submission yang belum dinilai jika total_submissions > 0
+            return totalSubmissions > 0;
+          }).map(assignment => ({
+            id: assignment.id,
+            title: assignment.title,
+            course: assignment.class_name,
+            pending_reviews: assignment.total_submissions || 0, // Untuk sementara, anggap semua submission belum dinilai
+            due_date: assignment.due_date ? new Date(assignment.due_date).toLocaleDateString("id-ID") : 'Tidak ada deadline'
+          }));
+
+          setPendingAssignments(pendingAssignmentsData);
+
+          // Update dashboard stats
+          setDashboardStats(prev => ({
+            ...prev,
+            totalClasses: assignments.length,
+            pendingGrades: pendingAssignmentsData.reduce((sum, a) => sum + a.pending_reviews, 0)
+          }));
+
+          // Set courses berdasarkan assignments yang ada
+          const coursesData = assignments.map((assignment, index) => ({
+            id: assignment.id,
+            title: `${assignment.class_name} - ${assignment.title}`,
+            students_count: assignment.total_submissions || 0,
+            progress_avg: Math.floor(Math.random() * 30) + 70, // Random untuk demo
+            image: `https://via.placeholder.com/150?text=${encodeURIComponent(assignment.class_name)}`
+          }));
+
+          setCourses(coursesData);
+        }
+
+        // Data siswa dummy (bisa diganti dengan API call sesungguhnya nanti)
         setStudents([
           { id: 1, name: 'Muhamad Dimas', class: '5A', last_active: '2 jam lalu', progress: 85 },
           { id: 2, name: 'Tio Ananda', class: '5A', last_active: '1 jam lalu', progress: 72 },
@@ -40,28 +80,42 @@ const DashboardGuru = () => {
           { id: 4, name: 'Budi Santoso', class: '5A', last_active: '5 jam lalu', progress: 65 },
           { id: 5, name: 'Dian Sastro', class: '5A', last_active: '1 hari lalu', progress: 78 }
         ]);
-        
-        setPendingAssignments([
-          { id: 1, title: 'Soal Persamaan Kuadrat', course: 'Matematika - Aljabar', pending_reviews: 12, due_date: '15 Mei 2025' },
-          { id: 2, title: 'Tugas Sistem Reproduksi', course: 'Biologi', pending_reviews: 8, due_date: '20 Mei 2025' },
-          { id: 3, title: 'Quiz Mingguan Hukum Newton', course: 'Fisika', pending_reviews: 15, due_date: '18 Mei 2025' }
-        ]);
-        
+
+        // Data pesan dummy (bisa diganti dengan API call sesungguhnya nanti)
         setRecentMessages([
           { id: 1, from: 'Ibu Anisa Putri', subject: 'Jadwal Konsultasi', excerpt: 'Selamat siang Bu Senia, saya ingin berkonsultasi...', time: '10:30', unread: true },
           { id: 2, from: 'Ayah Budi Santoso', subject: 'Laporan Kemajuan', excerpt: 'Terima kasih atas laporan perkembangan Budi...', time: '08:45', unread: false },
           { id: 3, from: 'Ibu Tio Ananda', subject: 'Pertanyaan PR', excerpt: 'Bu guru, Tio kesulitan mengerjakan PR matematika...', time: 'Kemarin', unread: true }
         ]);
+
+        // Update stats untuk siswa dan pesan
+        setDashboardStats(prev => ({
+          ...prev,
+          totalStudents: 5, // Hardcoded untuk demo
+          unreadMessages: 2 // Hardcoded untuk demo
+        }));
+
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+
+        // Fallback ke data dummy jika API gagal
+        setCourses([
+          { id: 1, title: 'Matematika - Aljabar', students_count: 32, progress_avg: 78, image: 'https://via.placeholder.com/150?text=Matematika' },
+          { id: 2, title: 'Biologi - Reproduksi Manusia', students_count: 28, progress_avg: 65, image: 'https://via.placeholder.com/150?text=Biologi' }
+        ]);
+
+        setPendingAssignments([
+          { id: 1, title: 'Tidak ada data', course: 'Error loading', pending_reviews: 0, due_date: 'N/A' }
+        ]);
       } finally {
         setLoading(false);
       }
     };
-    
     fetchDashboardData();
   }, []);
-  
+
+
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -69,18 +123,19 @@ const DashboardGuru = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      
+
       <main className="container mx-auto px-4 py-6">
         {/* Welcome Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Selamat datang, {user?.nama_lengkap || 'Senia'}!</h1>
           <p className="text-gray-600">Pantau perkembangan kelas dan siswa Anda di dashboard ini.</p>
         </div>
-        
+
+        {/* Stats Overview */}
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow-sm p-6">
@@ -92,11 +147,11 @@ const DashboardGuru = () => {
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Total Kelas</p>
-                <h3 className="text-2xl font-bold text-gray-800">{courses.length}</h3>
+                <h3 className="text-2xl font-bold text-gray-800">{dashboardStats.totalClasses}</h3>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center">
               <div className="bg-green-100 p-3 rounded-full mr-4">
@@ -106,11 +161,11 @@ const DashboardGuru = () => {
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Total Siswa</p>
-                <h3 className="text-2xl font-bold text-gray-800">{students.length}</h3>
+                <h3 className="text-2xl font-bold text-gray-800">{dashboardStats.totalStudents}</h3>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center">
               <div className="bg-yellow-100 p-3 rounded-full mr-4">
@@ -120,11 +175,11 @@ const DashboardGuru = () => {
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Tugas Belum Dinilai</p>
-                <h3 className="text-2xl font-bold text-gray-800">{pendingAssignments.reduce((sum, a) => sum + a.pending_reviews, 0)}</h3>
+                <h3 className="text-2xl font-bold text-gray-800">{dashboardStats.pendingGrades}</h3>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center">
               <div className="bg-red-100 p-3 rounded-full mr-4">
@@ -134,12 +189,12 @@ const DashboardGuru = () => {
               </div>
               <div>
                 <p className="text-gray-500 text-sm">Pesan Baru</p>
-                <h3 className="text-2xl font-bold text-gray-800">{recentMessages.filter(m => m.unread).length}</h3>
+                <h3 className="text-2xl font-bold text-gray-800">{dashboardStats.unreadMessages}</h3>
               </div>
             </div>
           </div>
         </div>
-        
+
         {/* Courses Section */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
@@ -148,14 +203,14 @@ const DashboardGuru = () => {
               + Buat Kursus Baru
             </Link>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {courses.map(course => (
               <Link to={`/kelas-diajar/${course.id}`} key={course.id} className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 <div className="aspect-w-16 aspect-h-9 bg-gray-200">
-                  <img 
-                    src={course.image} 
-                    alt={course.title} 
+                  <img
+                    src={course.image}
+                    alt={course.title}
                     className="object-cover w-full h-full"
                   />
                 </div>
@@ -170,14 +225,14 @@ const DashboardGuru = () => {
             ))}
           </div>
         </div>
-        
+
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Students Activity */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-4">Aktivitas Siswa Terbaru</h2>
-              
+
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
@@ -211,7 +266,7 @@ const DashboardGuru = () => {
                           <div className="flex items-center">
                             <span className="text-sm text-gray-900 mr-2">{student.progress}%</span>
                             <div className="w-24 bg-gray-200 rounded-full h-1.5">
-                              <div 
+                              <div
                                 className={`h-1.5 rounded-full ${student.progress >= 80 ? 'bg-green-500' : student.progress >= 60 ? 'bg-blue-500' : 'bg-yellow-500'}`}
                                 style={{ width: `${student.progress}%` }}
                               ></div>
@@ -223,7 +278,7 @@ const DashboardGuru = () => {
                   </tbody>
                 </table>
               </div>
-              
+
               <div className="mt-4 text-right">
                 <Link to="/kelas-diajar/students" className="text-blue-500 hover:text-blue-700 text-sm font-medium">
                   Lihat semua siswa →
@@ -231,37 +286,43 @@ const DashboardGuru = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Sidebar Content */}
           <div className="space-y-6">
             {/* Assignments to Review */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-4">Tugas Perlu Dinilai</h2>
-              
+
               <div className="space-y-4">
-                {pendingAssignments.map(assignment => (
-                  <div key={assignment.id} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
-                    <h3 className="font-medium text-gray-900">{assignment.title}</h3>
-                    <p className="text-sm text-gray-500 mb-1">{assignment.course}</p>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-red-500">{assignment.pending_reviews} belum dinilai</span>
-                      <span className="text-gray-500">Deadline: {assignment.due_date}</span>
+                {pendingAssignments.length > 0 ? (
+                  pendingAssignments.slice(0, 3).map(assignment => (
+                    <div key={assignment.id} className="border-b border-gray-100 pb-3 last:border-b-0 last:pb-0">
+                      <h3 className="font-medium text-gray-900">{assignment.title}</h3>
+                      <p className="text-sm text-gray-500 mb-1">{assignment.course}</p>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-red-500">{assignment.pending_reviews} belum dinilai</span>
+                        <span className="text-gray-500">Deadline: {assignment.due_date}</span>
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    <p>Tidak ada tugas yang perlu dinilai</p>
                   </div>
-                ))}
+                )}
               </div>
-              
+
               <div className="mt-4 text-right">
-                <Link to="/manajemen-kelas/assignments" className="text-blue-500 hover:text-blue-700 text-sm font-medium">
+                <Link to="/penilaian-tugas" className="text-blue-500 hover:text-blue-700 text-sm font-medium">
                   Lihat semua tugas →
                 </Link>
               </div>
             </div>
-            
+
             {/* Recent Messages */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-4">Pesan Terbaru</h2>
-              
+
               <div className="space-y-4">
                 {recentMessages.map(message => (
                   <div key={message.id} className={`border-b border-gray-100 pb-3 last:border-b-0 last:pb-0 ${message.unread ? 'bg-blue-50 -mx-4 px-4' : ''}`}>
@@ -274,7 +335,7 @@ const DashboardGuru = () => {
                   </div>
                 ))}
               </div>
-              
+
               <div className="mt-4 text-right">
                 <Link to="/chat-guru" className="text-blue-500 hover:text-blue-700 text-sm font-medium">
                   Lihat semua pesan →

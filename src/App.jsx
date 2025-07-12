@@ -34,6 +34,7 @@ import ManajemenKelas from './pages/Guru/ManajemenKelas';
 import KelasYangDiajar from './pages/Guru/KelasYangDiajar';
 import NotifikasiGuru from './pages/Guru/NotifikasiGuru';
 import ChatOrtuPage from './pages/Guru/ChatOrtu';
+import PenilaianTugas from './pages/Guru/PenilaianTugas';
 
 // Import OrangTua
 import DashboardOrangtua from './components/dashboard/DashboardOrangtua';
@@ -49,7 +50,7 @@ import AdminCourseManagement from './pages/Admin/AdminCoursesManagement';
 import ProfileSettings from './pages/setting/ProfileSettings';
 import UpdatePremium from './pages/setting/UpdatePremium';
 import Chatbot from './service/chatbot/Chatbot'
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/authContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -177,6 +178,11 @@ function App() {
           <Route path="/chat-ortu" element={
             <ProtectedRoute allowedRoles={['guru']}>
               <ChatOrtuPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/penilaian-tugas" element={
+            <ProtectedRoute allowedRoles={['guru']}>
+              <PenilaianTugas />
             </ProtectedRoute>
           } />
 

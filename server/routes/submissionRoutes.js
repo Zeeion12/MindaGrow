@@ -122,4 +122,51 @@ router.get('/submissions/:submissionId/download',
     submissionController.downloadSubmissionFile
 );
 
+//  ===== UNTUK UPDATE NILAI =====
+
+// Grade submission (memberikan nilai)
+router.post('/submissions/:submissionId/grade',
+    authenticateToken,
+    (req, res, next) => {
+        if (req.user.role !== 'guru') {
+            return res.status(403).json({
+                success: false,
+                message: 'Hanya guru yang dapat menilai submission.'
+            });
+        }
+        next();
+    },
+    submissionController.gradeSubmission
+);
+
+// Update grade (edit nilai)
+router.put('/submissions/:submissionId/grade',
+    authenticateToken,
+    (req, res, next) => {
+        if (req.user.role !== 'guru') {
+            return res.status(403).json({
+                success: false,
+                message: 'Hanya guru yang dapat mengubah nilai submission.'
+            });
+        }
+        next();
+    },
+    submissionController.updateGrade
+);
+
+// Get submissions for grading (dengan detail lengkap)
+router.get('/assignments/:assignmentId/grading',
+    authenticateToken,
+    (req, res, next) => {
+        if (req.user.role !== 'guru') {
+            return res.status(403).json({
+                success: false,
+                message: 'Hanya guru yang dapat mengakses halaman penilaian.'
+            });
+        }
+        next();
+    },
+    submissionController.getSubmissionsForGrading
+);
+
 module.exports = router;

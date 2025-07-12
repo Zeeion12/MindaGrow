@@ -138,7 +138,7 @@ exports.getAssignmentsByTeacher = async (req, res) => {
             FROM assignments a
             JOIN classes c ON a.class_id = c.id
             LEFT JOIN submissions s ON a.id = s.assignment_id
-            WHERE c.teacher_id = $1
+            WHERE a.teacher_id = $1
         `;
 
         const params = [teacherId];
