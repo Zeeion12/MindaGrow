@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import Dailymission from '../../components/layout/GameCard/Dailymission';
 import Expcard from '../../components/layout/GameCard/Expcard';
-import Game from '../../components/layout/GameCard/Game';
 import Scoreboard from '../../components/layout/GameCard/Scoreboard';
 import StreakCard from '../../components/layout/GameCard/StreakCard';
 
@@ -19,35 +19,17 @@ export default function GameMainUI() {
         longestStreak: 0
     });
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
-    // Static game data with default progress
-    const staticGameData = [
-        {
-            id: 1,
-            title: "Tebak Pola (Pattern Puzzle)",
-            progress: "0",
-            image: game1Image,
-            gameId: "patternpuzzle"
-        },
-        {
-            id: 2,
-            title: "Yes or No",
-            progress: "0",
-            image: game2Image,
-            gameId: "yesorno"
-        },
-        {
-            id: 3,
-            title: "Maze Challenge",
-            progress: "0",
-            image: game3Image,
-            gameId: "mazechallenge"
-        },
-    ];
+    const gameImages = {
+        1: game1Image,
+        2: game2Image, 
+        3: game3Image
+    };
 
     useEffect(() => {
         fetchGameData();
-        // Auto refresh every 30 seconds to keep data fresh
+        // Auto refresh every 30 seconds
         const interval = setInterval(fetchGameData, 30000);
         return () => clearInterval(interval);
     }, []);
@@ -57,86 +39,67 @@ export default function GameMainUI() {
             const token = localStorage.getItem('token');
             
             if (!token) {
-                // Use static data if no token
-                setGameData(staticGameData);
+                setGameData([
+                    { id: 1, name: 'Pattern Puzzle', progress: 0, questions_completed: 0, total_questions: 20 },
+                    { id: 2, name: 'Yes or No', progress: 0, questions_completed: 0, total_questions: 25 },
+                    { id: 3, name: 'Maze Challenge', progress: 0, questions_completed: 0, total_questions: 15 }
+                ]);
                 setLoading(false);
                 return;
             }
 
-            // Try to fetch dynamic data
-            const response = await axios.get('http://localhost:5000/api/games/dashboard', {
+            // Fetch real game progress
+            const response = await axios.get('http://localhost:5000/api/games/progress', {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
-                // Map response to game data
-                const dynamicGameData = staticGameData.map(game => {
-                    const foundGame = response.data.games?.find(g => g.id === game.id);
-                    return {
-                        ...game,
-                        progress: foundGame?.progress?.toString() || "0"
-                    };
-                });
+                const mappedGames = response.data.games.map(game => ({
+                    id: game.id,
+                    title: game.name === 'Pattern Puzzle' ? 'Tebak Pola (Pattern Puzzle)' :
+                           game.name === 'Yes or No' ? 'Yes or No' :
+                           game.name === 'Maze Challenge' ? 'Maze Challenge' : game.name,
+                    progress: game.progress_percentage.toString(),
+                    questions_completed: game.questions_completed,
+                    total_questions: game.total_questions,
+                    image: gameImages[game.id],
+                    gameId: game.id === 1 ? 'patternpuzzle' :
+                            game.id === 2 ? 'yesorno' :
+                            game.id === 3 ? 'mazechallenge' : `game${game.id}`
+                }));
 
-                setGameData(dynamicGameData);
-                setUserStats({
-                    level: response.data.user?.current_level || 1,
-                    totalXp: response.data.user?.total_xp || 0,
-                    currentStreak: response.data.streak?.current_streak || 0,
-                    longestStreak: response.data.streak?.longest_streak || 0
-                });
-            } else {
-                // Fallback to static data
-                setGameData(staticGameData);
+                setGameData(mappedGames);
             }
+
+            // Fetch user stats
+            const userResponse = await axios.get('http://localhost:5000/api/games/dashboard', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (userResponse.data.success) {
+                setUserStats({
+                    level: userResponse.data.user?.current_level || 1,
+                    totalXp: userResponse.data.user?.total_xp || 0,
+                    currentStreak: userResponse.data.streak?.current_streak || 0,
+                    longestStreak: userResponse.data.streak?.longest_streak || 0
+                });
+            }
+
         } catch (error) {
             console.error('Error fetching game data:', error);
-            // Fallback to static data
-            setGameData(staticGameData);
-            
-            // Try to fetch at least user stats separately
-            try {
-                const token = localStorage.getItem('token');
-                if (token) {
-                    // Try to get user XP from profile or another endpoint
-                    const userResponse = await axios.get('http://localhost:5000/api/profile', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    
-                    if (userResponse.data.success) {
-                        setUserStats(prev => ({
-                            ...prev,
-                            level: userResponse.data.user?.current_level || 1,
-                            totalXp: userResponse.data.user?.total_xp || 0
-                        }));
-                    }
-                }
-            } catch (userError) {
-                console.error('Error fetching user data:', userError);
-            }
+            // Fallback to default data with 0% progress
+            setGameData([
+                { id: 1, title: 'Tebak Pola (Pattern Puzzle)', progress: '0', image: game1Image, gameId: 'patternpuzzle', questions_completed: 0, total_questions: 20 },
+                { id: 2, title: 'Yes or No', progress: '0', image: game2Image, gameId: 'yesorno', questions_completed: 0, total_questions: 25 },
+                { id: 3, title: 'Maze Challenge', progress: '0', image: game3Image, gameId: 'mazechallenge', questions_completed: 0, total_questions: 15 }
+            ]);
         } finally {
             setLoading(false);
         }
     };
 
-    const updateMissionProgress = async (missionType, progress = 1) => {
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-
-            await axios.post('http://localhost:5000/api/daily-missions/progress', {
-                missionType,
-                progress
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            // Refresh game data to get updated XP and stats
-            await fetchGameData();
-            
-        } catch (error) {
-            console.error('Error updating mission progress:', error);
-        }
+    const handleGameClick = (gameId) => {
+        navigate(`/game/${gameId}`);
     };
 
     if (loading) {
@@ -153,7 +116,7 @@ export default function GameMainUI() {
     return (
         <div className="h-screen flex flex-col">
             <main className="container mx-auto px-4 py-6">
-                {/* Header - Simple Version */}
+                {/* Header */}
                 <div className="bg-gradient-to-r from-blue-100 via-purple-50 to-pink-100 rounded-lg p-6 mb-8 relative overflow-hidden">
                     <div className="relative z-10">
                         <div className="flex flex-col md:flex-row items-center justify-between">
@@ -162,7 +125,7 @@ export default function GameMainUI() {
                                     🧠 Asah logikamu lewat permainan seru dan menantang!
                                 </h1>
                                 <p className="text-gray-600">
-                                    Bermain game setiap hari untuk meningkatkan streak dan mendapat XP bonus!
+                                    Progress game akan tersimpan setiap kali kamu bermain!
                                 </p>
                             </div>
                             
@@ -190,15 +153,15 @@ export default function GameMainUI() {
                     </div>
                 </div>
 
-                {/* Daily Challenge Notice */}
-                {userStats.currentStreak === 0 && (
-                    <div className="bg-gradient-to-r from-orange-400 to-red-500 rounded-lg p-4 mb-6 text-white">
+                {/* Progress Notice */}
+                {gameData.some(game => parseInt(game.progress) > 0) && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
                         <div className="flex items-center">
-                            <div className="text-2xl mr-3">🔥</div>
+                            <div className="text-green-600 text-xl mr-3">📈</div>
                             <div>
-                                <div className="font-bold">Mulai Streak Harian!</div>
-                                <div className="text-sm opacity-90">
-                                    Main game hari ini untuk memulai streak dan dapatkan XP bonus setiap hari!
+                                <div className="font-bold text-green-800">Progress Tersimpan!</div>
+                                <div className="text-sm text-green-600">
+                                    Kamu sudah menyelesaikan beberapa soal. Lanjutkan untuk menyelesaikan semua game!
                                 </div>
                             </div>
                         </div>
@@ -210,60 +173,72 @@ export default function GameMainUI() {
                     <h2 className='text-xl font-poppins font-semibold mb-4'>Daftar Game</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {gameData.map((game) => (
-                            <Game
-                                key={game.id}
-                                title={game.title}
-                                subject={game.subject}
-                                progress={game.progress}
-                                image={game.image}
-                                gameId={game.gameId}
-                                onGameComplete={updateMissionProgress}
-                            />
+                            <div 
+                                key={game.id} 
+                                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer transform"
+                                onClick={() => handleGameClick(game.gameId)}
+                            >
+                                <div className="relative h-48">
+                                    <img 
+                                        src={game.image} 
+                                        alt={game.title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute bottom-4 left-4 right-4">
+                                        <h3 className="text-white text-lg font-bold mb-2 drop-shadow-lg">
+                                            {game.title}
+                                        </h3>
+                                        <div className="bg-black bg-opacity-50 rounded-full px-3 py-1 text-white text-sm">
+                                            {game.progress}%
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-4">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <span className="text-sm text-gray-600">
+                                            Progress: {game.questions_completed || 0}/{game.total_questions || 0} soal
+                                        </span>
+                                        <span className="text-xs text-blue-600 font-medium">
+                                            {parseInt(game.progress) === 100 ? '✅ Selesai' : 'Berlanjut'}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                                        <div 
+                                            className="bg-blue-600 h-3 rounded-full transition-all duration-500" 
+                                            style={{ width: `${game.progress}%` }}
+                                        ></div>
+                                    </div>
+                                    
+                                    <button 
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleGameClick(game.gameId);
+                                        }}
+                                    >
+                                        {parseInt(game.progress) === 100 ? 'Main Lagi' : 'Berlanjut'}
+                                    </button>
+                                </div>
+                            </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Cards Section with Dynamic Components */}
+                {/* Cards Section */}
                 <div className='mt-12 grid grid-cols-1 lg:grid-cols-3 gap-6'>
                     <div className='lg:col-span-2 space-y-6'>
                         <Expcard 
                             progress={userStats.totalXp % 100} 
                             level={userStats.level} 
                             totalXp={userStats.totalXp}
+                            showDetailedProgress={true}
                         />
                         <Dailymission />
                     </div>
                     <div className='lg:col-span-1 space-y-6'>
                         <StreakCard />
                         <Scoreboard />
-                    </div>
-                </div>
-
-                {/* Motivational Footer */}
-                <div className="mt-8 bg-blue-50 rounded-lg p-6">
-                    <h3 className="text-lg font-bold text-blue-800 mb-4">💡 Tips Meningkatkan XP</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div className="flex items-start">
-                            <div className="text-blue-600 mr-2">🎯</div>
-                            <div>
-                                <div className="font-semibold text-blue-800">Selesaikan Daily Mission</div>
-                                <div className="text-blue-600">Dapatkan XP ekstra dari misi harian</div>
-                            </div>
-                        </div>
-                        <div className="flex items-start">
-                            <div className="text-blue-600 mr-2">🔥</div>
-                            <div>
-                                <div className="font-semibold text-blue-800">Pertahankan Streak</div>
-                                <div className="text-blue-600">Main setiap hari untuk bonus streak</div>
-                            </div>
-                        </div>
-                        <div className="flex items-start">
-                            <div className="text-blue-600 mr-2">🏆</div>
-                            <div>
-                                <div className="font-semibold text-blue-800">Kompetisi Leaderboard</div>
-                                <div className="text-blue-600">Saingi teman untuk peringkat teratas</div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </main>

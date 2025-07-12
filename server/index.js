@@ -1806,37 +1806,87 @@ function getWeekStartDate() {
   return startDate.toISOString().split('T')[0];
 }
 
+function getTodayDate() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function isNewDay(lastDate) {
+  const today = getTodayDate();
+  const last = new Date(lastDate).toISOString().split('T')[0];
+  return today !== last;
+}
+
 // User Streak Route
 app.get('/api/users/streak', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    const today = getTodayDate();
     
-    // Check if user_streaks table exists
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'user_streaks'
-      );
-    `);
-    
-    if (!tableCheck.rows[0].exists) {
-      return res.json({ current_streak: 0, longest_streak: 0, last_activity_date: null });
-    }
-    
-    const result = await pool.query(
-      'SELECT current_streak, longest_streak, last_activity_date FROM user_streaks WHERE user_id = $1',
+    let streakData = await pool.query(
+      'SELECT * FROM user_streaks WHERE user_id = $1',
       [userId]
     );
     
-    if (result.rows.length === 0) {
-      return res.json({ current_streak: 0, longest_streak: 0, last_activity_date: null });
+    if (streakData.rows.length === 0) {
+      // Create new streak record
+      await pool.query(`
+        INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_activity_date, last_reset_date)
+        VALUES ($1, 0, 0, NULL, $2)
+      `, [userId, today]);
+      
+      return res.json({
+        current_streak: 0,
+        longest_streak: 0,
+        last_activity_date: null,
+        is_active_today: false
+      });
     }
     
-    res.json(result.rows[0]);
+    const streak = streakData.rows[0];
+    const lastActivityDate = streak.last_activity_date ? 
+      new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
+    
+    // Check if user was active today
+    const isActiveToday = lastActivityDate === today;
+    
+    // Check if we need to reset streak (if it's a new day and user wasn't active yesterday)
+    if (lastActivityDate && lastActivityDate !== today) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      if (lastActivityDate !== yesterdayStr) {
+        // Reset streak if user wasn't active yesterday
+        await pool.query(`
+          UPDATE user_streaks 
+          SET current_streak = 0, last_reset_date = $1 
+          WHERE user_id = $2
+        `, [today, userId]);
+        
+        return res.json({
+          current_streak: 0,
+          longest_streak: streak.longest_streak,
+          last_activity_date: lastActivityDate,
+          is_active_today: false
+        });
+      }
+    }
+    
+    res.json({
+      current_streak: streak.current_streak,
+      longest_streak: streak.longest_streak,
+      last_activity_date: lastActivityDate,
+      is_active_today: isActiveToday
+    });
+    
   } catch (error) {
     console.error('Error getting user streak:', error);
-    res.json({ current_streak: 0, longest_streak: 0, last_activity_date: null });
+    res.json({
+      current_streak: 0,
+      longest_streak: 0,
+      last_activity_date: null,
+      is_active_today: false
+    });
   }
 });
 
@@ -1844,119 +1894,96 @@ app.get('/api/users/streak', authenticateToken, async (req, res) => {
 app.get('/api/daily-missions', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     
-    // Check if daily_missions table exists
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'daily_missions'
-      );
-    `);
+    // Get user's daily quiz completion
+    const quizCompletion = await pool.query(`
+      SELECT * FROM daily_quiz_completions WHERE user_id = $1 AND quiz_date = $2
+    `, [userId, today]);
     
-    if (!tableCheck.rows[0].exists) {
-      // Return dummy data
-      return res.json({
-        success: true,
-        missions: [
-          {
-            id: 1,
-            title: "Complete 3 quizzes",
-            description: "Selesaikan 3 kuis dalam berbagai mata pelajaran",
-            mission_type: "quiz",
-            target_count: 3,
-            xp_reward: 50,
-            current_progress: 2,
-            is_completed: false
-          },
-          {
-            id: 2,
-            title: "Watch 5 tutorial videos",
-            description: "Tonton 5 video pembelajaran untuk menambah wawasan",
-            mission_type: "video",
-            target_count: 5,
-            xp_reward: 30,
-            current_progress: 3,
-            is_completed: false
-          },
-          {
-            id: 3,
-            title: "Solve 10 practice problems",
-            description: "Kerjakan 10 soal latihan untuk mengasah kemampuan",
-            mission_type: "practice",
-            target_count: 10,
-            xp_reward: 100,
-            current_progress: 4,
-            is_completed: false
-          },
-          {
-            id: 4,
-            title: "Play 2 educational games",
-            description: "Mainkan 2 game edukatif untuk belajar sambil bermain",
-            mission_type: "game",
-            target_count: 2,
-            xp_reward: 75,
-            current_progress: 0,
-            is_completed: false
-          }
-        ]
-      });
-    }
+    const quizData = quizCompletion.rows[0] || { 
+      completed_quizzes: 0, 
+      correct_answers: 0, 
+      total_questions: 0 
+    };
     
-    const query = `
-      SELECT 
-        dm.*,
-        COALESCE(udm.current_progress, 0) as current_progress,
-        COALESCE(udm.is_completed, false) as is_completed,
-        udm.completed_at
+    // Get user's daily missions progress
+    const missionsQuery = await pool.query(`
+      SELECT dm.*, COALESCE(udm.current_progress, 0) as current_progress,
+             COALESCE(udm.is_completed, false) as is_completed
       FROM daily_missions dm
       LEFT JOIN user_daily_missions udm ON dm.id = udm.mission_id 
         AND udm.user_id = $1 AND udm.mission_date = $2
       WHERE dm.is_active = true
       ORDER BY dm.id
-    `;
+    `, [userId, today]);
     
-    const result = await pool.query(query, [userId, today]);
+    // Build dynamic missions based on real data
+    const missions = [
+      {
+        id: 1,
+        title: "Complete 3 quizzes",
+        description: "Selesaikan 3 kuis hari ini dengan benar",
+        mission_type: "quiz",
+        target_count: 3,
+        xp_reward: 50,
+        current_progress: quizData.completed_quizzes,
+        is_completed: quizData.completed_quizzes >= 3,
+        condition_met: quizData.completed_quizzes >= 3
+      },
+      {
+        id: 2,
+        title: "Watch 5 tutorial videos",
+        description: "Tonton 5 video pembelajaran untuk menambah wawasan",
+        mission_type: "video",
+        target_count: 5,
+        xp_reward: 30,
+        current_progress: 0, // Would need video tracking
+        is_completed: false,
+        condition_met: false
+      },
+      {
+        id: 3,
+        title: "Solve 10 practice problems",
+        description: "Selesaikan 10 soal latihan dengan benar",
+        mission_type: "practice",
+        target_count: 10,
+        xp_reward: 100,
+        current_progress: quizData.correct_answers,
+        is_completed: quizData.correct_answers >= 10,
+        condition_met: quizData.correct_answers >= 10
+      },
+      {
+        id: 4,
+        title: "Play any game",
+        description: "Mainkan game apapun hari ini",
+        mission_type: "game",
+        target_count: 1,
+        xp_reward: 25,
+        current_progress: quizData.completed_quizzes > 0 ? 1 : 0,
+        is_completed: quizData.completed_quizzes > 0,
+        condition_met: quizData.completed_quizzes > 0
+      }
+    ];
     
     res.json({
       success: true,
-      missions: result.rows
+      missions
     });
+    
   } catch (error) {
     console.error('Error fetching daily missions:', error);
-    // Return dummy data on error
     res.json({
       success: true,
       missions: [
         {
           id: 1,
           title: "Complete 3 quizzes",
-          description: "Selesaikan 3 kuis dalam berbagai mata pelajaran",
+          description: "Selesaikan 3 kuis hari ini dengan benar",
           mission_type: "quiz",
           target_count: 3,
           xp_reward: 50,
-          current_progress: 2,
-          is_completed: false
-        },
-        {
-          id: 2,
-          title: "Watch 5 tutorial videos",
-          description: "Tonton 5 video pembelajaran untuk menambah wawasan",
-          mission_type: "video",
-          target_count: 5,
-          xp_reward: 30,
-          current_progress: 3,
-          is_completed: false
-        },
-        {
-          id: 3,
-          title: "Solve 10 practice problems",
-          description: "Kerjakan 10 soal latihan untuk mengasah kemampuan",
-          mission_type: "practice",
-          target_count: 10,
-          xp_reward: 100,
-          current_progress: 4,
+          current_progress: 0,
           is_completed: false
         }
       ]
@@ -2118,7 +2145,7 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Get user info
+    // Get user info with real XP data
     let userData = { nama_lengkap: 'Student', total_xp: 0, current_level: 1 };
     try {
       const userQuery = await pool.query(`
@@ -2137,93 +2164,307 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
       console.log('User data not available, using defaults');
     }
     
-    // Get user streak
-    let streakData = { current_streak: 0, longest_streak: 0 };
-    try {
-      const streakQuery = await pool.query(`
-        SELECT current_streak, longest_streak 
-        FROM user_streaks 
-        WHERE user_id = $1
-      `, [userId]);
-      
-      if (streakQuery.rows.length > 0) {
-        streakData = streakQuery.rows[0];
-      }
-    } catch (streakError) {
-      console.log('Streak data not available, using defaults');
-    }
+    // Get real game progress
+    const gamesQuery = await pool.query(`
+      SELECT 
+        g.id,
+        g.name,
+        COALESCE(ugp.questions_completed, 0) as questions_completed,
+        g.total_questions,
+        CASE 
+          WHEN g.total_questions > 0 
+          THEN ROUND((COALESCE(ugp.questions_completed, 0)::float / g.total_questions) * 100)
+          ELSE 0 
+        END as progress
+      FROM games g
+      LEFT JOIN user_game_progress ugp ON g.id = ugp.game_id AND ugp.user_id = $1
+      WHERE g.is_active = true
+      ORDER BY g.id
+    `, [userId]);
     
-    // Mock data for components
-    const gamesData = [
-      { id: 1, name: 'Pattern Puzzle', progress: 25 },
-      { id: 2, name: 'Yes or No', progress: 20 },
-      { id: 3, name: 'Maze Challenge', progress: 35 }
-    ];
-    
-    const dailyMissions = [
-      {
-        id: 1,
-        title: "Complete 3 quizzes",
-        description: "Selesaikan 3 kuis dalam berbagai mata pelajaran",
-        mission_type: "quiz",
-        target_count: 3,
-        xp_reward: 50,
-        current_progress: 2,
-        is_completed: false
-      },
-      {
-        id: 2,
-        title: "Watch 5 tutorial videos",
-        description: "Tonton 5 video pembelajaran untuk menambah wawasan",
-        mission_type: "video",
-        target_count: 5,
-        xp_reward: 30,
-        current_progress: 3,
-        is_completed: false
-      },
-      {
-        id: 3,
-        title: "Play 2 educational games",
-        description: "Mainkan 2 game edukatif untuk belajar sambil bermain",
-        mission_type: "game",
-        target_count: 2,
-        xp_reward: 75,
-        current_progress: 0,
-        is_completed: false
-      }
-    ];
-    
-    const leaderboard = [
-      { nama_lengkap: 'ITO', weekly_xp: 1250, rank: 1 },
-      { nama_lengkap: 'Tio', weekly_xp: 1180, rank: 2 },
-      { nama_lengkap: 'Fonsi', weekly_xp: 1050, rank: 3 },
-      { nama_lengkap: 'Selenia', weekly_xp: 890, rank: 4 },
-      { nama_lengkap: 'Dimas', weekly_xp: 750, rank: 5 }
-    ];
+    // Get streak data
+    const streakResponse = await fetch(`http://localhost:${process.env.PORT || 5000}/api/users/streak`, {
+      headers: { Authorization: `Bearer ${req.headers.authorization?.split(' ')[1]}` }
+    });
+    const streakData = await streakResponse.json();
     
     res.json({
       success: true,
       user: userData,
       streak: streakData,
-      games: gamesData,
-      dailyMissions: dailyMissions,
-      leaderboard: leaderboard
+      games: gamesQuery.rows,
+      dailyMissions: [], // Will be fetched separately
+      leaderboard: [] // Will be fetched separately
     });
     
   } catch (error) {
-    console.error('Error fetching game dashboard:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      user: { nama_lengkap: 'Student', total_xp: 0, current_level: 1 },
-      streak: { current_streak: 0, longest_streak: 0 },
-      games: [],
-      dailyMissions: [],
-      leaderboard: []
+    console.error('Error fetching dashboard:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/games/progress', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get all games with user progress
+    const query = `
+      SELECT 
+        g.id,
+        g.name,
+        g.description,
+        g.total_questions,
+        g.xp_per_question,
+        COALESCE(ugp.questions_completed, 0) as questions_completed,
+        COALESCE(ugp.correct_answers, 0) as correct_answers,
+        COALESCE(ugp.score, 0) as score,
+        COALESCE(ugp.session_count, 0) as session_count,
+        CASE 
+          WHEN g.total_questions > 0 
+          THEN ROUND((COALESCE(ugp.questions_completed, 0)::float / g.total_questions) * 100)
+          ELSE 0 
+        END as progress_percentage
+      FROM games g
+      LEFT JOIN user_game_progress ugp ON g.id = ugp.game_id AND ugp.user_id = $1
+      WHERE g.is_active = true
+      ORDER BY g.id
+    `;
+    
+    const result = await pool.query(query, [userId]);
+    
+    res.json({
+      success: true,
+      games: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching game progress:', error);
+    // Return static progress if error
+    res.json({
+      success: true,
+      games: [
+        { id: 1, name: 'Pattern Puzzle', progress_percentage: 0, questions_completed: 0, total_questions: 20 },
+        { id: 2, name: 'Yes or No', progress_percentage: 0, questions_completed: 0, total_questions: 25 },
+        { id: 3, name: 'Maze Challenge', progress_percentage: 0, questions_completed: 0, total_questions: 15 }
+      ]
     });
   }
 });
 
+// Update game progress when game completed
+app.post('/api/games/complete', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { 
+      gameId, 
+      questionsAnswered, 
+      correctAnswers, 
+      score, 
+      completionTime 
+    } = req.body;
+    
+    const userId = req.user.id;
+    const today = getTodayDate();
+    
+    // Get game info
+    const gameResult = await client.query('SELECT * FROM games WHERE id = $1', [gameId]);
+    const game = gameResult.rows[0];
+    
+    if (!game) {
+      throw new Error('Game not found');
+    }
+    
+    // Calculate XP earned
+    const xpEarned = correctAnswers * game.xp_per_question;
+    
+    // Update or insert user game progress
+    await client.query(`
+      INSERT INTO user_game_progress (
+        user_id, game_id, questions_completed, correct_answers, 
+        total_questions, score, session_count, last_played_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT (user_id, game_id)
+      DO UPDATE SET 
+        questions_completed = user_game_progress.questions_completed + $3,
+        correct_answers = user_game_progress.correct_answers + $4,
+        score = GREATEST(user_game_progress.score, $6),
+        session_count = user_game_progress.session_count + 1,
+        last_played_at = CURRENT_TIMESTAMP
+    `, [userId, gameId, questionsAnswered, correctAnswers, game.total_questions, score]);
+    
+    // Update user XP and level
+    await client.query(`
+      UPDATE siswa 
+      SET total_xp = total_xp + $1,
+          current_level = FLOOR((total_xp + $1) / 100) + 1
+      WHERE user_id = $2
+    `, [xpEarned, userId]);
+    
+    // Update daily quiz completion if it's a quiz-type game
+    if (gameId === 1 || gameId === 2) { // Pattern Puzzle or Yes or No
+      await client.query(`
+        INSERT INTO daily_quiz_completions (user_id, quiz_date, completed_quizzes, correct_answers, total_questions, xp_earned)
+        VALUES ($1, $2, 1, $3, $4, $5)
+        ON CONFLICT (user_id, quiz_date)
+        DO UPDATE SET 
+          completed_quizzes = daily_quiz_completions.completed_quizzes + 1,
+          correct_answers = daily_quiz_completions.correct_answers + $3,
+          total_questions = daily_quiz_completions.total_questions + $4,
+          xp_earned = daily_quiz_completions.xp_earned + $5
+      `, [userId, today, correctAnswers, questionsAnswered, xpEarned]);
+    }
+    
+    // Update user streak
+    await updateUserStreak(userId, client);
+    
+    // Update weekly leaderboard
+    await updateWeeklyLeaderboard(userId, xpEarned, client);
+    
+    // Check and update daily missions
+    await checkDailyMissions(userId, client);
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: 'Game completed successfully',
+      xpEarned,
+      questionsAnswered,
+      correctAnswers
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error completing game:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+async function updateUserStreak(userId, client) {
+  const today = getTodayDate();
+  
+  const streakResult = await client.query(
+    'SELECT * FROM user_streaks WHERE user_id = $1',
+    [userId]
+  );
+  
+  if (streakResult.rows.length === 0) {
+    // Create new streak
+    await client.query(
+      `INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_activity_date, streak_start_date, last_reset_date)
+       VALUES ($1, 1, 1, $2, $2, $2)`,
+      [userId, today]
+    );
+    return;
+  }
+  
+  const streak = streakResult.rows[0];
+  const lastActivityDate = streak.last_activity_date ? 
+    new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
+  
+  if (lastActivityDate === today) {
+    // Already active today, don't update
+    return;
+  }
+  
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  
+  if (lastActivityDate === yesterdayStr) {
+    // Consecutive day, increment streak
+    const newStreak = streak.current_streak + 1;
+    const longestStreak = Math.max(newStreak, streak.longest_streak);
+    
+    await client.query(
+      `UPDATE user_streaks 
+       SET current_streak = $1, longest_streak = $2, last_activity_date = $3 
+       WHERE user_id = $4`,
+      [newStreak, longestStreak, today, userId]
+    );
+  } else {
+    // Start new streak
+    await client.query(
+      `UPDATE user_streaks 
+       SET current_streak = 1, last_activity_date = $1, streak_start_date = $1 
+       WHERE user_id = $2`,
+      [today, userId]
+    );
+  }
+}
+
+async function updateWeeklyLeaderboard(userId, xpGained, client) {
+  const weekStartDate = getWeekStartDate();
+  
+  await client.query(`
+    INSERT INTO weekly_leaderboard (user_id, week_start_date, total_xp, games_played)
+    VALUES ($1, $2, $3, 1)
+    ON CONFLICT (user_id, week_start_date)
+    DO UPDATE SET 
+      total_xp = weekly_leaderboard.total_xp + $3,
+      games_played = weekly_leaderboard.games_played + 1,
+      updated_at = CURRENT_TIMESTAMP
+  `, [userId, weekStartDate, xpGained]);
+}
+
+async function checkDailyMissions(userId, client) {
+  const today = getTodayDate();
+  
+  // Get today's quiz completion data
+  const quizResult = await client.query(`
+    SELECT * FROM daily_quiz_completions WHERE user_id = $1 AND quiz_date = $2
+  `, [userId, today]);
+  
+  const quizData = quizResult.rows[0];
+  if (!quizData) return;
+  
+  // Check mission 1: Complete 3 quizzes
+  if (quizData.completed_quizzes >= 3) {
+    await client.query(`
+      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
+      VALUES ($1, 1, $2, true, CURRENT_TIMESTAMP, $3)
+      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
+    `, [userId, quizData.completed_quizzes, today]);
+    
+    // Award XP
+    await client.query(`
+      UPDATE siswa SET total_xp = total_xp + 50 WHERE user_id = $1
+    `, [userId]);
+  }
+  
+  // Check mission 3: Solve 10 practice problems
+  if (quizData.correct_answers >= 10) {
+    await client.query(`
+      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
+      VALUES ($1, 3, $2, true, CURRENT_TIMESTAMP, $3)
+      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
+    `, [userId, quizData.correct_answers, today]);
+    
+    // Award XP
+    await client.query(`
+      UPDATE siswa SET total_xp = total_xp + 100 WHERE user_id = $1
+    `, [userId]);
+  }
+  
+  // Check mission 4: Play any game
+  if (quizData.completed_quizzes > 0) {
+    await client.query(`
+      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
+      VALUES ($1, 4, 1, true, CURRENT_TIMESTAMP, $2)
+      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
+    `, [userId, today]);
+    
+    // Award XP
+    await client.query(`
+      UPDATE siswa SET total_xp = total_xp + 25 WHERE user_id = $1
+    `, [userId]);
+  }
+}
 console.log('✅ Game system routes loaded successfully');
 
 // ===============================
