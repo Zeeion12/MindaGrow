@@ -1,0 +1,13 @@
+🔄 Template Ekspor Database PostgreSQL ke File .sql via Command Line
+Gunakan perintah ini di Command Prompt untuk mengekspor database PostgreSQL menjadi file .sql yang dapat dibuka dan dibaca (bukan format backup binary). Pastikan pg_dump.exe sesuai dengan direktori PostgreSQL yang terpasang di komputermu.
+
+"PATH\TO\pg_dump.exe" -U [USERNAME] -d [NAMA_DATABASE] --inserts --column-inserts --no-owner --no-privileges --no-comments --no-tablespaces --file="[LOKASI_PENYIMPANAN]\[NAMA_FILE].sql"
+
+📌 Penjelasan Placeholder:
+Placeholder	Keterangan
+PATH\TO\pg_dump.exe	Lokasi file pg_dump.exe. Contoh: D:\PostgreSQL\bin\pg_dump.exe
+[USERNAME]	Username PostgreSQL, biasanya postgres
+[NAMA_DATABASE]	Nama database yang ingin diekspor, misalnya: mindagrow
+[LOKASI_PENYIMPANAN]	Folder tujuan penyimpanan file .sql
+[NAMA_FILE].sql	Nama file output .sql yang dihasilkan
+
