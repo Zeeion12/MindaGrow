@@ -70,376 +70,365 @@ const patterns = [
     },
 ]
 
-export default function PatternPuzzleGame() {
+export default function PatternPuzzleGame(props) {
     const [gameState, setGameState] = useState("start")
     const [currentPattern, setCurrentPattern] = useState(0)
     const [score, setScore] = useState(0)
     const [totalExp, setTotalExp] = useState(0)
+    const [lives, setLives] = useState(3)
     const [showFeedback, setShowFeedback] = useState(null)
     const [progress, setProgress] = useState(0)
-    const [timeLeft, setTimeLeft] = useState(20)
-    const [isTimerActive, setIsTimerActive] = useState(false)
-    const [fadeIn, setFadeIn] = useState(true)
-    const [difficultyLevel, setDifficultyLevel] = useState("all") // "easy", "medium", "hard", "all"
-    const [filteredPatterns, setFilteredPatterns] = useState(patterns)
+    const [selectedAnswer, setSelectedAnswer] = useState(null)
+    const [answeredCorrectly, setAnsweredCorrectly] = useState([])
+    const [onGameComplete, setOnGameComplete] = useState(null)
 
-    // Filter patterns based on difficulty
+    // Receive props from GameWrapper
     useEffect(() => {
-        if (difficultyLevel === "all") {
-            setFilteredPatterns(patterns)
-        } else {
-            const difficultyMap = { easy: 1, medium: 2, hard: 3 }
-            const level = difficultyMap[difficultyLevel]
-            setFilteredPatterns(patterns.filter((pattern) => pattern.difficulty === level))
+        if (props.onGameComplete) {
+            setOnGameComplete(() => props.onGameComplete);
         }
-    }, [difficultyLevel])
+    }, [props.onGameComplete]);
 
     // Update progress when current pattern changes
     useEffect(() => {
         if (gameState === "playing") {
-            setProgress((currentPattern / filteredPatterns.length) * 100)
-            setTimeLeft(20)
-            setIsTimerActive(true)
-            setFadeIn(true)
+            setProgress((currentPattern / patterns.length) * 100)
         }
-    }, [currentPattern, gameState, filteredPatterns.length])
+    }, [currentPattern, gameState])
 
-    // Timer effect
-    useEffect(() => {
-        let timer
-        if (isTimerActive && timeLeft > 0 && gameState === "playing" && !showFeedback) {
-            timer = setTimeout(() => {
-                setTimeLeft(timeLeft - 1)
-            }, 1000)
-        } else if (timeLeft === 0 && !showFeedback) {
-            // Time's up - mark as wrong
-            setShowFeedback("timeout")
-            setIsTimerActive(false)
-
-            setTimeout(() => {
-                setShowFeedback(null)
-                if (currentPattern < filteredPatterns.length - 1) {
-                    setFadeIn(false)
-                    setTimeout(() => {
-                        setCurrentPattern(currentPattern + 1)
-                    }, 300)
-                } else {
-                    setGameState("result")
-                }
-            }, 1500)
-        }
-
-        return () => clearTimeout(timer)
-    }, [timeLeft, isTimerActive, gameState, showFeedback, currentPattern, filteredPatterns.length])
-
-    const handleStart = () => {
+    const startGame = () => {
         setGameState("playing")
         setCurrentPattern(0)
         setScore(0)
+        setTotalExp(0)
+        setLives(3)
         setShowFeedback(null)
         setProgress(0)
-        setTimeLeft(20)
-        setIsTimerActive(true)
-        setFadeIn(true)
+        setSelectedAnswer(null)
+        setAnsweredCorrectly([])
+    }
+
+    const restartGame = () => {
+        setGameState("start")
+        setCurrentPattern(0)
+        setScore(0)
+        setTotalExp(0)
+        setLives(3)
+        setShowFeedback(null)
+        setProgress(0)
+        setSelectedAnswer(null)
+        setAnsweredCorrectly([])
     }
 
     const handleAnswer = (answer) => {
-        setIsTimerActive(false)
-        const isCorrect = answer === filteredPatterns[currentPattern].correctAnswer
-        const expGain = filteredPatterns[currentPattern].difficulty * 10
-
+        if (showFeedback) return
+        
+        setSelectedAnswer(answer)
+        const pattern = patterns[currentPattern]
+        const isCorrect = answer === pattern.correctAnswer
+        
         if (isCorrect) {
             setScore(score + 1)
-            setTotalExp(totalExp + expGain)
+            const expGained = pattern.difficulty * 15 // More XP for harder patterns
+            setTotalExp(totalExp + expGained)
             setShowFeedback("correct")
+            setAnsweredCorrectly([...answeredCorrectly, currentPattern])
         } else {
-            setShowFeedback("wrong")
+            setLives(lives - 1)
+            setShowFeedback("incorrect")
         }
 
         setTimeout(() => {
             setShowFeedback(null)
-            if (currentPattern < filteredPatterns.length - 1) {
-                setFadeIn(false)
-                setTimeout(() => {
+            setSelectedAnswer(null)
+            
+            if (isCorrect) {
+                if (currentPattern < patterns.length - 1) {
                     setCurrentPattern(currentPattern + 1)
-                }, 300)
-            } else {
-                setGameState("result")
+                } else {
+                    handleGameEnd()
+                }
+            } else if (lives <= 1) {
+                handleGameEnd()
             }
         }, 1500)
     }
 
-    const handleDifficultyChange = (level) => {
-        setDifficultyLevel(level)
-    }
+    const handleGameEnd = () => {
+        const finalScore = score;
+        const completionPercentage = Math.round((currentPattern / patterns.length) * 100);
+        const correctAnswers = score;
+        const totalPatterns = patterns.length;
+        
+        if (onGameComplete) {
+            onGameComplete(true, finalScore, {
+                correctAnswers,
+                totalPatterns,
+                completionPercentage,
+                gameType: 'pattern',
+                difficulty: currentPattern < patterns.length ? patterns[currentPattern].difficulty : 3
+            });
+        }
+        
+        setGameState("result");
+    };
 
-    const getDifficultyLabel = (difficulty) => {
+    const getDifficultyColor = (difficulty) => {
         switch (difficulty) {
-            case 1:
-                return "Mudah"
-            case 2:
-                return "Sedang"
-            case 3:
-                return "Sulit"
-            default:
-                return ""
+            case 1: return "bg-green-100 text-green-800"
+            case 2: return "bg-yellow-100 text-yellow-800"
+            case 3: return "bg-red-100 text-red-800"
+            default: return "bg-gray-100 text-gray-800"
         }
     }
 
-    const renderStartScreen = () => (
-        <div className="flex flex-col items-center justify-center h-full space-y-8 py-10">
-            <div className="relative w-full max-w-md opacity-0 animate-fade-in">
-                <div className="bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl shadow-2xl p-8 text-center">
-                    <div className="text-6xl mb-4 animate-float">🧩</div>
-                    <h1 className="text-4xl font-extrabold text-white mb-4">Tebak Pola</h1>
-                    <p className="text-lg text-indigo-100 mb-8">Temukan pola yang tepat dan lanjutkan urutan!</p>
+    const getDifficultyText = (difficulty) => {
+        switch (difficulty) {
+            case 1: return "Mudah"
+            case 2: return "Sedang"
+            case 3: return "Sulit"
+            default: return "Unknown"
+        }
+    }
 
-                    <div className="bg-white/10 rounded-lg p-4 mb-8">
-                        <p className="text-white text-sm">
-                            • Temukan pola dalam urutan
-                            <br />• Pilih item berikutnya yang tepat
-                            <br />• Dapatkan EXP berdasarkan tingkat kesulitan
-                            <br />• Waktu terbatas untuk setiap soal
+    if (gameState === "start") {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+                <div className="max-w-2xl mx-auto pt-20">
+                    <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+                        <div className="text-6xl mb-6">🧩</div>
+                        <h1 className="text-3xl font-bold text-gray-800 mb-4">Pattern Puzzle</h1>
+                        <p className="text-gray-600 mb-6 text-lg">
+                            Temukan pola selanjutnya dalam urutan yang diberikan!
                         </p>
-                    </div>
+                        
+                        <div className="bg-purple-50 rounded-lg p-6 mb-6">
+                            <h3 className="font-bold text-purple-800 mb-3">Cara Bermain:</h3>
+                            <ul className="text-purple-700 text-left space-y-2">
+                                <li>• Perhatikan urutan pola yang ditampilkan</li>
+                                <li>• Pilih jawaban yang melengkapi pola tersebut</li>
+                                <li>• Kamu punya 3 kesempatan (nyawa)</li>
+                                <li>• Pola akan semakin sulit seiring berjalannya permainan</li>
+                            </ul>
+                        </div>
 
-                    <div className="mb-8">
-                        <h3 className="text-white text-lg font-semibold mb-3">Pilih Tingkat Kesulitan:</h3>
-                        <div className="flex flex-wrap justify-center gap-2">
-                            <button
-                                onClick={() => handleDifficultyChange("all")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${difficultyLevel === "all" ? "bg-white text-blue-400 " : "bg-white/20 text-white hover:bg-white/30"
-                                    }`}
-                            >
-                                Semua
-                            </button>
-                            <button
-                                onClick={() => handleDifficultyChange("easy")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${difficultyLevel === "easy" ? "bg-white text-blue-400 " : "bg-white/20 text-white hover:bg-white/30"
-                                    }`}
-                            >
-                                Mudah
-                            </button>
-                            <button
-                                onClick={() => handleDifficultyChange("medium")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${difficultyLevel === "medium" ? "bg-white text-blue-400" : "bg-white/20 text-white hover:bg-white/30"
-                                    }`}
-                            >
-                                Sedang
-                            </button>
-                            <button
-                                onClick={() => handleDifficultyChange("hard")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${difficultyLevel === "hard" ? "bg-white text-blue-400 " : "bg-white/20 text-white hover:bg-white/30"
-                                    }`}
-                            >
-                                Sulit
-                            </button>
+                        <div className="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div className="bg-green-100 text-green-800 p-3 rounded-lg">
+                                <div className="font-bold">Mudah</div>
+                                <div>+15 XP</div>
+                            </div>
+                            <div className="bg-yellow-100 text-yellow-800 p-3 rounded-lg">
+                                <div className="font-bold">Sedang</div>
+                                <div>+30 XP</div>
+                            </div>
+                            <div className="bg-red-100 text-red-800 p-3 rounded-lg">
+                                <div className="font-bold">Sulit</div>
+                                <div>+45 XP</div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={startGame}
+                            className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-8 rounded-full text-xl transition-all duration-200 transform hover:scale-105"
+                        >
+                            Mulai Bermain 🎮
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (gameState === "playing") {
+        const pattern = patterns[currentPattern]
+
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+                <div className="max-w-3xl mx-auto pt-10">
+                    {/* Header Info */}
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center space-x-4">
+                            <div className={`px-3 py-1 rounded-full text-sm font-bold ${getDifficultyColor(pattern.difficulty)}`}>
+                                {getDifficultyText(pattern.difficulty)}
+                            </div>
+                            <div className="text-sm font-medium text-gray-600">
+                                Pola {currentPattern + 1} dari {patterns.length}
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-1">
+                                {[...Array(3)].map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className={`w-6 h-6 rounded-full ${
+                                            i < lives ? "bg-red-500" : "bg-gray-300"
+                                        }`}
+                                    >
+                                        {i < lives && <span className="text-white text-sm flex items-center justify-center h-full">❤️</span>}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="text-sm font-medium text-gray-600">Skor: {score}</div>
                         </div>
                     </div>
 
-                    <button
-                        onClick={handleStart}
-                        className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-4 px-10 rounded-full text-xl shadow-lg transition-transform duration-200 hover:scale-105 active:scale-95"
-                    >
-                        Mulai Bermain
-                    </button>
-                </div>
-            </div>
-
-            <div className="text-center text-gray-600">
-                <p>Total EXP Kamu: {totalExp}</p>
-            </div>
-        </div>
-    )
-
-    const renderPlayingScreen = () => {
-        const pattern = filteredPatterns[currentPattern]
-
-        return (
-            <div
-                className={`flex flex-col items-center justify-center h-full space-y-6 py-8 transition-opacity duration-300 ${fadeIn ? "opacity-100" : "opacity-0"
-                    }`}
-            >
-                <div className="w-full max-w-2xl">
-                    <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                        <span className="bg-indigo-100 text-blue-600  px-3 py-1 rounded-full text-sm font-medium">
-                            Pola {currentPattern + 1}/{filteredPatterns.length}
-                        </span>
-                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
-                            Skor: {score}
-                        </span>
-                        <span
-                            className={`px-3 py-1 rounded-full text-sm font-medium ${timeLeft > 10
-                                    ? "bg-green-100 text-green-800"
-                                    : timeLeft > 5
-                                        ? "bg-yellow-100 text-yellow-800"
-                                        : "bg-red-100 text-red-800 animate-pulse"
-                                }`}
-                        >
-                            ⏱️ {timeLeft}s
-                        </span>
-                        <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-medium">
-                            {getDifficultyLabel(pattern.difficulty)}
-                        </span>
+                    {/* Progress Bar */}
+                    <div className="mb-8">
+                        <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div
+                                className="bg-purple-500 h-3 rounded-full transition-all duration-500"
+                                style={{ width: `${progress}%` }}
+                            ></div>
+                        </div>
                     </div>
 
-                    <div className="w-full bg-gray-200 rounded-full h-3 mb-6">
-                        <div
-                            className="bg-gradient-to-r from-blue-600 to-blue-400  h-3 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${progress}%` }}
-                        ></div>
-                    </div>
-
-                    <div className="w-full p-8 bg-white shadow-xl rounded-2xl border-t-4 border-blue-600">
-                        <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Apa yang selanjutnya dalam pola ini?</h2>
-
-                        {/* Pattern Display */}
-                        <div className="flex justify-center items-center mb-8 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl overflow-x-auto">
-                            <div className="flex items-center space-x-3">
-                                {pattern.sequence.map((item, index) => (
-                                    <div
-                                        key={index}
-                                        className="text-4xl p-4 bg-white rounded-lg shadow-md border-2 border-indigo-100 transition-transform hover:scale-105"
-                                    >
-                                        {item}
-                                    </div>
-                                ))}
-                                <div className="text-4xl p-4 bg-yellow-50 rounded-lg shadow-md border-2 border-dashed border-yellow-400 animate-pulse">
-                                    ?
+                    {/* Pattern Display */}
+                    <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">
+                            Temukan pola selanjutnya:
+                        </h2>
+                        
+                        <div className="flex items-center justify-center space-x-3 mb-8">
+                            {pattern.sequence.map((item, index) => (
+                                <div
+                                    key={index}
+                                    className="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center text-2xl font-bold border-2 border-gray-200"
+                                >
+                                    {item}
                                 </div>
+                            ))}
+                            <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center text-3xl border-2 border-purple-300 border-dashed">
+                                ?
                             </div>
                         </div>
 
                         {/* Options */}
-                        <div className="grid grid-cols-2 gap-4 max-w-xl mx-auto">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {pattern.options.map((option, index) => (
                                 <button
                                     key={index}
                                     onClick={() => handleAnswer(option)}
-                                    className={`text-3xl p-6 h-auto bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 
-                                    text-gray-800 border-2 border-indigo-200 rounded-xl shadow-md transition-all duration-200 
-                                    hover:shadow-lg hover:scale-105 active:scale-95 ${showFeedback ? "pointer-events-none" : ""}`}
                                     disabled={showFeedback !== null}
+                                    className={`w-16 h-16 mx-auto rounded-lg text-2xl font-bold transition-all duration-200 transform hover:scale-110 border-2 ${
+                                        selectedAnswer === option
+                                            ? showFeedback === "correct"
+                                                ? "bg-green-500 text-white border-green-600"
+                                                : "bg-red-500 text-white border-red-600"
+                                            : option === pattern.correctAnswer && showFeedback === "incorrect"
+                                            ? "bg-green-200 border-green-400"
+                                            : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                                    }`}
                                 >
                                     {option}
                                 </button>
                             ))}
                         </div>
+
+                        {/* Feedback */}
+                        {showFeedback && (
+                            <div className="mt-6 text-center animate-fade-in">
+                                {showFeedback === "correct" && (
+                                    <div className="bg-green-100 text-green-800 p-4 rounded-lg">
+                                        <div className="text-3xl mb-2">🎉</div>
+                                        <p className="font-bold text-lg">Benar!</p>
+                                        <p className="text-sm">+{pattern.difficulty * 15} XP</p>
+                                    </div>
+                                )}
+                                {showFeedback === "incorrect" && (
+                                    <div className="bg-red-100 text-red-800 p-4 rounded-lg">
+                                        <div className="text-3xl mb-2">😞</div>
+                                        <p className="font-bold text-lg">Salah!</p>
+                                        <p className="text-sm">Jawaban yang benar: {pattern.correctAnswer}</p>
+                                        <p className="text-sm">Nyawa tersisa: {lives - 1}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                {showFeedback && (
-                    <div
-                        className={`text-center p-6 rounded-xl shadow-lg animate-slide-up ${showFeedback === "correct"
-                                ? "bg-green-100 text-green-800 border-l-4 border-green-500"
-                                : showFeedback === "timeout"
-                                    ? "bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500"
-                                    : "bg-red-100 text-red-800 border-l-4 border-red-500"
-                            }`}
-                    >
-                        {showFeedback === "correct" && (
-                            <div className="flex items-center justify-center space-x-2">
-                                <span className="text-3xl">✅</span>
-                                <p className="text-xl font-bold">Benar! +{pattern.difficulty * 10} EXP</p>
-                            </div>
-                        )}
-                        {showFeedback === "wrong" && (
-                            <div className="flex items-center justify-center space-x-2">
-                                <span className="text-3xl">❌</span>
-                                <p className="text-xl font-bold">Salah! Jawaban yang benar: {pattern.correctAnswer}</p>
-                            </div>
-                        )}
-                        {showFeedback === "timeout" && (
-                            <div className="flex items-center justify-center space-x-2">
-                                <span className="text-3xl">⏰</span>
-                                <p className="text-xl font-bold">Waktu Habis! Jawaban yang benar: {pattern.correctAnswer}</p>
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
         )
     }
 
-    const renderResultScreen = () => {
-        const percentage = Math.round((score / filteredPatterns.length) * 100)
-        let message, emoji
+    if (gameState === "result") {
+        const percentage = Math.round((score / patterns.length) * 100)
+        let message = ""
+        let emoji = ""
 
-        if (percentage === 100) {
-            message = "Sempurna! Kamu jenius!"
+        if (percentage >= 80) {
+            message = "Master Pola!"
             emoji = "🏆"
-        } else if (percentage >= 80) {
-            message = "Hebat! Kemampuan analisis pola kamu luar biasa!"
-            emoji = "🎉"
         } else if (percentage >= 60) {
-            message = "Bagus! Kamu cukup pandai menganalisis pola!"
-            emoji = "👍"
+            message = "Detektif Pola!"
+            emoji = "🕵️"
         } else if (percentage >= 40) {
-            message = "Lumayan! Terus latih kemampuan analisis kamu!"
-            emoji = "📚"
+            message = "Pemula Pola!"
+            emoji = "👍"
         } else {
-            message = "Jangan menyerah! Coba lagi untuk meningkatkan kemampuan analisis pola!"
+            message = "Tetap Berlatih!"
             emoji = "💪"
         }
 
         return (
-            <div className="flex flex-col items-center justify-center h-full space-y-8 py-10 animate-fade-in">
-                <div className="w-full max-w-md p-8 bg-gradient-to-br from-blue-600 to-blue-400  shadow-2xl rounded-2xl text-center text-white">
-                    <div className="text-6xl mb-4 animate-bounce-once">{emoji}</div>
-                    <h2 className="text-3xl font-bold mb-4">Permainan Selesai!</h2>
-                    <p className="text-lg mb-6">{message}</p>
-
-                    <div className="bg-white/10 rounded-xl p-6 mb-6">
-                        <div className="flex justify-between items-center mb-2">
-                            <span>Skor:</span>
-                            <span className="text-2xl font-bold">
-                                {score}/{filteredPatterns.length}
-                            </span>
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+                <div className="max-w-2xl mx-auto pt-20">
+                    <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+                        <div className="text-6xl mb-6">{emoji}</div>
+                        <h1 className="text-3xl font-bold text-gray-800 mb-4">{message}</h1>
+                        
+                        <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <div className="text-2xl font-bold text-purple-600">{score}</div>
+                                    <div className="text-sm text-gray-600">Benar</div>
+                                </div>
+                                <div>
+                                    <div className="text-2xl font-bold text-green-600">{percentage}%</div>
+                                    <div className="text-sm text-gray-600">Akurasi</div>
+                                </div>
+                                <div>
+                                    <div className="text-2xl font-bold text-yellow-600">{totalExp}</div>
+                                    <div className="text-sm text-gray-600">XP</div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="w-full bg-white/20 rounded-full h-4 mb-4">
-                            <div
-                                className="bg-yellow-400 h-4 rounded-full transition-all duration-1000 ease-out"
-                                style={{ width: `${percentage}%` }}
-                            ></div>
+                        {/* Pattern Summary */}
+                        <div className="bg-purple-50 rounded-lg p-4 mb-6">
+                            <h3 className="font-bold text-purple-800 mb-3">Ringkasan Pola:</h3>
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <div className="text-green-600">
+                                    <div className="font-bold">{answeredCorrectly.filter(i => patterns[i].difficulty === 1).length}</div>
+                                    <div>Mudah</div>
+                                </div>
+                                <div className="text-yellow-600">
+                                    <div className="font-bold">{answeredCorrectly.filter(i => patterns[i].difficulty === 2).length}</div>
+                                    <div>Sedang</div>
+                                </div>
+                                <div className="text-red-600">
+                                    <div className="font-bold">{answeredCorrectly.filter(i => patterns[i].difficulty === 3).length}</div>
+                                    <div>Sulit</div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="text-center">
-                            <span className="text-xl">{percentage}%</span>
+                        <div className="space-y-4">
+                            <button
+                                onClick={restartGame}
+                                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-full transition-all duration-200"
+                            >
+                                Main Lagi 🔄
+                            </button>
+                            <button
+                                onClick={() => window.history.back()}
+                                className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition-all duration-200"
+                            >
+                                Kembali ke Menu
+                            </button>
                         </div>
-                    </div>
-
-                    <div className="bg-green-400/20 rounded-lg p-4 mb-6">
-                        <p className="text-xl">
-                            Total EXP: <span className="font-bold">+{totalExp}</span>
-                        </p>
-                    </div>
-
-                    <div className="flex flex-col space-y-4">
-                        <button
-                            onClick={handleStart}
-                            className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-4 px-10 rounded-full text-xl shadow-lg transition-transform duration-200 hover:scale-105 active:scale-95"
-                        >
-                            Main Lagi
-                        </button>
-
-                        <button
-                            onClick={() => setGameState("start")}
-                            className="bg-white/20 hover:bg-white/30 text-white font-medium py-2 px-6 rounded-full transition-colors duration-200"
-                        >
-                            Ubah Tingkat Kesulitan
-                        </button>
                     </div>
                 </div>
             </div>
         )
     }
-
-    return (
-        <div className="min-h-[600px] w-full max-w-4xl mx-auto p-4 bg-gradient-to-b from-indigo-50 to-white rounded-3xl shadow-lg">
-            {gameState === "start" && renderStartScreen()}
-            {gameState === "playing" && renderPlayingScreen()}
-            {gameState === "result" && renderResultScreen()}
-        </div>
-    )
 }
