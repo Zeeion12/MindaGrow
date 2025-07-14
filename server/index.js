@@ -95,8 +95,8 @@ const classRoutes = require('./routes/classRoutes');
 app.use('/api', classRoutes);
 
 // Assignment Router
-const assignmentRoutes = require('./routes/assignmentRoutes');
-app.use('/api', assignmentRoutes);
+const assingmentRoutes = require('./routes/assignmentRoutes');
+app.use('/api', assingmentRoutes);
 
 // Material Routes
 const materialRoutes = require('./routes/materialRoutes');
@@ -502,7 +502,7 @@ const logLoginAttempt = async (email, ipAddress, attemptType, success, errorMess
     // Pastikan attemptType menggunakan enum yang valid
     const validAttemptTypes = ['login', '2fa_verify']; // Hapus 'google_oauth' sementara
     const finalAttemptType = validAttemptTypes.includes(attemptType) ? attemptType : 'login';
-    
+
     await pool.query(
       'INSERT INTO login_attempts (email, ip_address, attempt_type, success, error_message) VALUES ($1, $2, $3, $4, $5)',
       [email, ipAddress, finalAttemptType, success, errorMessage]
@@ -545,8 +545,8 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // Test endpoint
 app.get('/api/test', authenticateToken, (req, res) => {
-  res.json({ 
-    message: 'API is working', 
+  res.json({
+    message: 'API is working',
     user: req.user,
     timestamp: new Date().toISOString()
   });
@@ -555,34 +555,34 @@ app.get('/api/test', authenticateToken, (req, res) => {
 // Get user streak
 app.get('/api/users/streak', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  
-  try { 
+
+  try {
     const result = await pool.query(
       'SELECT current_streak, longest_streak, last_activity_date, is_active FROM user_streaks WHERE user_id = $1',
       [userId]
     );
-    
+
     if (result.rows.length === 0) {
       console.log('📭 No streak data found, returning defaults');
-      return res.json({ 
-        current_streak: 0, 
-        longest_streak: 0, 
+      return res.json({
+        current_streak: 0,
+        longest_streak: 0,
         is_active: false,
-        last_activity_date: null 
+        last_activity_date: null
       });
     }
-    
+
     const streak = result.rows[0];
-    
+
     // Check if streak should be deactivated (setelah jam 12 malam)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     const lastActivity = new Date(streak.last_activity_date);
     lastActivity.setHours(0, 0, 0, 0);
-    
+
     const isActiveToday = lastActivity.getTime() === today.getTime();
-    
+
     // Update is_active status jika berbeda dari database
     if (streak.is_active !== isActiveToday) {
       await pool.query(
@@ -592,7 +592,7 @@ app.get('/api/users/streak', authenticateToken, async (req, res) => {
       streak.is_active = isActiveToday;
       console.log(`🔄 Updated streak active status to ${isActiveToday}`);
     }
-    
+
     res.json(streak);
   } catch (error) {
     console.error('❌ Error getting user streak:', error);
@@ -603,19 +603,19 @@ app.get('/api/users/streak', authenticateToken, async (req, res) => {
 // Get game progress
 app.get('/api/games/progress', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  
+
   try {
-    
+
     const result = await pool.query(
       'SELECT * FROM game_progress WHERE user_id = $1',
       [userId]
     );
-    
+
     const gameProgress = {};
     result.rows.forEach(row => {
-      const percentage = row.total_questions > 0 ? 
+      const percentage = row.total_questions > 0 ?
         Math.min(Math.round((row.correct_answers / row.total_questions) * 100), 100) : 0;
-      
+
       gameProgress[row.game_id] = {
         totalQuestions: row.total_questions,
         correctAnswers: row.correct_answers,
@@ -632,21 +632,21 @@ app.get('/api/games/progress', authenticateToken, async (req, res) => {
 // Update user streak function (internal) - FIXED VERSION
 async function updateUserStreak(userId) {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     console.log(`🔥 Updating streak for user ${userId} on ${today.toISOString()}`);
-    
+
     // Check if user streak exists
     const streakResult = await client.query(
       'SELECT * FROM user_streaks WHERE user_id = $1',
       [userId]
     );
-    
+
     if (streakResult.rows.length === 0) {
       // Create new streak
       await client.query(
@@ -657,18 +657,18 @@ async function updateUserStreak(userId) {
       await client.query('COMMIT');
       return { newStreak: 1, wasUpdated: true };
     }
-    
+
     const streak = streakResult.rows[0];
     let lastActivityDate = new Date(streak.last_activity_date);
     lastActivityDate.setHours(0, 0, 0, 0);
-    
+
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     console.log(`📅 Last activity: ${lastActivityDate.toISOString()}`);
     console.log(`📅 Yesterday: ${yesterday.toISOString()}`);
     console.log(`📅 Today: ${today.toISOString()}`);
-    
+
     // KUNCI: Cek apakah sudah main hari ini
     if (lastActivityDate.getTime() === today.getTime()) {
       // Sudah main hari ini, JANGAN update streak lagi, hanya aktifkan
@@ -680,12 +680,12 @@ async function updateUserStreak(userId) {
       await client.query('COMMIT');
       return { newStreak: streak.current_streak, wasUpdated: false };
     }
-    
+
     if (lastActivityDate.getTime() === yesterday.getTime()) {
       // Kemarin main, hari ini main = consecutive day, increment streak
       const newStreak = streak.current_streak + 1;
       const longestStreak = Math.max(newStreak, streak.longest_streak);
-      
+
       await client.query(
         'UPDATE user_streaks SET current_streak = $1, longest_streak = $2, last_activity_date = $3, is_active = true WHERE user_id = $4',
         [newStreak, longestStreak, today, userId]
@@ -696,7 +696,7 @@ async function updateUserStreak(userId) {
     } else {
       // Streak broken atau gap lebih dari 1 hari, start new streak
       console.log('🔴 Streak broken! Gap detected, starting new streak');
-      
+
       await client.query(
         'UPDATE user_streaks SET current_streak = 1, last_activity_date = $1, streak_start_date = $1, is_active = true WHERE user_id = $2',
         [today, userId]
@@ -718,7 +718,7 @@ async function updateUserStreak(userId) {
 app.post('/api/games/complete', authenticateToken, async (req, res) => {
   const userId = req.user.id;
   const { gameId, correctAnswers, totalQuestions } = req.body;
-  
+
   try {
     console.log(`🎮 Completing game:`, {
       userId,
@@ -726,15 +726,15 @@ app.post('/api/games/complete', authenticateToken, async (req, res) => {
       correctAnswers,
       totalQuestions
     });
-    
+
     // Validate input
     if (!gameId || typeof correctAnswers !== 'number' || typeof totalQuestions !== 'number') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Invalid input data',
         received: { gameId, correctAnswers, totalQuestions }
       });
     }
-    
+
     // Update or insert game progress
     await pool.query(`
       INSERT INTO game_progress (user_id, game_id, total_questions, correct_answers, updated_at)
@@ -745,30 +745,30 @@ app.post('/api/games/complete', authenticateToken, async (req, res) => {
         correct_answers = game_progress.correct_answers + $4,
         updated_at = CURRENT_TIMESTAMP
     `, [userId, gameId, totalQuestions, correctAnswers]);
-    
+
     console.log('✅ Game progress updated in database');
-    
+
     // Update streak HANYA SEKALI PER HARI
     const streakResult = await updateUserStreak(userId);
-    
+
     console.log('✅ Streak update result:', streakResult);
-    
+
     // Log activity
     await pool.query(
       'INSERT INTO activity_logs (user_id, activity_type, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
       [userId, 'game_complete', 'game', gameId]
     );
-    
-    res.json({ 
+
+    res.json({
       message: 'Game progress updated successfully',
       streakUpdated: streakResult.wasUpdated,
       currentStreak: streakResult.newStreak
     });
   } catch (error) {
     console.error('❌ Error completing game:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error',
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -2049,18 +2049,18 @@ app.get('/api/daily-missions', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const today = getTodayDate();
-    
+
     // Get user's daily quiz completion
     const quizCompletion = await pool.query(`
       SELECT * FROM daily_quiz_completions WHERE user_id = $1 AND quiz_date = $2
     `, [userId, today]);
-    
-    const quizData = quizCompletion.rows[0] || { 
-      completed_quizzes: 0, 
-      correct_answers: 0, 
-      total_questions: 0 
+
+    const quizData = quizCompletion.rows[0] || {
+      completed_quizzes: 0,
+      correct_answers: 0,
+      total_questions: 0
     };
-    
+
     // Get user's daily missions progress
     const missionsQuery = await pool.query(`
       SELECT dm.*, COALESCE(udm.current_progress, 0) as current_progress,
@@ -2071,7 +2071,7 @@ app.get('/api/daily-missions', authenticateToken, async (req, res) => {
       WHERE dm.is_active = true
       ORDER BY dm.id
     `, [userId, today]);
-    
+
     // Build dynamic missions based on real data
     const missions = [
       {
@@ -2119,12 +2119,12 @@ app.get('/api/daily-missions', authenticateToken, async (req, res) => {
         condition_met: quizData.completed_quizzes > 0
       }
     ];
-    
+
     res.json({
       success: true,
       missions
     });
-    
+
   } catch (error) {
     console.error('Error fetching daily missions:', error);
     res.json({
@@ -2149,15 +2149,15 @@ app.post('/api/daily-missions/progress', authenticateToken, async (req, res) => 
   try {
     const { missionType, progress = 1 } = req.body;
     const userId = req.user.id;
-    
+
     console.log(`Mission progress update: ${missionType} +${progress} for user ${userId}`);
-    
+
     res.json({
       success: true,
       message: `Mission progress updated: ${missionType} +${progress}`,
       xpGained: progress * 10 // Simple XP calculation
     });
-    
+
   } catch (error) {
     console.error('Error updating mission progress:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -2175,7 +2175,7 @@ app.get('/api/leaderboard/weekly', authenticateToken, async (req, res) => {
         AND table_name = 'siswa'
       );
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
       // Return dummy data
       return res.json({
@@ -2191,9 +2191,9 @@ app.get('/api/leaderboard/weekly', authenticateToken, async (req, res) => {
         weekStartDate: getWeekStartDate()
       });
     }
-    
+
     const weekStartDate = getWeekStartDate();
-    
+
     const query = `
       SELECT 
         s.nama_lengkap,
@@ -2209,9 +2209,9 @@ app.get('/api/leaderboard/weekly', authenticateToken, async (req, res) => {
       ORDER BY weekly_xp DESC, total_xp DESC
       LIMIT 20
     `;
-    
+
     const result = await pool.query(query, [weekStartDate]);
-    
+
     res.json({
       success: true,
       leaderboard: result.rows,
@@ -2244,7 +2244,7 @@ app.get('/api/leaderboard/overall', authenticateToken, async (req, res) => {
         AND table_name = 'siswa'
       );
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
       return res.json({
         success: true,
@@ -2258,7 +2258,7 @@ app.get('/api/leaderboard/overall', authenticateToken, async (req, res) => {
         ]
       });
     }
-    
+
     const query = `
       SELECT 
         s.nama_lengkap,
@@ -2271,9 +2271,9 @@ app.get('/api/leaderboard/overall', authenticateToken, async (req, res) => {
       ORDER BY total_xp DESC
       LIMIT 20
     `;
-    
+
     const result = await pool.query(query);
-    
+
     res.json({
       success: true,
       leaderboard: result.rows
@@ -2298,7 +2298,7 @@ app.get('/api/leaderboard/overall', authenticateToken, async (req, res) => {
 app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Get user info with real XP data
     let userData = { nama_lengkap: 'Student', total_xp: 0, current_level: 1 };
     try {
@@ -2310,14 +2310,14 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
         JOIN users u ON s.user_id = u.id 
         WHERE u.id = $1
       `, [userId]);
-      
+
       if (userQuery.rows.length > 0) {
         userData = userQuery.rows[0];
       }
     } catch (userError) {
       console.log('User data not available, using defaults');
     }
-    
+
     // Get real game progress
     const gamesQuery = await pool.query(`
       SELECT 
@@ -2335,13 +2335,13 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
       WHERE g.is_active = true
       ORDER BY g.id
     `, [userId]);
-    
+
     // Get streak data
     const streakResponse = await fetch(`http://localhost:${process.env.PORT || 5000}/api/users/streak`, {
       headers: { Authorization: `Bearer ${req.headers.authorization?.split(' ')[1]}` }
     });
     const streakData = await streakResponse.json();
-    
+
     res.json({
       success: true,
       user: userData,
@@ -2350,7 +2350,7 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
       dailyMissions: [], // Will be fetched separately
       leaderboard: [] // Will be fetched separately
     });
-    
+
   } catch (error) {
     console.error('Error fetching dashboard:', error);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -2359,7 +2359,7 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
 
 async function updateWeeklyLeaderboard(userId, xpGained, client) {
   const weekStartDate = getWeekStartDate();
-  
+
   await client.query(`
     INSERT INTO weekly_leaderboard (user_id, week_start_date, total_xp, games_played)
     VALUES ($1, $2, $3, 1)
@@ -2373,15 +2373,15 @@ async function updateWeeklyLeaderboard(userId, xpGained, client) {
 
 async function checkDailyMissions(userId, client) {
   const today = getTodayDate();
-  
+
   // Get today's quiz completion data
   const quizResult = await client.query(`
     SELECT * FROM daily_quiz_completions WHERE user_id = $1 AND quiz_date = $2
   `, [userId, today]);
-  
+
   const quizData = quizResult.rows[0];
   if (!quizData) return;
-  
+
   // Check mission 1: Complete 3 quizzes
   if (quizData.completed_quizzes >= 3) {
     await client.query(`
@@ -2389,13 +2389,13 @@ async function checkDailyMissions(userId, client) {
       VALUES ($1, 1, $2, true, CURRENT_TIMESTAMP, $3)
       ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
     `, [userId, quizData.completed_quizzes, today]);
-    
+
     // Award XP
     await client.query(`
       UPDATE siswa SET total_xp = total_xp + 50 WHERE user_id = $1
     `, [userId]);
   }
-  
+
   // Check mission 3: Solve 10 practice problems
   if (quizData.correct_answers >= 10) {
     await client.query(`
@@ -2403,13 +2403,13 @@ async function checkDailyMissions(userId, client) {
       VALUES ($1, 3, $2, true, CURRENT_TIMESTAMP, $3)
       ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
     `, [userId, quizData.correct_answers, today]);
-    
+
     // Award XP
     await client.query(`
       UPDATE siswa SET total_xp = total_xp + 100 WHERE user_id = $1
     `, [userId]);
   }
-  
+
   // Check mission 4: Play any game
   if (quizData.completed_quizzes > 0) {
     await client.query(`
@@ -2417,7 +2417,7 @@ async function checkDailyMissions(userId, client) {
       VALUES ($1, 4, 1, true, CURRENT_TIMESTAMP, $2)
       ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
     `, [userId, today]);
-    
+
     // Award XP
     await client.query(`
       UPDATE siswa SET total_xp = total_xp + 25 WHERE user_id = $1

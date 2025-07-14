@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "../../context/authContext"
+import { useAuth } from "../../context/AuthContext"
 import Header from "../../components/layout/layoutParts/Header"
 import axios from "axios"
 
@@ -133,6 +133,11 @@ export default function PenilaianTugas() {
         }
     }
 
+    const refreshDashboard = () => {
+        // Emit custom event untuk refresh dashboard
+        window.dispatchEvent(new CustomEvent('refreshDashboard'))
+    }
+
     //function handleGradeSubmission
     const handleGradeSubmission = async () => {
         if (!selectedSubmission || !gradeInput) {
@@ -186,11 +191,11 @@ export default function PenilaianTugas() {
                         ? {
                             ...assignment,
                             graded: selectedSubmission.score !== null
-                                ? assignment.graded // No change if already graded
-                                : assignment.graded + 1, // Increment if new grade
+                                ? assignment.graded
+                                : assignment.graded + 1,
                             pending: selectedSubmission.score !== null
-                                ? assignment.pending // No change if already graded  
-                                : Math.max(0, assignment.pending - 1) // Decrement if new grade
+                                ? assignment.pending
+                                : Math.max(0, assignment.pending - 1)
                         }
                         : assignment
                 ))
@@ -201,9 +206,10 @@ export default function PenilaianTugas() {
                 setSelectedSubmission(null)
                 setGradingMode(false)
 
+                // **TAMBAH** - Refresh dashboard
+                refreshDashboard()
+
                 alert('Nilai berhasil disimpan!')
-            } else {
-                alert(response.data.message || 'Gagal menyimpan nilai')
             }
         } catch (error) {
             console.error('Error grading submission:', error)
@@ -389,11 +395,17 @@ export default function PenilaianTugas() {
                                     <div className="w-full bg-gray-200 rounded-full h-2">
                                         <div
                                             className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                                            style={{ width: `${(assignment.graded / assignment.total_submissions) * 100}%` }}
+                                            style={{
+                                                width: `${assignment.total_submissions > 0
+                                                    ? (assignment.graded / assignment.total_submissions) * 100
+                                                    : 0}%`
+                                            }}
                                         ></div>
                                     </div>
                                     <div className="text-right text-sm text-gray-500 mt-1">
-                                        {Math.round((assignment.graded / assignment.total_submissions) * 100)}% selesai
+                                        {assignment.total_submissions > 0
+                                            ? Math.round((assignment.graded / assignment.total_submissions) * 100)
+                                            : 0}% selesai
                                     </div>
                                 </div>
                             ))}

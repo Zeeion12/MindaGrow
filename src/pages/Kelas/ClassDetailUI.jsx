@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { useAuth } from "../../context/authContext"
+import { useAuth } from "../../context/AuthContext"
 import axios from "axios"
 import { format } from "date-fns"
 
@@ -234,9 +234,9 @@ export default function EnhancedClassDetail() {
                 },
             });
 
-            console.log("Assignments response:", response.data); // Debug log
+            console.log("Assignments response:", response.data);
 
-            // Process assignments untuk siswa - tambahkan info submission
+            // Process assignments untuk siswa - TAMBAHKAN info nilai
             const assignmentsWithSubmissionInfo = response.data.assignments.map(assignment => {
                 let displayStatus = assignment.status;
                 let submissionInfo = null;
@@ -249,8 +249,8 @@ export default function EnhancedClassDetail() {
                             id: assignment.my_submission_id,
                             status: assignment.my_submission_status,
                             submitted_at: assignment.my_submitted_at,
-                            score: assignment.my_score,
-                            file_url: assignment.my_submission_file_url // Jika ada
+                            score: assignment.my_score, // **TAMBAHKAN** score dari backend
+                            file_url: assignment.my_submission_file_url
                         };
                         displayStatus = assignment.my_submission_status;
                     } else {
@@ -624,6 +624,15 @@ export default function EnhancedClassDetail() {
         }
     }
 
+    // **TAMBAHKAN** - Function helper untuk warna grade
+    const getGradeColor = (score, maxScore) => {
+        const percentage = (score / maxScore) * 100;
+        if (percentage >= 85) return 'text-green-700 bg-green-50 border-green-200';
+        if (percentage >= 70) return 'text-blue-700 bg-blue-50 border-blue-200';
+        if (percentage >= 60) return 'text-yellow-700 bg-yellow-50 border-yellow-200';
+        return 'text-red-700 bg-red-50 border-red-200';
+    };
+
 
     // Fungsi untuk mengunduh file - FIXED VERSION
     const handleDownloadFile = async (itemId, type) => {
@@ -964,7 +973,6 @@ export default function EnhancedClassDetail() {
                                         displayStatus = assignment.my_submission_status;
                                     }
 
-
                                     return (
                                         <div key={assignment.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
                                             <div className="p-6">
@@ -993,14 +1001,44 @@ export default function EnhancedClassDetail() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {/* Status untuk guru dan siswa */}
-                                                    <span
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(displayStatus)}`}
-                                                    >
-                                                        {getStatusIcon(displayStatus)}
-                                                        <span className="ml-1 capitalize">{displayStatus}</span>
-                                                    </span>
+
+                                                    {/* **TAMBAHKAN** - Section untuk menampilkan status dan nilai */}
+                                                    <div className="flex flex-col items-end space-y-2">
+                                                        {/* Status Badge */}
+                                                        <span
+                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(displayStatus)}`}
+                                                        >
+                                                            {getStatusIcon(displayStatus)}
+                                                            <span className="ml-1 capitalize">{displayStatus}</span>
+                                                        </span>
+
+                                                        {/* **TAMBAHKAN** - Nilai untuk siswa yang sudah dinilai */}
+                                                        {user?.role === "siswa" && assignment.my_submission && assignment.my_submission.score !== null && (
+                                                            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-center">
+                                                                <div className="text-lg font-bold text-green-700">
+                                                                    {assignment.my_submission.score}/{assignment.points}
+                                                                </div>
+                                                                <div className="text-xs text-green-600">
+                                                                    Nilai: {Math.round((assignment.my_submission.score / assignment.points) * 100)}%
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* **TAMBAHKAN** - Info pending grade untuk siswa */}
+                                                        {user?.role === "siswa" && assignment.my_submission && assignment.my_submission.score === null && assignment.my_submission_status === 'submitted' && (
+                                                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-center">
+                                                                <div className="text-xs text-yellow-700 font-medium">
+                                                                    Menunggu Penilaian
+                                                                </div>
+                                                                <div className="text-xs text-yellow-600">
+                                                                    Sudah dikumpulkan
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
+
+                                                {/* Sisa kode untuk border dan action buttons tetap sama */}
                                                 <div className="border-t border-gray-200 my-4"></div>
 
                                                 <div className="flex items-center justify-between">
@@ -1020,6 +1058,7 @@ export default function EnhancedClassDetail() {
                                                         )}
                                                     </div>
 
+                                                    {/* Action buttons tetap sama */}
                                                     <div className="flex space-x-2">
                                                         <button
                                                             onClick={() => handleViewAssignment(assignment)}
@@ -1028,7 +1067,7 @@ export default function EnhancedClassDetail() {
                                                             Lihat
                                                         </button>
 
-                                                        {/* DOWNLOAD ASSIGNMENT FILE - FIXED */}
+                                                        {/* DOWNLOAD ASSIGNMENT FILE */}
                                                         {assignment.file_url && (
                                                             <button
                                                                 onClick={() => handleDownloadFile(assignment.id, 'assignment')}
@@ -1050,7 +1089,7 @@ export default function EnhancedClassDetail() {
                                                             </button>
                                                         )}
 
-                                                        {/* SISWA ACTIONS - FIXED LOGIC */}
+                                                        {/* SISWA ACTIONS - Logic tetap sama */}
                                                         {user?.role === "siswa" && (
                                                             <>
                                                                 {/* JIKA BELUM SUBMIT DAN BELUM OVERDUE */}
@@ -1900,15 +1939,39 @@ export default function EnhancedClassDetail() {
                                     </span>
                                 </div>
                             )}
-                            {user?.role === "siswa" && selectedAssignment.my_submission_status && (
+                            {user?.role === "siswa" && selectedAssignment.my_submission && (
                                 <div>
                                     <p className="font-medium">Status Pengiriman Anda:</p>
-                                    <span
-                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(selectedAssignment.my_submission_status)}`}
-                                    >
-                                        {getStatusIcon(selectedAssignment.my_submission_status)}
-                                        <span className="ml-1 capitalize">{selectedAssignment.my_submission_status}</span>
-                                    </span>
+                                    <div className="flex items-center space-x-4 mt-2">
+                                        <span
+                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(selectedAssignment.my_submission_status)}`}
+                                        >
+                                            {getStatusIcon(selectedAssignment.my_submission_status)}
+                                            <span className="ml-1 capitalize">{selectedAssignment.my_submission_status}</span>
+                                        </span>
+
+                                        {/* **TAMBAHKAN** - Tampilkan nilai jika sudah dinilai */}
+                                        {selectedAssignment.my_submission.score !== null && (
+                                            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                                <div className="text-sm font-bold text-green-700">
+                                                    Nilai: {selectedAssignment.my_submission.score}/{selectedAssignment.points}
+                                                </div>
+                                                <div className="text-xs text-green-600">
+                                                    ({Math.round((selectedAssignment.my_submission.score / selectedAssignment.points) * 100)}%)
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* **TAMBAHKAN** - Tampilkan feedback jika ada */}
+                                    {selectedAssignment.my_submission.feedback && (
+                                        <div className="mt-3">
+                                            <p className="font-medium text-sm">Feedback dari Guru:</p>
+                                            <div className="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                                <p className="text-sm text-blue-800">{selectedAssignment.my_submission.feedback}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

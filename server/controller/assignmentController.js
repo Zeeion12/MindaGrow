@@ -126,7 +126,7 @@ exports.createAssignment = async (req, res) => {
 // Guru: Mendapatkan semua assignments dari kelas yang diajar
 exports.getAssignmentsByTeacher = async (req, res) => {
     const teacherId = req.user.id;
-    const { classId } = req.query; // Optional filter by class
+    const { classId } = req.query;
 
     try {
         let query = `
@@ -134,7 +134,9 @@ exports.getAssignmentsByTeacher = async (req, res) => {
                 a.*,
                 c.name as class_name,
                 c.grade as class_grade,
-                COUNT(s.id) as total_submissions
+                COUNT(s.id) as total_submissions,
+                COUNT(CASE WHEN s.status = 'graded' THEN 1 END) as graded_count,
+                COUNT(CASE WHEN s.status IN ('submitted', 'pending_grading') THEN 1 END) as pending_count
             FROM assignments a
             JOIN classes c ON a.class_id = c.id
             LEFT JOIN submissions s ON a.id = s.assignment_id
@@ -152,9 +154,16 @@ exports.getAssignmentsByTeacher = async (req, res) => {
 
         const result = await pool.query(query, params);
 
+        // **TAMBAH** - Transform data dengan stats yang benar
+        const transformedAssignments = result.rows.map(assignment => ({
+            ...assignment,
+            graded_count: parseInt(assignment.graded_count) || 0,
+            pending_count: parseInt(assignment.pending_count) || 0
+        }));
+
         res.json({
             success: true,
-            assignments: result.rows
+            assignments: transformedAssignments
         });
     } catch (error) {
         console.error('Error fetching assignments by teacher:', error);
@@ -492,7 +501,7 @@ exports.getAssignmentsByClass = async (req, res) => {
             WHERE a.class_id = $1 AND a.status = 'active'
         `;
 
-        // Jika siswa, ambil juga info submission mereka
+        // **UBAH** - Jika siswa, tambahkan score ke query
         if (userRole === 'siswa') {
             query = `
                 SELECT 
@@ -502,6 +511,7 @@ exports.getAssignmentsByClass = async (req, res) => {
                     my_s.status as my_submission_status,
                     my_s.submitted_at as my_submitted_at,
                     my_s.score as my_score,
+                    my_s.feedback as my_feedback,
                     my_s.file_url as my_submission_file_url
                 FROM assignments a
                 LEFT JOIN submissions s ON a.id = s.assignment_id
@@ -513,7 +523,7 @@ exports.getAssignmentsByClass = async (req, res) => {
         query += ' GROUP BY a.id';
 
         if (userRole === 'siswa') {
-            query += ', my_s.id, my_s.status, my_s.submitted_at, my_s.score';
+            query += ', my_s.id, my_s.status, my_s.submitted_at, my_s.score, my_s.feedback';
         }
 
         query += ' ORDER BY a.due_date ASC, a.created_at DESC';
@@ -680,3 +690,4 @@ exports.downloadAssignment = async (req, res) => {
         }
     }
 };
+
