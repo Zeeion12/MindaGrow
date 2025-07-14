@@ -105,11 +105,6 @@ const Sidebar = ({ onToggle }) => {
           icon: <RiBookletLine size={24} />
         },
         {
-          path: '/manajemen-kelas',
-          name: 'Manajemen Kelas',
-          icon: <RiFileList3Line size={24} />
-        },
-        {
           path: '/chat-ortu',
           name: 'Chat dengan Guru',
           icon: <RiMessage3Line size={24} />

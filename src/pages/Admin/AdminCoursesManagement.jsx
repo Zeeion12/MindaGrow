@@ -182,6 +182,8 @@ const AdminCourseManagement = () => {
   };
 
   const handleDeleteConfirm = async () => {
+    if (!deleteModal.course) return;
+    
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -194,20 +196,28 @@ const AdminCourseManagement = () => {
         }
       });
 
+      const responseData = await response.json();
+
       if (response.ok) {
         setDeleteModal({ isOpen: false, course: null });
         setSuccessModal({
           isOpen: true,
-          message: `Kursus "${deleteModal.course.title}" berhasil dihapus!`
+          message: responseData.deletedEnrollments > 0 
+            ? `Kursus "${deleteModal.course.title}" berhasil dihapus! (${responseData.deletedEnrollments} pendaftaran dihapus)`
+            : `Kursus "${deleteModal.course.title}" berhasil dihapus!`
         });
-        loadCourses();
+        loadCourses(); // Refresh list
       } else {
-        const errorData = await response.json();
-        alert(errorData.message || 'Error deleting course');
+        // Handle specific errors
+        if (response.status === 400 && responseData.enrollmentCount) {
+          alert(`Tidak dapat menghapus kursus. Ada ${responseData.enrollmentCount} siswa yang masih terdaftar. Sebagai admin, Anda dapat memaksa menghapus kursus ini.`);
+        } else {
+          alert(responseData.message || 'Error deleting course');
+        }
       }
     } catch (error) {
       console.error('Error deleting course:', error);
-      alert('Network error while deleting course');
+      alert('Network error while deleting course. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -259,11 +269,20 @@ const AdminCourseManagement = () => {
     const [confirmText, setConfirmText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     
+    // Reset confirmText when modal opens/closes
+    useEffect(() => {
+      if (isOpen) {
+        setConfirmText('');
+        setIsTyping(false);
+      }
+    }, [isOpen]);
+    
     if (!isOpen) return null;
 
     const handleConfirm = () => {
       if (confirmText.toLowerCase() === 'delete') {
         onConfirm();
+        setConfirmText(''); // Reset after confirm
       }
     };
 
@@ -273,9 +292,14 @@ const AdminCourseManagement = () => {
       setTimeout(() => setIsTyping(false), 1000);
     };
 
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter' && confirmText.toLowerCase() === 'delete') {
+        handleConfirm();
+      }
+    };
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all duration-300 ease-out scale-95 hover:scale-100"></div>
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
@@ -283,7 +307,7 @@ const AdminCourseManagement = () => {
         />
         
         {/* Modal */}
-        <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all duration-300 animate-modal-enter">
+        <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all duration-300">
           {/* Danger Icon */}
           <div className="flex items-center justify-center pt-8 pb-4">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center animate-pulse">
@@ -295,7 +319,9 @@ const AdminCourseManagement = () => {
 
           <div className="px-6 pb-6">
             <h3 className="text-xl font-bold text-gray-900 text-center mb-2">Hapus Kursus</h3>
-            <p className="text-gray-600 text-center mb-4">Anda yakin ingin menghapus kursus ini? Tindakan ini tidak dapat dibatalkan.</p>
+            <p className="text-gray-600 text-center mb-4">
+              Anda yakin ingin menghapus kursus ini? Tindakan ini tidak dapat dibatalkan.
+            </p>
 
             {/* Course Info */}
             {course && (
@@ -318,7 +344,10 @@ const AdminCourseManagement = () => {
                       <span>{course.duration} menit</span>
                     </div>
                     {course.enrolled_count > 0 && (
-                      <p className="text-xs text-red-600 mt-1">⚠️ {course.enrolled_count} siswa terdaftar di kursus ini</p>
+                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                        <p className="text-yellow-800 font-medium">⚠️ {course.enrolled_count} siswa terdaftar</p>
+                        <p className="text-yellow-700">Sebagai admin, Anda dapat memaksa menghapus kursus ini. Semua pendaftaran akan dihapus.</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -334,11 +363,13 @@ const AdminCourseManagement = () => {
                 type="text"
                 value={confirmText}
                 onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all duration-200 ${
                   confirmText.toLowerCase() === 'delete' ? 'border-red-500 bg-red-50' : 
                   confirmText ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300'
                 }`}
                 placeholder="Ketik DELETE di sini..."
+                disabled={loading}
               />
               
               {/* Real-time feedback */}
@@ -350,13 +381,12 @@ const AdminCourseManagement = () => {
                         <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        <span className="text-sm text-green-600">Konfirmasi diterima</span>
+                        <span className="text-sm text-green-600 font-medium">Siap untuk menghapus</span>
                       </>
                     ) : (
                       <>
-                        <svg className="w-4 h-4 text-yellow-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                         </svg>
                         <span className="text-sm text-yellow-600">Ketik "DELETE" untuk melanjutkan</span>
                       </>
@@ -371,34 +401,25 @@ const AdminCourseManagement = () => {
               <button
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={confirmText.toLowerCase() !== 'delete' || loading}
-                className={`flex-1 px-4 py-2 rounded-lg focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center space-x-2 ${
-                  confirmText.toLowerCase() === 'delete' && !loading
-                    ? 'bg-red-600 hover:bg-red-700 text-white transform hover:scale-105'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {loading ? (
                   <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Menghapus...</span>
+                    Menghapus...
                   </>
                 ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span>Hapus Kursus</span>
-                  </>
+                  'Hapus Kursus'
                 )}
               </button>
             </div>

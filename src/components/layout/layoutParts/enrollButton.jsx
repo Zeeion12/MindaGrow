@@ -1,4 +1,4 @@
-// src/components/layout/layoutParts/enrollButton.jsx
+// src/components/layout/layoutParts/enrollButton.jsx - Updated Version
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -30,12 +30,14 @@ const EnrollButton = ({
       return;
     }
 
-    // Handle enroll/unenroll
+    // If enrolled, go to learning page instead of unenrolling
     if (isEnrolled) {
-      onUnenroll();
-    } else {
-      onEnroll();
+      navigate(`/kursus/${courseId}/belajar`);
+      return;
     }
+
+    // If not enrolled, enroll first
+    onEnroll();
   };
 
   // Size variants
@@ -78,14 +80,14 @@ const EnrollButton = ({
 
     if (isEnrolled) {
       return {
-        text: 'Batal dari Kursus',
-        classes: 'bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl'
+        text: 'Masuk Kursus', // Changed from 'Batal dari Kursus'
+        classes: 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
       };
     }
 
     return {
       text: 'Daftar Sekarang',
-      classes: 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
+      classes: 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
     };
   };
 

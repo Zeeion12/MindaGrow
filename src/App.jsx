@@ -14,7 +14,7 @@ import TwoFactorVerify from './components/auth/TwoFactorVerify';
 // Import komponen kursus
 import CourseList from './pages/courses/CourseList';
 import CourseDetail from './pages/courses/CourseDetail';
-import CourseLearn from './pages/courses/CourseLearn';
+import CourseLearning from './pages/courses/CourseLearning';
 
 // Import komponen Kelas
 import ClassMainUI from './pages/kelas/ClassMainUI';
@@ -30,7 +30,6 @@ import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
 // Import Guru
 import DashboardGuru from './components/dashboard/DashboardGuru';
 import BuatKursusPage from './pages/Guru/BuatKursus';
-import ManajemenKelas from './pages/Guru/ManajemenKelas';
 import KelasYangDiajar from './pages/Guru/KelasYangDiajar';
 import NotifikasiGuru from './pages/Guru/NotifikasiGuru';
 import ChatOrtuPage from './pages/Guru/ChatOrtu';
@@ -111,14 +110,14 @@ function App() {
               <CourseDetail />
             </ProtectedRoute>
           } />
-          <Route path="/kursus/:courseId/learn" element={
+          <Route path="/kursus/:courseId/belajar" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
-              <CourseLearn />
+              <CourseLearning />
             </ProtectedRoute>
           } />
-          <Route path="/kursus/:courseId/learn/:lessonId" element={
+          <Route path="/kursus/:courseId/belajar/:lessonId" element={
             <ProtectedRoute allowedRoles={['siswa', 'orangtua']}>
-              <CourseLearn />
+              <CourseLearning />
             </ProtectedRoute>
           } />
 
@@ -158,11 +157,6 @@ function App() {
           <Route path="/buat-kursus" element={
             <ProtectedRoute allowedRoles={['guru']}>
               <BuatKursusPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/manajemen-kelas" element={
-            <ProtectedRoute allowedRoles={['guru']}>
-              <ManajemenKelas />
             </ProtectedRoute>
           } />
           <Route path="/kelas-yang-diajar" element={

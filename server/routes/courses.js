@@ -803,6 +803,177 @@ router.get('/:id', optionalAuth, async (req, res) => {
   }
 });
 
+router.get('/:id/content', authenticateToken, async (req, res) => {
+  try {
+    const { id: courseId } = req.params;
+    const { id: userId, role } = req.user;
+    
+    // Periksa apakah course exists
+    const courseQuery = `
+      SELECT c.*, cat.name as category_name
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      WHERE c.id = $1 AND c.status = 'active'
+    `;
+    
+    const courseResult = await pool.query(courseQuery, [courseId]);
+    
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+    
+    const course = courseResult.rows[0];
+    
+    // Periksa enrollment untuk siswa
+    if (role === 'siswa') {
+      const enrollmentCheck = await pool.query(
+        'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2 AND status = $3',
+        [userId, courseId, 'active']
+      );
+      
+      if (enrollmentCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'You must be enrolled in this course to access content'
+        });
+      }
+    }
+    
+    // Ambil modules dengan lessons
+    const modulesQuery = `
+      SELECT 
+        m.id,
+        m.title,
+        m.description,
+        m.order_index,
+        m.file_url,
+        m.file_type,
+        json_agg(
+          json_build_object(
+            'id', l.id,
+            'title', l.title,
+            'content', l.content,
+            'video_url', l.video_url,
+            'duration', l.duration,
+            'order_index', l.order_index,
+            'is_free', l.is_free
+          ) ORDER BY l.order_index ASC
+        ) FILTER (WHERE l.id IS NOT NULL) as lessons
+      FROM modules m
+      LEFT JOIN lessons l ON m.id = l.module_id
+      WHERE m.course_id = $1
+      GROUP BY m.id, m.title, m.description, m.order_index, m.file_url, m.file_type
+      ORDER BY m.order_index ASC
+    `;
+    
+    const modulesResult = await pool.query(modulesQuery, [courseId]);
+    
+    res.json({
+      success: true,
+      data: {
+        course: course,
+        modules: modulesResult.rows || []
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching course content:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching course content',
+      error: error.message
+    });
+  }
+});
+
+router.get('/:id/progress', authenticateToken, async (req, res) => {
+  try {
+    const { id: courseId } = req.params;
+    const { id: userId, role } = req.user;
+    
+    if (role !== 'siswa') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only students can access progress'
+      });
+    }
+    
+    // Periksa enrollment
+    const enrollmentCheck = await pool.query(
+      'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2 AND status = $3',
+      [userId, courseId, 'active']
+    );
+    
+    if (enrollmentCheck.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not enrolled in this course'
+      });
+    }
+    
+    // Ambil progress data
+    const progressQuery = `
+      SELECT 
+        lp.*,
+        l.title as lesson_title,
+        m.title as module_title,
+        m.id as module_id
+      FROM lesson_progress lp
+      JOIN lessons l ON lp.lesson_id = l.id
+      JOIN modules m ON l.module_id = m.id
+      WHERE m.course_id = $1 AND lp.user_id = $2
+    `;
+    
+    const progressResult = await pool.query(progressQuery, [courseId, userId]);
+    
+    // Hitung statistik
+    const totalLessonsQuery = `
+      SELECT COUNT(*) as total
+      FROM lessons l
+      JOIN modules m ON l.module_id = m.id
+      WHERE m.course_id = $1
+    `;
+    
+    const completedLessonsQuery = `
+      SELECT COUNT(*) as completed
+      FROM lesson_progress lp
+      JOIN lessons l ON lp.lesson_id = l.id
+      JOIN modules m ON l.module_id = m.id
+      WHERE m.course_id = $1 AND lp.user_id = $2 AND lp.completed = true
+    `;
+    
+    const [totalResult, completedResult] = await Promise.all([
+      pool.query(totalLessonsQuery, [courseId]),
+      pool.query(completedLessonsQuery, [courseId, userId])
+    ]);
+    
+    const totalLessons = parseInt(totalResult.rows[0].total);
+    const completedLessons = parseInt(completedResult.rows[0].completed);
+    const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    
+    res.json({
+      success: true,
+      progress: progressResult.rows,
+      stats: {
+        total_lessons: totalLessons,
+        completed_lessons: completedLessons,
+        progress_percentage: progressPercentage
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error fetching progress:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching progress',
+      error: error.message
+    });
+  }
+});
+
 // PUT /api/courses/:id - Update course
 router.put('/:id',
   authenticateToken,
@@ -1015,13 +1186,16 @@ router.put('/:id',
 );
 
 // DELETE /api/courses/:id - Delete course
+// Tambahkan atau ganti di server/routes/courses.js
+
+// DELETE /api/courses/:id - Delete course
 router.delete('/:id',
   authenticateToken,
   async (req, res) => {
     try {
       const courseId = req.params.id;
 
-      // Check authorization - ADMIN BISA DELETE SEMUA
+      // Check authorization
       if (req.user.role !== 'guru' && req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
@@ -1040,7 +1214,7 @@ router.delete('/:id',
 
       const course = courseResult.rows[0];
 
-      // PERBAIKAN: Admin bisa delete semua course, guru hanya course mereka
+      // Admin bisa delete semua course, guru hanya course mereka
       if (req.user.role === 'guru' && course.instructor_id !== req.user.id) {
         return res.status(403).json({
           success: false,
@@ -1048,28 +1222,52 @@ router.delete('/:id',
         });
       }
 
-      // HAPUS CEK ENROLLMENT untuk admin (admin bisa force delete)
-      if (req.user.role !== 'admin') {
-        // Hanya check enrollment untuk guru
-        const enrollmentResult = await pool.query(
-          'SELECT COUNT(*) as count FROM enrollments WHERE course_id = $1',
-          [courseId]
-        );
+      // Check enrollment - dengan opsi force delete untuk admin
+      const enrollmentResult = await pool.query(
+        'SELECT COUNT(*) as count FROM enrollments WHERE course_id = $1 AND status = $2',
+        [courseId, 'active']
+      );
 
-        const enrollmentCount = parseInt(enrollmentResult.rows[0].count);
-        if (enrollmentCount > 0) {
+      const enrollmentCount = parseInt(enrollmentResult.rows[0].count);
+      
+      if (enrollmentCount > 0) {
+        if (req.user.role !== 'admin') {
+          // Guru tidak bisa delete course dengan enrollment
           return res.status(400).json({
             success: false,
-            message: 'Cannot delete course with active enrollments'
+            message: `Cannot delete course with ${enrollmentCount} active enrollments`,
+            enrollmentCount: enrollmentCount
           });
+        } else {
+          // Admin bisa force delete - hapus enrollment dulu
+          console.log(`Admin force deleting course ${courseId} with ${enrollmentCount} enrollments`);
+          
+          // Delete all enrollments first
+          await pool.query('DELETE FROM enrollments WHERE course_id = $1', [courseId]);
+          
+          // Delete lesson progress
+          await pool.query(`
+            DELETE FROM lesson_progress 
+            WHERE lesson_id IN (
+              SELECT l.id FROM lessons l 
+              JOIN modules m ON l.module_id = m.id 
+              WHERE m.course_id = $1
+            )
+          `, [courseId]);
         }
       }
 
       // Delete course thumbnail if exists
       if (course.thumbnail && !course.thumbnail.startsWith('http')) {
+        const fs = require('fs');
+        const path = require('path');
         const thumbnailPath = path.join(__dirname, '..', course.thumbnail);
         if (fs.existsSync(thumbnailPath)) {
-          fs.unlinkSync(thumbnailPath);
+          try {
+            fs.unlinkSync(thumbnailPath);
+          } catch (fileError) {
+            console.log('Warning: Could not delete thumbnail file:', fileError.message);
+          }
         }
       }
 
@@ -1078,14 +1276,18 @@ router.delete('/:id',
 
       res.json({
         success: true,
-        message: 'Course deleted successfully'
+        message: enrollmentCount > 0 && req.user.role === 'admin' 
+          ? `Course deleted successfully (${enrollmentCount} enrollments removed)`
+          : 'Course deleted successfully',
+        deletedEnrollments: enrollmentCount
       });
 
     } catch (error) {
       console.error('Error deleting course:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error',
+        error: error.message
       });
     }
   }

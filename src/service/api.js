@@ -60,12 +60,147 @@ export const courseAPI = {
   deleteCourse: (id) => api.delete(`/courses/${id}`),
   enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
   getEnrolledCourses: () => api.get('/courses/enrolled'),
+  getCourseContent: (courseId) => api.get(`/courses/${courseId}/content`),
+  updateLessonProgress: (courseId, lessonId, progressData) => api.put(`/courses/${courseId}/lessons/${lessonId}/progress`, progressData),
 };
 
 export const gameAPI = {
   getProgress: () => api.get('/games/progress'),
   completeGame: (data) => api.post('/games/complete', data),
   getUserStreak: () => api.get('/users/streak')
+};
+
+export const progressAPI = {
+  // Update lesson progress
+  updateLessonProgress: (lessonId, progressData) => {
+    return api.post(`/lessons/${lessonId}/progress`, progressData);
+  },
+
+  // Get student course progress
+  getStudentCourseProgress: (courseId) => {
+    return api.get(`/courses/${courseId}/progress`);
+  },
+
+  // Get all student progress
+  getStudentProgress: () => {
+    return api.get('/progress/my-progress');
+  },
+
+  // Get course completion certificate
+  getCertificate: (courseId) => {
+    return api.get(`/courses/${courseId}/certificate`);
+  },
+};
+
+export const moduleAPI = {
+  // Create module
+  createModule: (courseId, moduleData) => {
+    return api.post(`/courses/${courseId}/modules`, moduleData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Update module
+  updateModule: (moduleId, moduleData) => {
+    return api.put(`/modules/${moduleId}`, moduleData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Delete module
+  deleteModule: (moduleId) => {
+    return api.delete(`/modules/${moduleId}`);
+  },
+
+  // Get module by ID
+  getModuleById: (moduleId) => {
+    return api.get(`/modules/${moduleId}`);
+  },
+
+  // Create lesson
+  createLesson: (moduleId, lessonData) => {
+    return api.post(`/modules/${moduleId}/lessons`, lessonData);
+  },
+
+  // Update lesson
+  updateLesson: (lessonId, lessonData) => {
+    return api.put(`/lessons/${lessonId}`, lessonData);
+  },
+
+  // Delete lesson
+  deleteLesson: (lessonId) => {
+    return api.delete(`/lessons/${lessonId}`);
+  },
+
+  // Get lesson by ID
+  getLessonById: (lessonId) => {
+    return api.get(`/lessons/${lessonId}`);
+  },
+};
+
+export const materialAPI = {
+  // Get materials
+  getMaterials: (params = {}) => {
+    return api.get('/materials', { params });
+  },
+
+  // Get material by ID
+  getMaterialById: (materialId) => {
+    return api.get(`/materials/${materialId}`);
+  },
+
+  // Create material (guru only)
+  createMaterial: (materialData) => {
+    return api.post('/materials', materialData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Update material (guru only)
+  updateMaterial: (materialId, materialData) => {
+    return api.put(`/materials/${materialId}`, materialData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Delete material (guru only)
+  deleteMaterial: (materialId) => {
+    return api.delete(`/materials/${materialId}`);
+  },
+
+  // Download material
+  downloadMaterial: (materialId) => {
+    return api.get(`/materials/${materialId}/download`, {
+      responseType: 'blob'
+    });
+  },
+};
+
+export const notificationAPI = {
+  // Get notifications
+  getNotifications: (params = {}) => {
+    return api.get('/notifications', { params });
+  },
+
+  // Mark notification as read
+  markAsRead: (notificationId) => {
+    return api.put(`/notifications/${notificationId}/read`);
+  },
+
+  // Mark all notifications as read
+  markAllAsRead: () => {
+    return api.put('/notifications/mark-all-read');
+  },
+
+  // Delete notification
+  deleteNotification: (notificationId) => {
+    return api.delete(`/notifications/${notificationId}`);
+  },
+
+  // Get unread count
+  getUnreadCount: () => {
+    return api.get('/notifications/unread-count');
+  },
 };
 
 // Admin API
@@ -89,6 +224,33 @@ export const userAPI = {
     });
   },
   deleteProfilePicture: () => api.delete('/users/profile-picture'),
+};
+
+export const chatAPI = {
+  // Get conversations
+  getConversations: () => {
+    return api.get('/chat/conversations');
+  },
+
+  // Get conversation by ID
+  getConversation: (conversationId) => {
+    return api.get(`/chat/conversations/${conversationId}`);
+  },
+
+  // Send message
+  sendMessage: (conversationId, messageData) => {
+    return api.post(`/chat/conversations/${conversationId}/messages`, messageData);
+  },
+
+  // Create conversation
+  createConversation: (participantIds) => {
+    return api.post('/chat/conversations', { participantIds });
+  },
+
+  // Mark messages as read
+  markAsRead: (conversationId) => {
+    return api.put(`/chat/conversations/${conversationId}/read`);
+  },
 };
 
 // Enhanced Chatbot API with OpenAI
@@ -271,5 +433,77 @@ export const testFlaskConnection = async () => {
   }
 };
 
+export const uploadFile = async (file, uploadPath = 'uploads') => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('uploadPath', uploadPath);
+  
+  return api.post('/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+};
+
+// Helper function untuk download file
+export const downloadFile = async (fileUrl, fileName) => {
+  try {
+    const response = await api.get(fileUrl, {
+      responseType: 'blob'
+    });
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response;
+  } catch (error) {
+    console.error('Download error:', error);
+    throw error;
+  }
+};
+
+// Helper function untuk format error message
+export const getErrorMessage = (error) => {
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  if (error.response?.data?.error) {
+    return error.response.data.error;
+  }
+  if (error.message) {
+    return error.message;
+  }
+  return 'Terjadi kesalahan yang tidak diketahui';
+};
+
+// Helper function untuk check if user is authenticated
+export const isAuthenticated = () => {
+  const token = localStorage.getItem('token');
+  const user = localStorage.getItem('user');
+  return !!(token && user);
+};
+
+// Helper function untuk get current user
+export const getCurrentUser = () => {
+  try {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  } catch (error) {
+    console.error('Error parsing user data:', error);
+    return null;
+  }
+};
+
 // Export default API instance
 export default api;
+
+// Re-export specific APIs for backwards compatibility
+export { 
+  courseAPI as default_courseAPI,
+  authAPI as default_authAPI,
+  userAPI as default_userAPI 
+};
