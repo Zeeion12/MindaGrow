@@ -82,12 +82,7 @@ const requireTeacherOrStudent = (req, res, next) => {
     }
     next();
 };
-
-
-
-
-
-// --- TAMBAHKAN ERROR HANDLER UNTUK MULTER DI AKHIR FILE INI ---
+// Middleware untuk menangani error dari multer
 router.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
@@ -111,7 +106,6 @@ router.use((error, req, res, next) => {
 
     next(error);
 });
-// --- AKHIR ERROR HANDLER MULTER ---
 
 
 // ===============================
