@@ -1,6 +1,7 @@
-// server/controller/gameController.js
+// server/controller/gameController.js - FIXED for Siswa Table Structure
 const { Pool } = require('pg');
 
+// PostgreSQL connection
 const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -9,523 +10,568 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// Get user's game progress
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+// Hitung detik sampai reset streak (12 malam)
+const getSecondsUntilMidnight = () => {
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    return Math.floor((midnight - now) / 1000);
+};
+
+// Hitung start dan end date untuk minggu ini
+const getWeekDates = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    
+    return { weekStart: monday, weekEnd: sunday };
+};
+
+// ============================================
+// GAME PROGRESS CONTROLLERS
+// ============================================
+
+// Ambil progress semua game user
+exports.getUserGameProgress = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // FIXED: Proper JOIN with games table
+        const query = `
+            SELECT 
+                ugp.*,
+                g.title,
+                g.description,
+                g.difficulty,
+                g.total_questions as game_total_questions
+            FROM user_game_progress ugp
+            JOIN games g ON ugp.game_id = g.game_id
+            WHERE ugp.user_id = $1
+            ORDER BY ugp.last_played_at DESC
+        `;
+        
+        const result = await pool.query(query, [userId]);
+        
+        // Transform data ke format yang diharapkan frontend
+        const progressData = {};
+        result.rows.forEach(row => {
+            progressData[row.game_id] = {
+                totalQuestions: row.total_questions_answered,
+                correctAnswers: row.correct_answers,
+                wrongAnswers: row.wrong_answers,
+                percentage: parseFloat(row.completion_percentage),
+                isCompleted: row.is_completed,
+                timesPlayed: row.times_played,
+                lastPlayedAt: row.last_played_at,
+                totalXpEarned: row.total_xp_earned,
+                bestScore: row.best_score
+            };
+        });
+        
+        res.json({ data: progressData });
+    } catch (error) {
+        console.error('Error fetching user game progress:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Ambil progress game tertentu
 exports.getGameProgress = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const result = await pool.query(`
-      SELECT 
-        gp.game_id,
-        gp.total_questions,
-        gp.correct_answers,
-        gp.percentage,
-        gp.is_completed,
-        gp.last_played_at,
-        g.name,
-        g.description,
-        g.difficulty,
-        g.max_questions
-      FROM game_progress gp
-      JOIN games g ON gp.game_id = g.game_id
-      WHERE gp.user_id = $1
-    `, [userId]);
-    
-    // Convert array to object with game_id as keys
-    const progressData = {};
-    result.rows.forEach(row => {
-      progressData[row.game_id] = {
-        totalQuestions: row.total_questions,
-        correctAnswers: row.correct_answers,
-        percentage: parseFloat(row.percentage),
-        isCompleted: row.is_completed,
-        lastPlayedAt: row.last_played_at,
-        gameInfo: {
-          name: row.name,
-          description: row.description,
-          difficulty: row.difficulty,
-          maxQuestions: row.max_questions
+    try {
+        const userId = req.user.id;
+        const { gameId } = req.params;
+        
+        const query = `
+            SELECT 
+                ugp.*,
+                g.title,
+                g.description,
+                g.difficulty,
+                g.total_questions as game_total_questions
+            FROM user_game_progress ugp
+            JOIN games g ON ugp.game_id = g.game_id
+            WHERE ugp.user_id = $1 AND ugp.game_id = $2
+        `;
+        
+        const result = await pool.query(query, [userId, gameId]);
+        
+        if (result.rows.length === 0) {
+            return res.json({ 
+                data: {
+                    totalQuestions: 0,
+                    correctAnswers: 0,
+                    wrongAnswers: 0,
+                    percentage: 0,
+                    isCompleted: false,
+                    timesPlayed: 0,
+                    totalXpEarned: 0,
+                    bestScore: 0
+                }
+            });
         }
-      };
-    });
-    
-    res.json({ success: true, data: progressData });
-  } catch (error) {
-    console.error('Error getting game progress:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
+        
+        const row = result.rows[0];
+        res.json({
+            data: {
+                totalQuestions: row.total_questions_answered,
+                correctAnswers: row.correct_answers,
+                wrongAnswers: row.wrong_answers,
+                percentage: parseFloat(row.completion_percentage),
+                isCompleted: row.is_completed,
+                timesPlayed: row.times_played,
+                lastPlayedAt: row.last_played_at,
+                totalXpEarned: row.total_xp_earned,
+                bestScore: row.best_score
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching game progress:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 };
 
-// Update game progress after playing
+// Update progress setelah main game
 exports.updateGameProgress = async (req, res) => {
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    const userId = req.user.id;
-    const { gameId, questionsAnswered, correctAnswers, sessionData } = req.body;
-    
-    if (!gameId || questionsAnswered === undefined || correctAnswers === undefined) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'gameId, questionsAnswered, and correctAnswers are required' 
-      });
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const userId = req.user.id;
+        const { gameId } = req.params;
+        const { 
+            questionsAnswered, 
+            correctAnswers, 
+            wrongAnswers, 
+            score, 
+            timeSpent,
+            isCompleted = false 
+        } = req.body;
+        
+        // Get game data
+        const gameQuery = `SELECT * FROM games WHERE game_id = $1`;
+        const gameResult = await client.query(gameQuery, [gameId]);
+        
+        if (gameResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Game not found' });
+        }
+        
+        const game = gameResult.rows[0];
+        
+        // Hitung XP yang didapat
+        let xpEarned = 0;
+        if (correctAnswers > 0) {
+            xpEarned = Math.floor((correctAnswers / questionsAnswered) * game.max_xp_reward);
+            if (isCompleted) {
+                xpEarned += game.completion_bonus_xp;
+            }
+        }
+        
+        // Hitung completion percentage
+        const completionPercentage = game.total_questions > 0 
+            ? Math.min((correctAnswers / game.total_questions) * 100, 100) 
+            : 0;
+        
+        const isGameCompleted = completionPercentage >= 100;
+        
+        // Check existing progress
+        const existingQuery = `
+            SELECT * FROM user_game_progress 
+            WHERE user_id = $1 AND game_id = $2
+        `;
+        const existingResult = await client.query(existingQuery, [userId, gameId]);
+        
+        if (existingResult.rows.length === 0) {
+            // Insert progress baru
+            const insertQuery = `
+                INSERT INTO user_game_progress (
+                    user_id, game_id, total_questions_answered, correct_answers, 
+                    wrong_answers, completion_percentage, is_completed, total_xp_earned, 
+                    best_score, times_played, last_played_at, first_played_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING *
+            `;
+            
+            await client.query(insertQuery, [
+                userId, gameId, questionsAnswered, correctAnswers, wrongAnswers,
+                completionPercentage, isGameCompleted, xpEarned, score, 1
+            ]);
+        } else {
+            // Update existing progress
+            const existing = existingResult.rows[0];
+            const newTotalQuestions = existing.total_questions_answered + questionsAnswered;
+            const newCorrectAnswers = existing.correct_answers + correctAnswers;
+            const newWrongAnswers = existing.wrong_answers + wrongAnswers;
+            const newTotalXp = existing.total_xp_earned + xpEarned;
+            const newBestScore = Math.max(existing.best_score, score);
+            const newTimesPlayed = existing.times_played + 1;
+            
+            const newCompletionPercentage = game.total_questions > 0 
+                ? Math.min((newCorrectAnswers / game.total_questions) * 100, 100) 
+                : 0;
+            const newIsCompleted = newCompletionPercentage >= 100;
+            
+            const updateQuery = `
+                UPDATE user_game_progress SET
+                    total_questions_answered = $3,
+                    correct_answers = $4,
+                    wrong_answers = $5,
+                    completion_percentage = $6,
+                    is_completed = $7,
+                    total_xp_earned = $8,
+                    best_score = $9,
+                    times_played = $10,
+                    last_played_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1 AND game_id = $2
+                RETURNING *
+            `;
+            
+            await client.query(updateQuery, [
+                userId, gameId, newTotalQuestions, newCorrectAnswers, newWrongAnswers,
+                newCompletionPercentage, newIsCompleted, newTotalXp, newBestScore, newTimesPlayed
+            ]);
+        }
+        
+        // Insert game session record
+        const sessionQuery = `
+            INSERT INTO game_sessions (
+                user_id, game_id, questions_answered, correct_answers, wrong_answers,
+                score, xp_earned, completion_percentage, time_spent, is_completed
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+        `;
+        
+        const sessionResult = await client.query(sessionQuery, [
+            userId, gameId, questionsAnswered, correctAnswers, wrongAnswers,
+            score, xpEarned, completionPercentage, timeSpent || 0, isCompleted
+        ]);
+        
+        // Update user XP and level if functions exist
+        try {
+            if (xpEarned > 0) {
+                await client.query('SELECT update_user_xp_and_level($1, $2)', [userId, xpEarned]);
+            }
+        } catch (funcError) {
+            console.log('XP function not available, skipping XP update');
+        }
+        
+        // Update streak if function exists
+        try {
+            await client.query('SELECT update_user_streak($1)', [userId]);
+        } catch (funcError) {
+            console.log('Streak function not available, skipping streak update');
+        }
+        
+        await client.query('COMMIT');
+        
+        res.json({
+            message: 'Game progress updated successfully',
+            data: {
+                sessionId: sessionResult.rows[0].id,
+                xpEarned,
+                completionPercentage: isGameCompleted ? 100 : completionPercentage,
+                isCompleted: isGameCompleted
+            }
+        });
+        
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error updating game progress:', error);
+        res.status(500).json({ message: 'Server error' });
+    } finally {
+        client.release();
     }
-    
-    // Get game info
-    const gameResult = await client.query(
-      'SELECT * FROM games WHERE game_id = $1',
-      [gameId]
-    );
-    
-    if (gameResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Game not found' });
-    }
-    
-    const game = gameResult.rows[0];
-    
-    // Check if progress exists
-    const existingProgress = await client.query(
-      'SELECT * FROM game_progress WHERE user_id = $1 AND game_id = $2',
-      [userId, gameId]
-    );
-    
-    let totalQuestions, totalCorrect, newPercentage;
-    
-    if (existingProgress.rows.length === 0) {
-      // Create new progress
-      totalQuestions = questionsAnswered;
-      totalCorrect = correctAnswers;
-      newPercentage = questionsAnswered > 0 ? (correctAnswers / questionsAnswered) * 100 : 0;
-      
-      await client.query(`
-        INSERT INTO game_progress (
-          user_id, game_id, total_questions, correct_answers, percentage, 
-          is_completed, last_played_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-      `, [
-        userId, gameId, totalQuestions, totalCorrect, newPercentage,
-        newPercentage >= 100
-      ]);
-    } else {
-      // Update existing progress
-      const existing = existingProgress.rows[0];
-      totalQuestions = existing.total_questions + questionsAnswered;
-      totalCorrect = existing.correct_answers + correctAnswers;
-      newPercentage = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
-      
-      // Cap at 100%
-      newPercentage = Math.min(newPercentage, 100);
-      
-      await client.query(`
-        UPDATE game_progress 
-        SET 
-          total_questions = $1,
-          correct_answers = $2,
-          percentage = $3,
-          is_completed = $4,
-          last_played_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = $5 AND game_id = $6
-      `, [
-        totalQuestions, totalCorrect, newPercentage, 
-        newPercentage >= 100, userId, gameId
-      ]);
-    }
-    
-    // Calculate XP earned
-    let xpEarned = correctAnswers * 10; // Base XP per correct answer
-    
-    // Bonus XP for completion
-    if (newPercentage >= 100) {
-      xpEarned += 50; // Completion bonus
-    }
-    
-    // Difficulty multiplier
-    switch (game.difficulty.toLowerCase()) {
-      case 'easy':
-        xpEarned = Math.floor(xpEarned * 1);
-        break;
-      case 'medium':
-        xpEarned = Math.floor(xpEarned * 1.2);
-        break;
-      case 'hard':
-        xpEarned = Math.floor(xpEarned * 1.5);
-        break;
-    }
-    
-    // Create game session record
-    await client.query(`
-      INSERT INTO game_sessions (
-        user_id, game_id, questions_answered, correct_answers, 
-        xp_earned, completed_at, session_data
-      ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
-    `, [userId, gameId, questionsAnswered, correctAnswers, xpEarned, JSON.stringify(sessionData || {})]);
-    
-    // Update user level and XP
-    await client.query('SELECT update_user_level($1, $2)', [userId, xpEarned]);
-    
-    // Update streak
-    await updateUserStreak(client, userId);
-    
-    // Update weekly ranking
-    await updateWeeklyRanking(client, userId, xpEarned);
-    
-    // Update daily missions
-    await updateDailyMissions(client, userId, 'play_game');
-    
-    await client.query('COMMIT');
-    
-    res.json({ 
-      success: true, 
-      data: {
-        totalQuestions,
-        correctAnswers: totalCorrect,
-        percentage: newPercentage,
-        isCompleted: newPercentage >= 100,
-        xpEarned
-      }
-    });
-    
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error updating game progress:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  } finally {
-    client.release();
-  }
 };
 
-// Get user streak data
+// ============================================
+// USER STREAK CONTROLLERS
+// ============================================
+
 exports.getUserStreak = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const result = await pool.query(
-      `SELECT 
-        current_streak, 
-        longest_streak, 
-        is_active,
-        last_activity_date,
-        EXTRACT(EPOCH FROM (CURRENT_DATE + INTERVAL '1 day' - CURRENT_TIMESTAMP)) as seconds_until_reset
-      FROM user_streaks 
-      WHERE user_id = $1`,
-      [userId]
-    );
-    
-    if (result.rows.length === 0) {
-      // Create initial streak record
-      await pool.query(
-        'INSERT INTO user_streaks (user_id) VALUES ($1)',
-        [userId]
-      );
-      
-      return res.json({ 
-        success: true, 
-        data: { 
-          current_streak: 0, 
-          longest_streak: 0, 
-          is_active: false,
-          seconds_until_reset: 86400 // 24 hours
-        } 
-      });
+    try {
+        const userId = req.user.id;
+        
+        const query = `
+            SELECT 
+                current_streak,
+                longest_streak,
+                is_active,
+                last_activity_date,
+                streak_start_date
+            FROM user_streaks 
+            WHERE user_id = $1
+        `;
+        
+        const result = await pool.query(query, [userId]);
+        
+        if (result.rows.length === 0) {
+            return res.json({
+                data: {
+                    current_streak: 0,
+                    longest_streak: 0,
+                    is_active: false,
+                    seconds_until_reset: getSecondsUntilMidnight()
+                }
+            });
+        }
+        
+        const streak = result.rows[0];
+        const today = new Date().toISOString().split('T')[0];
+        const lastActivity = streak.last_activity_date?.toISOString().split('T')[0];
+        
+        const isActiveToday = lastActivity === today;
+        
+        res.json({
+            data: {
+                current_streak: streak.current_streak,
+                longest_streak: streak.longest_streak,
+                is_active: isActiveToday,
+                seconds_until_reset: getSecondsUntilMidnight()
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error fetching user streak:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    
-    const streak = result.rows[0];
-    res.json({ 
-      success: true, 
-      data: {
-        current_streak: streak.current_streak,
-        longest_streak: streak.longest_streak,
-        is_active: streak.is_active,
-        seconds_until_reset: Math.max(0, streak.seconds_until_reset || 0)
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error getting user streak:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
 };
 
-// Get daily missions
-exports.getDailyMissions = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
-    
-    const result = await pool.query(`
-      SELECT 
-        dm.id,
-        dm.mission_type,
-        dm.title,
-        dm.description,
-        dm.target_count,
-        dm.xp_reward,
-        dm.icon,
-        COALESCE(udm.current_progress, 0) as current_progress,
-        COALESCE(udm.is_completed, false) as is_completed,
-        udm.completed_at
-      FROM daily_missions dm
-      LEFT JOIN user_daily_missions udm ON (
-        dm.id = udm.mission_id 
-        AND udm.user_id = $1 
-        AND udm.mission_date = $2
-      )
-      WHERE dm.is_active = true
-      ORDER BY dm.id
-    `, [userId, today]);
-    
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Error getting daily missions:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+// ============================================
+// USER LEVEL CONTROLLERS
+// ============================================
 
-// Get leaderboard
-exports.getLeaderboard = async (req, res) => {
-  try {
-    const { type = 'weekly' } = req.query;
-    
-    let query, params = [];
-    
-    if (type === 'weekly') {
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
-      const weekStartStr = weekStart.toISOString().split('T')[0];
-      
-      query = `
-        SELECT 
-          u.id,
-          s.nama_lengkap as name,
-          COALESCE(wr.weekly_xp, 0) as total_xp,
-          COALESCE(wr.games_played, 0) as games_played,
-          ROW_NUMBER() OVER (ORDER BY COALESCE(wr.weekly_xp, 0) DESC) as rank
-        FROM users u
-        LEFT JOIN weekly_rankings wr ON (
-          u.id = wr.user_id 
-          AND wr.week_start_date = $1
-        )
-        WHERE u.role = 'student'
-        ORDER BY total_xp DESC, u.name ASC
-        LIMIT 20
-      `;
-      params = [weekStartStr];
-    } else {
-      query = `
-        SELECT 
-          u.id,
-          s.nama_lengkap as name,
-          COALESCE(ul.total_xp, 0) as total_xp,
-          COALESCE(ul.current_level, 1) as level,
-          (
-            SELECT COUNT(*) 
-            FROM game_sessions gs 
-            WHERE gs.user_id = u.id
-          ) as games_played,
-          ROW_NUMBER() OVER (ORDER BY COALESCE(ul.total_xp, 0) DESC) as rank
-        FROM users u
-        LEFT JOIN user_levels ul ON u.id = ul.user_id
-        WHERE u.role = 'student'
-        ORDER BY total_xp DESC, u.name ASC
-        LIMIT 20
-      `;
-    }
-    
-    const result = await pool.query(query, params);
-    
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Error getting leaderboard:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-// Get user level info
 exports.getUserLevel = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const result = await pool.query(`
-      SELECT 
-        current_level,
-        current_xp,
-        total_xp,
-        xp_to_next_level
-      FROM user_levels 
-      WHERE user_id = $1
-    `, [userId]);
-    
-    if (result.rows.length === 0) {
-      // Create initial level record
-      await pool.query(
-        'INSERT INTO user_levels (user_id) VALUES ($1)',
-        [userId]
-      );
-      
-      return res.json({ 
-        success: true, 
-        data: { 
-          current_level: 1, 
-          current_xp: 0, 
-          total_xp: 0,
-          xp_to_next_level: 100
-        } 
-      });
+    try {
+        const userId = req.user.id;
+        
+        const query = `
+            SELECT 
+                current_level,
+                current_xp,
+                total_xp,
+                xp_to_next_level
+            FROM user_levels 
+            WHERE user_id = $1
+        `;
+        
+        const result = await pool.query(query, [userId]);
+        
+        if (result.rows.length === 0) {
+            return res.json({
+                data: {
+                    current_level: 1,
+                    current_xp: 0,
+                    total_xp: 0,
+                    xp_to_next_level: 100
+                }
+            });
+        }
+        
+        const level = result.rows[0];
+        res.json({
+            data: {
+                current_level: level.current_level,
+                current_xp: level.current_xp,
+                total_xp: level.total_xp,
+                xp_to_next_level: level.xp_to_next_level
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error fetching user level:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-    
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error getting user level:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
 };
 
-// Helper functions
-async function updateUserStreak(client, userId) {
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Check current streak
-  const streakResult = await client.query(
-    'SELECT * FROM user_streaks WHERE user_id = $1',
-    [userId]
-  );
-  
-  if (streakResult.rows.length === 0) {
-    // Create new streak
-    await client.query(`
-      INSERT INTO user_streaks (
-        user_id, current_streak, longest_streak, is_active, 
-        last_activity_date, streak_start_date
-      ) VALUES ($1, 1, 1, true, $2, $2)
-    `, [userId, today]);
-    return;
-  }
-  
-  const streak = streakResult.rows[0];
-  const lastActivity = streak.last_activity_date ? 
-    new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
-  
-  if (lastActivity === today) {
-    // Already played today, just make sure it's active
-    await client.query(
-      'UPDATE user_streaks SET is_active = true WHERE user_id = $1',
-      [userId]
-    );
-    return;
-  }
-  
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-  
-  if (lastActivity === yesterdayStr) {
-    // Continue streak
-    const newStreak = streak.current_streak + 1;
-    const longestStreak = Math.max(newStreak, streak.longest_streak);
-    
-    await client.query(`
-      UPDATE user_streaks 
-      SET 
-        current_streak = $1,
-        longest_streak = $2,
-        is_active = true,
-        last_activity_date = $3
-      WHERE user_id = $4
-    `, [newStreak, longestStreak, today, userId]);
-  } else {
-    // Reset streak
-    await client.query(`
-      UPDATE user_streaks 
-      SET 
-        current_streak = 1,
-        is_active = true,
-        last_activity_date = $1,
-        streak_start_date = $1
-      WHERE user_id = $2
-    `, [today, userId]);
-  }
-}
+// ============================================
+// DAILY MISSION CONTROLLERS
+// ============================================
 
-async function updateWeeklyRanking(client, userId, xpGained) {
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
-  const weekStartStr = weekStart.toISOString().split('T')[0];
-  
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndStr = weekEnd.toISOString().split('T')[0];
-  
-  // Check if record exists
-  const existingResult = await client.query(
-    'SELECT * FROM weekly_rankings WHERE user_id = $1 AND week_start_date = $2',
-    [userId, weekStartStr]
-  );
-  
-  if (existingResult.rows.length === 0) {
-    // Create new record
-    await client.query(`
-      INSERT INTO weekly_rankings (
-        user_id, week_start_date, week_end_date, weekly_xp, games_played
-      ) VALUES ($1, $2, $3, $4, 1)
-    `, [userId, weekStartStr, weekEndStr, xpGained]);
-  } else {
-    // Update existing record
-    await client.query(`
-      UPDATE weekly_rankings 
-      SET 
-        weekly_xp = weekly_xp + $1,
-        games_played = games_played + 1,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = $2 AND week_start_date = $3
-    `, [xpGained, userId, weekStartStr]);
-  }
-}
-
-async function updateDailyMissions(client, userId, missionType) {
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Get mission
-  const missionResult = await client.query(
-    'SELECT * FROM daily_missions WHERE mission_type = $1 AND is_active = true',
-    [missionType]
-  );
-  
-  if (missionResult.rows.length === 0) return;
-  
-  const mission = missionResult.rows[0];
-  
-  // Check user progress
-  const progressResult = await client.query(`
-    SELECT * FROM user_daily_missions 
-    WHERE user_id = $1 AND mission_id = $2 AND mission_date = $3
-  `, [userId, mission.id, today]);
-  
-  if (progressResult.rows.length === 0) {
-    // Create new progress
-    const isCompleted = 1 >= mission.target_count;
-    await client.query(`
-      INSERT INTO user_daily_missions (
-        user_id, mission_id, current_progress, is_completed, 
-        completed_at, mission_date
-      ) VALUES ($1, $2, 1, $3, $4, $5)
-    `, [
-      userId, mission.id, isCompleted, 
-      isCompleted ? new Date() : null, today
-    ]);
-    
-    if (isCompleted) {
-      // Award XP
-      await client.query(`
-        UPDATE user_levels 
-        SET total_xp = total_xp + $1, current_xp = current_xp + $1
-        WHERE user_id = $2
-      `, [mission.xp_reward, userId]);
-      
-      // Update user level
-      await client.query('SELECT update_user_level($1, $2)', [userId, mission.xp_reward]);
+exports.getDailyMissions = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const today = new Date().toISOString().split('T')[0];
+        
+        // FIXED: Use correct column names and check if tables exist
+        const query = `
+            SELECT 
+                dm.id,
+                dm.mission_type,
+                dm.title,
+                dm.description,
+                dm.target_value,
+                dm.xp_reward,
+                dm.icon,
+                COALESCE(udm.progress_value, 0) as progress_value,
+                COALESCE(udm.is_completed, false) as is_completed,
+                COALESCE(udm.xp_earned, 0) as xp_earned
+            FROM daily_missions dm
+            LEFT JOIN user_daily_missions udm ON dm.id = udm.mission_id 
+                AND udm.user_id = $1 AND udm.mission_date = $2
+            WHERE dm.is_active = true
+            ORDER BY dm.id
+        `;
+        
+        const result = await pool.query(query, [userId, today]);
+        
+        res.json({
+            data: result.rows.map(row => ({
+                id: row.id,
+                missionType: row.mission_type,
+                title: row.title,
+                description: row.description,
+                targetValue: row.target_value,
+                xpReward: row.xp_reward,
+                icon: row.icon,
+                progressValue: row.progress_value,
+                isCompleted: row.is_completed,
+                xpEarned: row.xp_earned,
+                completionPercentage: Math.min((row.progress_value / row.target_value) * 100, 100)
+            }))
+        });
+        
+    } catch (error) {
+        console.error('Error fetching daily missions:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-  }
-}
+};
+
+// ============================================
+// LEADERBOARD CONTROLLERS
+// ============================================
+
+exports.getWeeklyLeaderboard = async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 10;
+        const { weekStart } = getWeekDates();
+        
+        // FIXED: Use siswa table instead of users for nama_lengkap
+        const query = `
+            SELECT 
+                wr.user_id,
+                s.nama_lengkap as username,
+                wr.weekly_xp,
+                wr.games_played,
+                wr.streak_maintained_days,
+                wr.missions_completed,
+                ROW_NUMBER() OVER (ORDER BY wr.weekly_xp DESC, wr.games_played DESC) as rank_position
+            FROM weekly_rankings wr
+            JOIN users u ON wr.user_id = u.id
+            JOIN siswa s ON u.id = s.user_id
+            WHERE wr.week_start_date = $1
+            ORDER BY wr.weekly_xp DESC, wr.games_played DESC
+            LIMIT $2
+        `;
+        
+        const result = await pool.query(query, [weekStart.toISOString().split('T')[0], limit]);
+        
+        res.json({
+            data: result.rows.map(row => ({
+                userId: row.user_id,
+                username: row.username,
+                weeklyXp: row.weekly_xp,
+                gamesPlayed: row.games_played,
+                streakDays: row.streak_maintained_days,
+                missionsCompleted: row.missions_completed,
+                rank: row.rank_position
+            }))
+        });
+        
+    } catch (error) {
+        console.error('Error fetching weekly leaderboard:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+exports.getOverallLeaderboard = async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 10;
+        
+        // FIXED: Use siswa table instead of users for nama_lengkap
+        const query = `
+            SELECT 
+                orr.user_id,
+                s.nama_lengkap as username,
+                orr.total_xp,
+                orr.total_games_played,
+                orr.total_streak_days,
+                orr.total_missions_completed,
+                orr.current_level,
+                ROW_NUMBER() OVER (ORDER BY orr.total_xp DESC, orr.current_level DESC) as rank_position
+            FROM overall_rankings orr
+            JOIN users u ON orr.user_id = u.id
+            JOIN siswa s ON u.id = s.user_id
+            ORDER BY orr.total_xp DESC, orr.current_level DESC
+            LIMIT $1
+        `;
+        
+        const result = await pool.query(query, [limit]);
+        
+        res.json({
+            data: result.rows.map(row => ({
+                userId: row.user_id,
+                username: row.username,
+                totalXp: row.total_xp,
+                totalGamesPlayed: row.total_games_played,
+                totalStreakDays: row.total_streak_days,
+                totalMissionsCompleted: row.total_missions_completed,
+                currentLevel: row.current_level,
+                rank: row.rank_position
+            }))
+        });
+        
+    } catch (error) {
+        console.error('Error fetching overall leaderboard:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ============================================
+// GAME DATA CONTROLLERS
+// ============================================
+
+exports.getGames = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                game_id,
+                title,
+                description,
+                difficulty,
+                total_questions,
+                max_xp_reward,
+                completion_bonus_xp
+            FROM games
+            ORDER BY id
+        `;
+        
+        const result = await pool.query(query);
+        
+        res.json({
+            data: result.rows.map(row => ({
+                gameId: row.game_id,
+                title: row.title,
+                description: row.description,
+                difficulty: row.difficulty,
+                totalQuestions: row.total_questions,
+                maxXpReward: row.max_xp_reward,
+                completionBonusXp: row.completion_bonus_xp
+            }))
+        });
+        
+    } catch (error) {
+        console.error('Error fetching games:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};

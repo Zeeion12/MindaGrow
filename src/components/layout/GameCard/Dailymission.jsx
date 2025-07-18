@@ -6,24 +6,37 @@ export default function Dailymission({ onRefresh }) {
     const [missions, setMissions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [completedToday, setCompletedToday] = useState(0);
+    const [totalXpEarned, setTotalXpEarned] = useState(0);
 
     useEffect(() => {
         fetchDailyMissions();
+        
+        // Refresh missions setiap 30 detik
+        const interval = setInterval(fetchDailyMissions, 30000);
+        return () => clearInterval(interval);
     }, []);
 
     const fetchDailyMissions = async () => {
         try {
             setLoading(true);
             setError(null);
-            
+
             const response = await gameAPI.getDailyMissions();
-            // Ensure missions is always an array
-            const missionsData = Array.isArray(response.data) ? response.data : [];
+            const missionsData = response.data || [];
+            
             setMissions(missionsData);
+            
+            // Hitung statistik
+            const completed = missionsData.filter(mission => mission.isCompleted).length;
+            const totalXp = missionsData.reduce((sum, mission) => sum + (mission.xpEarned || 0), 0);
+            
+            setCompletedToday(completed);
+            setTotalXpEarned(totalXp);
+
         } catch (error) {
             console.error('Error fetching daily missions:', error);
             setError('Gagal memuat daily missions');
-            setMissions([]); // Set empty array on error
         } finally {
             setLoading(false);
         }
@@ -31,245 +44,249 @@ export default function Dailymission({ onRefresh }) {
 
     const handleRefresh = () => {
         fetchDailyMissions();
-        if (onRefresh) onRefresh();
+        if (onRefresh) {
+            onRefresh();
+        }
+    };
+
+    const getTimeUntilMidnight = () => {
+        const now = new Date();
+        const midnight = new Date();
+        midnight.setHours(24, 0, 0, 0);
+        
+        const diff = midnight - now;
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        return `${hours}j ${minutes}m`;
     };
 
     const getMissionIcon = (missionType) => {
         switch (missionType) {
-            case 'complete_quizzes':
-                return '🧠';
-            case 'watch_videos':
-                return '📺';
-            case 'solve_problems':
-                return '🧮';
-            case 'play_game':
-                return '🎮';
-            default:
-                return '📋';
+            case 'complete_games': return '📚';
+            case 'watch_videos': return '📺';
+            case 'solve_problems': return '🧮';
+            case 'play_any_game': return '🎮';
+            default: return '📋';
         }
     };
 
-    const getProgressColor = (isCompleted, progress, target) => {
-        if (isCompleted) return 'from-green-400 to-green-600';
-        if (progress / target >= 0.7) return 'from-yellow-400 to-orange-500';
-        return 'from-blue-400 to-blue-600';
+    const getProgressColor = (percentage) => {
+        if (percentage >= 100) return 'bg-green-500';
+        if (percentage >= 75) return 'bg-blue-500';
+        if (percentage >= 50) return 'bg-yellow-500';
+        return 'bg-gray-400';
     };
 
-    const getStatusBadge = (isCompleted) => {
-        if (isCompleted) {
-            return (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                    ✅ Selesai
-                </span>
-            );
-        }
+    if (loading && missions.length === 0) {
         return (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-                ⏳ Pending
-            </span>
-        );
-    };
-
-    if (loading) {
-        return (
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-800">Daily Mission</h2>
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                </div>
-                <div className="space-y-4">
-                    {[1, 2, 3, 4].map(i => (
-                        <div key={i} className="animate-pulse">
-                            <div className="flex items-center space-x-4 p-4 border border-gray-100 rounded-lg">
-                                <div className="w-8 h-8 bg-gray-200 rounded"></div>
-                                <div className="flex-1">
-                                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                                </div>
-                                <div className="w-16 h-6 bg-gray-200 rounded"></div>
-                            </div>
-                        </div>
-                    ))}
+            <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="flex items-center justify-center h-40">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                        <div className="text-sm text-gray-500">Memuat daily missions...</div>
+                    </div>
                 </div>
             </div>
         );
     }
-
-    if (error) {
-        return (
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-                <div className="text-center">
-                    <div className="text-red-500 text-sm mb-4">⚠️ {error}</div>
-                    <button 
-                        onClick={handleRefresh}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
-                    >
-                        Coba Lagi
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    // Safely filter missions - ensure missions is an array
-    const safeMissions = Array.isArray(missions) ? missions : [];
-    const completedMissions = safeMissions.filter(m => m.is_completed).length;
-    const totalXpAvailable = safeMissions.reduce((total, m) => total + (m.xp_reward || 0), 0);
-    const earnedXp = safeMissions.filter(m => m.is_completed).reduce((total, m) => total + (m.xp_reward || 0), 0);
 
     return (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-500 to-blue-600 p-6 text-white">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-xl font-bold mb-1">Daily Mission</h2>
-                        <p className="text-white/90 text-sm">
-                            Selesaikan misi harian untuk mendapat XP bonus
-                        </p>
-                    </div>
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Daily Mission</h3>
                     <button 
                         onClick={handleRefresh}
-                        className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg p-2 transition-colors"
-                        title="Refresh"
+                        className="text-white hover:text-blue-200 transition-colors"
+                        disabled={loading}
                     >
-                        🔄
+                        <span className={`text-sm ${loading ? 'animate-spin' : ''}`}>
+                            🔄 Refresh
+                        </span>
                     </button>
                 </div>
                 
-                {/* Summary Stats */}
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <div className="text-lg font-bold">{completedMissions}/{safeMissions.length}</div>
-                        <div className="text-xs text-white/80">Misi Selesai</div>
+                {/* Stats */}
+                <div className="flex justify-between items-center text-sm">
+                    <div>
+                        <span className="opacity-90">Selesai hari ini: </span>
+                        <span className="font-semibold">{completedToday}/{missions.length}</span>
                     </div>
-                    <div className="text-center p-3 bg-white/10 backdrop-blur-sm rounded-lg">
-                        <div className="text-lg font-bold">{earnedXp}/{totalXpAvailable} XP</div>
-                        <div className="text-xs text-white/80">XP Didapat</div>
+                    <div>
+                        <span className="opacity-90">XP: </span>
+                        <span className="font-semibold">+{totalXpEarned}</span>
                     </div>
+                </div>
+                
+                {/* Reset Timer */}
+                <div className="mt-2 text-xs opacity-75">
+                    📅 Reset dalam: {getTimeUntilMidnight()}
                 </div>
             </div>
 
-            {/* Missions List */}
-            <div className="p-6">
-                {safeMissions.length === 0 ? (
-                    <div className="text-center py-8">
-                        <div className="text-4xl mb-2">🎯</div>
-                        <div className="text-gray-500 text-sm">
-                            Belum ada misi harian tersedia
-                        </div>
+            {/* Content */}
+            <div className="p-4">
+                {/* Error State */}
+                {error && (
+                    <div className="text-center py-6">
+                        <div className="text-red-500 text-sm mb-2">⚠️ {error}</div>
                         <button 
                             onClick={handleRefresh}
-                            className="mt-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                            className="text-blue-500 hover:text-blue-700 text-xs"
                         >
-                            Muat Ulang
+                            Coba lagi
                         </button>
                     </div>
-                ) : (
+                )}
+
+                {/* Empty State */}
+                {!error && missions.length === 0 && !loading && (
+                    <div className="text-center py-6">
+                        <div className="text-gray-400 text-4xl mb-2">📋</div>
+                        <div className="text-gray-500 text-sm">Belum ada daily mission</div>
+                    </div>
+                )}
+
+                {/* Missions List */}
+                {!error && missions.length > 0 && (
                     <div className="space-y-4">
-                        {safeMissions.map((mission) => {
-                            const currentProgress = Number(mission.current_progress) || 0;
-                            const targetCount = Number(mission.target_count) || 1;
-                            const progressPercentage = Math.min((currentProgress / targetCount) * 100, 100);
+                        {missions.map((mission) => {
+                            const progressPercentage = Math.min((mission.progressValue / mission.targetValue) * 100, 100);
                             
                             return (
                                 <div 
                                     key={mission.id}
-                                    className={`p-4 border rounded-lg transition-all duration-300 ${
-                                        mission.is_completed 
+                                    className={`border rounded-lg p-4 transition-all duration-200 ${
+                                        mission.isCompleted 
                                             ? 'border-green-200 bg-green-50' 
-                                            : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                                            : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
                                     }`}
                                 >
-                                    <div className="flex items-start space-x-4">
-                                        {/* Mission Icon */}
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${
-                                            mission.is_completed 
-                                                ? 'bg-green-100 border border-green-200' 
-                                                : 'bg-blue-100 border border-blue-200'
-                                        }`}>
-                                            {getMissionIcon(mission.mission_type)}
+                                    {/* Mission Header */}
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="flex items-start space-x-3">
+                                            <div className="text-2xl">
+                                                {mission.icon || getMissionIcon(mission.missionType)}
+                                            </div>
+                                            <div className="flex-1">
+                                                <h4 className={`font-medium text-sm ${
+                                                    mission.isCompleted ? 'text-green-800' : 'text-gray-800'
+                                                }`}>
+                                                    {mission.title}
+                                                </h4>
+                                                <p className={`text-xs mt-1 ${
+                                                    mission.isCompleted ? 'text-green-600' : 'text-gray-600'
+                                                }`}>
+                                                    {mission.description}
+                                                </p>
+                                            </div>
                                         </div>
-
-                                        {/* Mission Content */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                                                        {mission.title || 'Untitled Mission'}
-                                                    </h3>
-                                                    <p className="text-gray-600 text-xs mb-3">
-                                                        {mission.description || 'No description available'}
-                                                    </p>
-                                                </div>
-                                                
-                                                <div className="flex items-center space-x-3 ml-4">
-                                                    <div className="text-right">
-                                                        <div className="text-sm font-bold text-blue-600">
-                                                            +{mission.xp_reward || 0} XP
-                                                        </div>
-                                                    </div>
-                                                    {getStatusBadge(mission.is_completed)}
-                                                </div>
-                                            </div>
-
-                                            {/* Progress */}
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between text-xs text-gray-600">
-                                                    <span>Progress: {currentProgress}/{targetCount}</span>
-                                                    <span>{Math.round(progressPercentage)}% Complete</span>
-                                                </div>
-                                                
-                                                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                                    <div 
-                                                        className={`h-2 rounded-full transition-all duration-500 bg-gradient-to-r ${
-                                                            getProgressColor(mission.is_completed, currentProgress, targetCount)
-                                                        }`}
-                                                        style={{ width: `${progressPercentage}%` }}
-                                                    >
-                                                        {mission.is_completed && (
-                                                            <div className="h-full w-full bg-white/20 rounded-full animate-pulse"></div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Completion Time */}
-                                            {mission.is_completed && mission.completed_at && (
-                                                <div className="mt-2 text-xs text-green-600 font-medium">
-                                                    ✅ Selesai pada {new Date(mission.completed_at).toLocaleTimeString('id-ID', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </div>
+                                        
+                                        {/* Status Badge */}
+                                        <div className="flex flex-col items-end">
+                                            {mission.isCompleted ? (
+                                                <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded-full mb-1">
+                                                    ✅ Selesai
+                                                </span>
+                                            ) : (
+                                                <span className="bg-gray-500 text-white text-xs font-semibold px-2 py-1 rounded-full mb-1">
+                                                    🔄 Pending
+                                                </span>
                                             )}
+                                            
+                                            {/* XP Reward */}
+                                            <span className={`text-xs font-medium ${
+                                                mission.isCompleted ? 'text-green-600' : 'text-purple-600'
+                                            }`}>
+                                                +{mission.xpReward} XP
+                                            </span>
                                         </div>
                                     </div>
+
+                                    {/* Progress */}
+                                    <div className="mb-2">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs text-gray-600">Progress:</span>
+                                            <span className="text-xs font-semibold text-gray-800">
+                                                {mission.progressValue}/{mission.targetValue}
+                                            </span>
+                                        </div>
+                                        
+                                        {/* Progress Bar */}
+                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div 
+                                                className={`h-full rounded-full transition-all duration-300 ${
+                                                    getProgressColor(progressPercentage)
+                                                }`}
+                                                style={{ width: `${progressPercentage}%` }}
+                                            ></div>
+                                        </div>
+                                        
+                                        {/* Progress Percentage */}
+                                        <div className="text-right mt-1">
+                                            <span className="text-xs text-gray-500">
+                                                {Math.round(progressPercentage)}% Complete
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Completion Message */}
+                                    {mission.isCompleted && (
+                                        <div className="bg-green-100 border border-green-200 rounded-md p-2 mt-2">
+                                            <div className="text-green-800 text-xs text-center font-medium">
+                                                🎉 Mission completed! +{mission.xpEarned} XP earned
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 )}
 
-                {/* Overall Progress */}
-                {safeMissions.length > 0 && (
-                    <div className="mt-6 pt-6 border-t border-gray-200">
+                {/* Daily Progress Summary */}
+                {missions.length > 0 && (
+                    <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                         <div className="text-center">
-                            <div className="text-sm text-gray-600 mb-2">
-                                Progress Harian Keseluruhan
+                            <div className="text-sm font-semibold text-blue-800 mb-1">
+                                📊 Progress Hari Ini
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                                <div 
-                                    className="h-3 rounded-full transition-all duration-500 bg-gradient-to-r from-purple-400 to-blue-600"
-                                    style={{ width: `${safeMissions.length > 0 ? (completedMissions / safeMissions.length) * 100 : 0}%` }}
-                                ></div>
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                                {completedMissions === safeMissions.length 
-                                    ? '🎉 Semua misi hari ini telah selesai!' 
-                                    : `${safeMissions.length - completedMissions} misi tersisa`}
+                            <div className="flex justify-center space-x-6 text-xs text-blue-700">
+                                <div>
+                                    <span className="font-medium">{completedToday}</span>
+                                    <span className="opacity-75">/{missions.length} Mission</span>
+                                </div>
+                                <div>
+                                    <span className="font-medium">{totalXpEarned}</span>
+                                    <span className="opacity-75"> XP Earned</span>
+                                </div>
+                                <div>
+                                    <span className="font-medium">{Math.round((completedToday / missions.length) * 100)}</span>
+                                    <span className="opacity-75">% Complete</span>
+                                </div>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Motivational Message */}
+                {missions.length > 0 && (
+                    <div className="mt-4 text-center">
+                        {completedToday === missions.length ? (
+                            <div className="text-green-600 text-sm font-medium">
+                                🏆 Semua mission hari ini selesai! Keren!
+                            </div>
+                        ) : completedToday > 0 ? (
+                            <div className="text-blue-600 text-sm">
+                                💪 {missions.length - completedToday} mission lagi menuju target harian!
+                            </div>
+                        ) : (
+                            <div className="text-gray-600 text-sm">
+                                🎯 Ayo selesaikan mission untuk mendapat XP bonus!
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

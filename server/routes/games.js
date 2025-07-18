@@ -7,35 +7,71 @@ const router = express.Router();
 
 // Auth middleware
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) return res.status(401).json({ message: 'Akses ditolak' });
-  
-  jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, user) => {
-    if (err) return res.status(403).json({ message: 'Token tidak valid' });
-    req.user = user;
-    next();
-  });
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ message: 'Access token required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid token' });
+        }
+        req.user = user;
+        next();
+    });
 };
 
-// Get user's game progress
-router.get('/progress', authenticateToken, gameController.getGameProgress);
+// ============================================
+// GAME PROGRESS ROUTES
+// ============================================
 
-// Update game progress after playing (supports both endpoints for compatibility)
-router.post('/progress', authenticateToken, gameController.updateGameProgress);
-router.post('/complete', authenticateToken, gameController.updateGameProgress);
+// GET /api/games/progress - Ambil progress semua game user
+router.get('/progress', authenticateToken, gameController.getUserGameProgress);
 
-// Get user streak data
+// GET /api/games/progress/:gameId - Ambil progress game tertentu
+router.get('/progress/:gameId', authenticateToken, gameController.getGameProgress);
+
+// POST /api/games/progress/:gameId - Update progress setelah main game
+router.post('/progress/:gameId', authenticateToken, gameController.updateGameProgress);
+
+// ============================================
+// STREAK ROUTES
+// ============================================
+
+// GET /api/games/streak - Ambil data streak user
 router.get('/streak', authenticateToken, gameController.getUserStreak);
 
-// Get daily missions
+// ============================================
+// LEVEL & XP ROUTES
+// ============================================
+
+// GET /api/games/level - Ambil level dan XP user
+router.get('/level', authenticateToken, gameController.getUserLevel);
+
+// ============================================
+// DAILY MISSION ROUTES
+// ============================================
+
+// GET /api/games/daily-missions - Ambil daily missions user hari ini
 router.get('/daily-missions', authenticateToken, gameController.getDailyMissions);
 
-// Get leaderboard (weekly or overall)
-router.get('/leaderboard', authenticateToken, gameController.getLeaderboard);
+// ============================================
+// LEADERBOARD ROUTES
+// ============================================
 
-// Get user level info
-router.get('/level', authenticateToken, gameController.getUserLevel);
+// GET /api/games/leaderboard/weekly - Ambil weekly leaderboard
+router.get('/leaderboard/weekly', authenticateToken, gameController.getWeeklyLeaderboard);
+
+// GET /api/games/leaderboard/overall - Ambil overall leaderboard
+router.get('/leaderboard/overall', authenticateToken, gameController.getOverallLeaderboard);
+
+// ============================================
+// GAME DATA ROUTES
+// ============================================
+
+// GET /api/games - Ambil daftar semua game
+router.get('/', authenticateToken, gameController.getGames);
 
 module.exports = router;

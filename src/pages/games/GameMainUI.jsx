@@ -29,7 +29,7 @@ export default function GameMainUI() {
     const [error, setError] = useState(null);
     const [showStreakAlert, setShowStreakAlert] = useState(false);
 
-    // Static game data template
+    // Static game data template dengan data yang lebih lengkap
     const gameData = [
         {
             id: 1,
@@ -37,7 +37,10 @@ export default function GameMainUI() {
             image: game1Image,
             gameId: "patternpuzzle",
             description: "Asah logika dengan menebak pola yang tersembunyi",
-            difficulty: "Medium"
+            difficulty: "Medium",
+            totalQuestions: 10,
+            maxXpReward: 25,
+            completionBonusXp: 50
         },
         {
             id: 2,
@@ -45,7 +48,10 @@ export default function GameMainUI() {
             image: game2Image,
             gameId: "yesorno",
             description: "Tes pengetahuan dengan pertanyaan ya atau tidak",
-            difficulty: "Easy"
+            difficulty: "Easy",
+            totalQuestions: 15,
+            maxXpReward: 20,
+            completionBonusXp: 30
         },
         {
             id: 3,
@@ -53,7 +59,10 @@ export default function GameMainUI() {
             image: game3Image,
             gameId: "mazechallenge",
             description: "Temukan jalan keluar dari labirin yang menantang",
-            difficulty: "Hard"
+            difficulty: "Hard",
+            totalQuestions: 8,
+            maxXpReward: 30,
+            completionBonusXp: 75
         },
     ];
 
@@ -63,7 +72,8 @@ export default function GameMainUI() {
         // Set up interval to check streak countdown
         const interval = setInterval(() => {
             checkStreakCountdown();
-        }, 60000); // Check every minute
+            updateSecondsUntilReset();
+        }, 1000); // Check every second for real-time countdown
 
         return () => clearInterval(interval);
     }, []);
@@ -125,15 +135,36 @@ export default function GameMainUI() {
         }
     };
 
+    const updateSecondsUntilReset = () => {
+        setStreakData(prev => ({
+            ...prev,
+            seconds_until_reset: Math.max(0, prev.seconds_until_reset - 1)
+        }));
+    };
+
     const checkStreakCountdown = () => {
         const secondsUntilReset = streakData.seconds_until_reset || 86400;
         const hoursUntilReset = secondsUntilReset / 3600;
         
         // Show alert if less than 1.5 hours and streak is not active
-        if (hoursUntilReset <= 1.5 && !streakData.is_active) {
+        if (hoursUntilReset <= 1.5 && !streakData.is_active && streakData.current_streak > 0) {
             setShowStreakAlert(true);
         } else {
             setShowStreakAlert(false);
+        }
+    };
+
+    const formatCountdown = (seconds) => {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        
+        if (hours > 0) {
+            return `${hours}j ${minutes}m ${remainingSeconds}d`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${remainingSeconds}d`;
+        } else {
+            return `${remainingSeconds}d`;
         }
     };
 
@@ -150,14 +181,20 @@ export default function GameMainUI() {
                 totalQuestions: gameProgress[gameId].totalQuestions || 0,
                 correctAnswers: gameProgress[gameId].correctAnswers || 0,
                 percentage: Math.min(gameProgress[gameId].percentage || 0, 100),
-                isCompleted: gameProgress[gameId].percentage >= 100
+                isCompleted: gameProgress[gameId].percentage >= 100,
+                timesPlayed: gameProgress[gameId].timesPlayed || 0,
+                totalXpEarned: gameProgress[gameId].totalXpEarned || 0,
+                bestScore: gameProgress[gameId].bestScore || 0
             };
         }
         return {
             totalQuestions: 0,
             correctAnswers: 0,
             percentage: 0,
-            isCompleted: false
+            isCompleted: false,
+            timesPlayed: 0,
+            totalXpEarned: 0,
+            bestScore: 0
         };
     };
 
@@ -165,9 +202,17 @@ export default function GameMainUI() {
         fetchAllData();
     };
 
-    const handleGameComplete = (gameId, gameResult) => {
-        // Update progress setelah game selesai
-        fetchAllData();
+    const handleGameComplete = async (gameId, gameResult) => {
+        try {
+            // Update progress di backend
+            await gameAPI.updateGameProgress(gameId, gameResult);
+            
+            // Refresh semua data setelah game selesai
+            await fetchAllData();
+            
+        } catch (error) {
+            console.error('Error updating game progress:', error);
+        }
     };
 
     if (loading) {
@@ -205,10 +250,29 @@ export default function GameMainUI() {
         <div className="h-screen flex flex-col">
             {/* Streak Alert Countdown */}
             {showStreakAlert && (
-                <StreakCountdown 
-                    secondsUntilReset={streakData.seconds_until_reset}
-                    onClose={() => setShowStreakAlert(false)}
-                />
+                <div className="fixed top-4 right-4 z-50 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-sm">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                            <span className="text-xl">⚠️</span>
+                            <span className="font-semibold">Streak akan reset!</span>
+                        </div>
+                        <button 
+                            onClick={() => setShowStreakAlert(false)}
+                            className="text-white hover:text-gray-200"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <div className="text-sm mb-2">
+                        Streak {streakData.current_streak} hari akan hilang dalam:
+                    </div>
+                    <div className="text-lg font-mono font-bold text-center bg-red-600 rounded px-2 py-1">
+                        {formatCountdown(streakData.seconds_until_reset)}
+                    </div>
+                    <div className="text-xs mt-2 text-center">
+                        Main 1 game untuk menjaga streak!
+                    </div>
+                </div>
             )}
 
             <main className="container mx-auto px-4 py-6">
@@ -225,7 +289,7 @@ export default function GameMainUI() {
                         </div>
                         
                         {/* Streak Display in Header */}
-                        <div className={`rounded-lg p-4 shadow-md min-w-[200px] ${
+                        <div className={`rounded-lg p-4 shadow-md min-w-[220px] transition-all duration-300 ${
                             streakData.is_active 
                                 ? 'bg-gradient-to-r from-yellow-400 to-orange-600' 
                                 : 'bg-gradient-to-r from-gray-400 to-gray-600'
@@ -247,9 +311,28 @@ export default function GameMainUI() {
                                     </div>
                                 </div>
                             </div>
-                            {!streakData.is_active && (
+                            
+                            {!streakData.is_active && streakData.current_streak === 0 && (
                                 <div className="text-center text-white text-sm opacity-80">
                                     Main 1 game untuk mengaktifkan!
+                                </div>
+                            )}
+                            
+                            {!streakData.is_active && streakData.current_streak > 0 && (
+                                <div className="text-center text-white text-xs opacity-90">
+                                    <div>Streak nonaktif hari ini</div>
+                                    <div className="font-mono text-yellow-200">
+                                        Reset dalam: {formatCountdown(streakData.seconds_until_reset)}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {streakData.is_active && (
+                                <div className="text-center text-white text-xs opacity-90">
+                                    <div>✅ Aktif hari ini!</div>
+                                    <div className="font-mono">
+                                        Reset dalam: {formatCountdown(streakData.seconds_until_reset)}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -260,6 +343,12 @@ export default function GameMainUI() {
                 <div>
                     <div className="flex items-center justify-between mb-6">
                         <h2 className='text-xl font-poppins font-semibold'>Lanjutkan Progress Game-mu!</h2>
+                        <button 
+                            onClick={handleRefresh}
+                            className="text-blue-500 hover:text-blue-700 text-sm font-medium transition-colors"
+                        >
+                            🔄 Refresh
+                        </button>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -277,6 +366,11 @@ export default function GameMainUI() {
                                     stats={stats}
                                     isCompleted={stats.isCompleted}
                                     onGameComplete={handleGameComplete}
+                                    gameInfo={{
+                                        totalQuestions: game.totalQuestions,
+                                        maxXpReward: game.maxXpReward,
+                                        completionBonusXp: game.completionBonusXp
+                                    }}
                                 />
                             );
                         })}
@@ -290,7 +384,9 @@ export default function GameMainUI() {
                         <p className="text-gray-600 mb-4">
                             {streakData.is_active 
                                 ? `Mantap! Kamu sudah aktif ${streakData.current_streak} hari berturut-turut!`
-                                : 'Ayo main minimal 1 game untuk mengaktifkan streak harian!'}
+                                : streakData.current_streak > 0
+                                    ? `Streak ${streakData.current_streak} hari belum aktif hari ini. Main 1 game untuk melanjutkan!`
+                                    : 'Ayo main minimal 1 game untuk mengaktifkan streak harian!'}
                         </p>
                         
                         {/* Progress toward next milestone */}
@@ -346,8 +442,36 @@ export default function GameMainUI() {
                         <li>• Challenge diri sendiri dengan tingkat kesulitan yang berbeda</li>
                         <li>• Selesaikan daily mission untuk XP tambahan</li>
                         <li>• Lihat leaderboard untuk membandingkan progressmu dengan teman</li>
+                        <li>• Jaga streak untuk naik ke level yang lebih tinggi</li>
                     </ul>
                 </div>
+
+                {/* Game Statistics */}
+                {Object.keys(gameProgress).length > 0 && (
+                    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+                        <h3 className="text-lg font-semibold mb-4">📊 Statistik Game</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="text-center p-4 bg-blue-50 rounded-lg">
+                                <div className="text-2xl font-bold text-blue-600">
+                                    {Object.values(gameProgress).reduce((sum, prog) => sum + (prog.timesPlayed || 0), 0)}
+                                </div>
+                                <div className="text-sm text-blue-800">Total Game Dimainkan</div>
+                            </div>
+                            <div className="text-center p-4 bg-green-50 rounded-lg">
+                                <div className="text-2xl font-bold text-green-600">
+                                    {Object.values(gameProgress).reduce((sum, prog) => sum + (prog.totalXpEarned || 0), 0)}
+                                </div>
+                                <div className="text-sm text-green-800">Total XP dari Game</div>
+                            </div>
+                            <div className="text-center p-4 bg-purple-50 rounded-lg">
+                                <div className="text-2xl font-bold text-purple-600">
+                                    {Object.values(gameProgress).filter(prog => prog.isCompleted).length}
+                                </div>
+                                <div className="text-sm text-purple-800">Game Diselesaikan</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

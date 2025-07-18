@@ -11,7 +11,6 @@ const QRCode = require('qrcode');
 const Joi = require('joi');
 
 const TwoFactorService = require('./services/TwoFactorService');
-const cron = require('node-cron');
 
 require('dotenv').config();
 
@@ -93,26 +92,61 @@ app.use('/api/courses', coursesRouter);
 
 // Routes for games
 const gamesRouter = require('./routes/games');
+const cron = require('node-cron');
+
 app.use('/api/games', gamesRouter);
 
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('0 0 * * 1', async () => {
   try {
-    console.log('Running daily streak reset...');
-    await pool.query('SELECT update_daily_streaks()');
-    console.log('Daily streak reset completed');
+    console.log('Resetting weekly rankings...');
+    
+    // Archive current week rankings before reset
+    const { pool } = require('./config/db');
+    
+    await pool.query(`
+      INSERT INTO weekly_rankings_archive 
+      SELECT *, CURRENT_TIMESTAMP as archived_at 
+      FROM weekly_rankings 
+      WHERE week_start_date = (
+        SELECT MAX(week_start_date) FROM weekly_rankings
+      )
+    `);
+    
+    // Clear current week rankings untuk minggu baru
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + 1; // Senin
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    
+    await pool.query('DELETE FROM weekly_rankings WHERE week_start_date < $1', [monday]);
+    
+    console.log('Weekly rankings reset completed');
   } catch (error) {
-    console.error('Error in daily streak reset:', error);
+    console.error('Error resetting weekly rankings:', error);
   }
 });
 
-// Reset weekly ranking setiap hari Senin pada pukul 00:00
-cron.schedule('0 0 * * 1', async () => {
+// Schedule streak check setiap tengah malam
+cron.schedule('0 0 * * *', async () => {
   try {
-    console.log('Running weekly ranking reset...');
-    await pool.query('SELECT reset_weekly_rankings()');
-    console.log('Weekly ranking reset completed');
+    console.log('Checking and resetting inactive streaks...');
+    
+    const { pool } = require('./config/db');
+    
+    // Reset streak yang tidak aktif kemarin
+    await pool.query(`
+      UPDATE user_streaks 
+      SET is_active = FALSE,
+          current_streak = 0,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE last_activity_date < CURRENT_DATE 
+      AND is_active = TRUE
+    `);
+    
+    console.log('Streak check completed');
   } catch (error) {
-    console.error('Error in weekly ranking reset:', error);
+    console.error('Error checking streaks:', error);
   }
 });
 

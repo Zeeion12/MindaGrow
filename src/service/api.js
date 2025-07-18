@@ -65,34 +65,137 @@ export const courseAPI = {
 };
 
 export const gameAPI = {
-  // Get user's game progress
+  // ============================================
+  // USER GAME PROGRESS
+  // ============================================
+  
+  // Get user's game progress (all games)
   getProgress: () => {
     return api.get('/games/progress');
   },
 
+  // Get progress for specific game
+  getGameProgress: (gameId) => {
+    return api.get(`/games/progress/${gameId}`);
+  },
+
   // Update game progress after playing
+  updateGameProgress: (gameId, gameResult) => {
+    return api.post(`/games/progress/${gameId}`, gameResult);
+  },
+
+  // Legacy method (keep for backward compatibility)
   updateProgress: (gameData) => {
     return api.post('/games/progress', gameData);
   },
 
+  // ============================================
+  // USER STREAKS
+  // ============================================
+  
   // Get user streak data with countdown timer
   getUserStreak: () => {
     return api.get('/games/streak');
   },
 
+  // Update streak (called after playing game)
+  updateStreak: (gameId) => {
+    return api.post('/games/streak', { gameId });
+  },
+
+  // ============================================
+  // USER LEVELS & XP
+  // ============================================
+  
+  // Get user level info
+  getUserLevel: () => {
+    return api.get('/games/level');
+  },
+
+  // ============================================
+  // DAILY MISSIONS
+  // ============================================
+  
   // Get daily missions
   getDailyMissions: () => {
     return api.get('/games/daily-missions');
   },
 
-  // Get leaderboard (weekly or overall)
+  // Update daily mission progress
+  updateDailyMissionProgress: (missionType, progressValue = 1) => {
+    return api.post('/games/daily-missions/progress', {
+      missionType,
+      progressValue
+    });
+  },
+
+  // ============================================
+  // LEADERBOARD
+  // ============================================
+  
+  // Get weekly leaderboard
+  getWeeklyLeaderboard: (limit = 10) => {
+    return api.get(`/games/leaderboard/weekly?limit=${limit}`);
+  },
+
+  // Get overall leaderboard
+  getOverallLeaderboard: (limit = 10) => {
+    return api.get(`/games/leaderboard/overall?limit=${limit}`);
+  },
+
+  // Legacy method (keep for backward compatibility)
   getLeaderboard: (type = 'weekly') => {
     return api.get(`/games/leaderboard?type=${type}`);
   },
 
-  // Get user level info
-  getUserLevel: () => {
-    return api.get('/games/level');
+  // Get user ranking
+  getUserRanking: () => {
+    return api.get('/games/ranking');
+  },
+
+  // ============================================
+  // GAME DATA
+  // ============================================
+  
+  // Get all games
+  getGames: () => {
+    return api.get('/games');
+  },
+
+  // Get game detail
+  getGameDetail: (gameId) => {
+    return api.get(`/games/${gameId}`);
+  },
+
+  // ============================================
+  // GAME SESSIONS
+  // ============================================
+  
+  // Start game session
+  startGameSession: (gameId) => {
+    return api.post('/games/session/start', { gameId });
+  },
+
+  // End game session
+  endGameSession: (sessionId, gameResult) => {
+    return api.post('/games/session/end', {
+      sessionId,
+      ...gameResult
+    });
+  },
+
+  // ============================================
+  // ANALYTICS & STATS
+  // ============================================
+  
+  // Get user game stats
+  getUserGameStats: () => {
+    return api.get('/games/stats');
+  },
+
+  // Get game history
+  getGameHistory: (gameId, limit = 10) => {
+    return api.get(`/games/history/${gameId}?limit=${limit}`);
   }
 };
 
