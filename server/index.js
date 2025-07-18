@@ -9,40 +9,50 @@ const fs = require('fs');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const Joi = require('joi');
+const { DateTime } = require("luxon");
 
 const TwoFactorService = require('./services/TwoFactorService');
 
 require('dotenv').config();
 
 function getCurrentDate() {
-  // Ambil waktu Jakarta dan convert ke format YYYY-MM-DD
-  const jakartaTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"});
-  const jakartaDate = new Date(jakartaTime);
-  
-  // Format ke YYYY-MM-DD
-  const year = jakartaDate.getFullYear();
-  const month = String(jakartaDate.getMonth() + 1).padStart(2, '0');
-  const day = String(jakartaDate.getDate()).padStart(2, '0');
-  const formattedDate = `${year}-${month}-${day}`;
+  // Menggunakan Luxon untuk akurasi timezone yang lebih baik
+  const jakartaDate = DateTime.now().setZone("Asia/Jakarta").toISODate();
   
   console.log('🕒 getCurrentDate called:', {
-    jakartaTimeString: jakartaTime,
-    formattedDate: formattedDate
+    jakartaDateTime: DateTime.now().setZone("Asia/Jakarta").toString(),
+    formattedDate: jakartaDate
   });
   
-  return formattedDate;
+  return jakartaDate; // Format: YYYY-MM-DD
 }
 
 function getSecondsUntilMidnight() {
-  const now = new Date();
-  const jakartaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+  const now = DateTime.now().setZone("Asia/Jakarta");
+  const midnight = now.plus({ days: 1 }).startOf('day');
+  const seconds = Math.floor(midnight.diff(now, 'seconds').seconds);
   
-  // Set midnight untuk Jakarta timezone
-  const midnight = new Date(jakartaTime);
-  midnight.setHours(24, 0, 0, 0);
+  console.log('🕒 getSecondsUntilMidnight called:', {
+    jakartaNow: now.toString(),
+    midnightJakarta: midnight.toString(),
+    secondsUntilMidnight: seconds
+  });
   
-  return Math.floor((midnight - jakartaTime) / 1000);
+  return seconds;
 }
+
+function getTodayDateJakarta() {
+  // Alternative method using Intl - fallback jika luxon error
+  const jakartaNow = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+
+  return jakartaNow;
+}
+
 
 // Initialize Express app
 const app = express();
@@ -160,7 +170,6 @@ cron.schedule('0 0 * * 1', async () => {
 // Schedule streak check setiap tengah malam
 cron.schedule('0 0 * * *', async () => {
   try {
-    console.log('Checking and resetting inactive streaks...');
     
     const { pool } = require('./config/db');
     
@@ -179,8 +188,6 @@ cron.schedule('0 0 * * *', async () => {
     console.error('Error checking streaks:', error);
   }
 });
-
-console.log('Scheduled jobs initialized');
 
 // Class Router
 const classRoutes = require('./routes/classRoutes');
@@ -645,10 +652,12 @@ app.get('/api/test', authenticateToken, (req, res) => {
 });
 
 // Get user streak
-app.get('/api/users/streak', authenticateToken, async (req, res) => {
+app.get('/api/games/streak', authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
+    console.log(`🔥 Fetching streak for user ${userId}`);
+    
     const result = await pool.query(
       'SELECT current_streak, longest_streak, last_activity_date, is_active FROM user_streaks WHERE user_id = $1',
       [userId]
@@ -660,35 +669,55 @@ app.get('/api/users/streak', authenticateToken, async (req, res) => {
         current_streak: 0,
         longest_streak: 0,
         is_active: false,
-        last_activity_date: null
+        last_activity_date: null,
+        seconds_until_reset: getSecondsUntilMidnight()
       });
     }
 
     const streak = result.rows[0];
+    const today = getCurrentDate(); // Using Luxon
+    const lastActivity = streak.last_activity_date ? 
+      DateTime.fromJSDate(new Date(streak.last_activity_date)).toISODate() : null;
 
-    // Check if streak should be deactivated (setelah jam 12 malam)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check apakah aktif hari ini
+    const isActiveToday = lastActivity === today;
+    
+    console.log(`🔥 Streak comparison:`, {
+      lastActivity,
+      today,
+      is_active_db: streak.is_active,
+      isActiveToday,
+      current_streak: streak.current_streak
+    });
 
-    const lastActivity = new Date(streak.last_activity_date);
-    lastActivity.setHours(0, 0, 0, 0);
-
-    const isActiveToday = lastActivity.getTime() === today.getTime();
-
-    // Update is_active status jika berbeda dari database
+    // Update database jika status berbeda
     if (streak.is_active !== isActiveToday) {
       await pool.query(
         'UPDATE user_streaks SET is_active = $1 WHERE user_id = $2',
         [isActiveToday, userId]
       );
-      streak.is_active = isActiveToday;
       console.log(`🔄 Updated streak active status to ${isActiveToday}`);
     }
 
-    res.json(streak);
+    res.json({
+      current_streak: streak.current_streak,
+      longest_streak: streak.longest_streak,
+      is_active: isActiveToday,
+      last_activity_date: streak.last_activity_date,
+      seconds_until_reset: getSecondsUntilMidnight()
+    });
+
   } catch (error) {
     console.error('❌ Error getting user streak:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      current_streak: 0,
+      longest_streak: 0,
+      is_active: false,
+      last_activity_date: null,
+      seconds_until_reset: 86400
+    });
   }
 });
 
@@ -967,7 +996,7 @@ async function updateUserStreak(userId) {
   try {
     await client.query('BEGIN');
 
-    const today = getCurrentDate(); // Gunakan function baru
+    const today = getCurrentDate(); // Using Luxon
 
     console.log(`🔥 Updating streak for user ${userId} on ${today}`);
 
@@ -989,7 +1018,7 @@ async function updateUserStreak(userId) {
 
     const streak = streakResult.rows[0];
     const lastActivity = streak.last_activity_date ? 
-      new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
+      DateTime.fromJSDate(new Date(streak.last_activity_date)).toISODate() : null;
 
     console.log(`🔥 Current streak data:`, {
       lastActivityDate: lastActivity,
@@ -1009,12 +1038,18 @@ async function updateUserStreak(userId) {
       return { newStreak: streak.current_streak, wasUpdated: false };
     }
 
-    // Calculate yesterday
-    const yesterday = new Date(getCurrentDate());
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // Calculate yesterday using Luxon
+    const todayDT = DateTime.fromISO(today);
+    const yesterdayDT = todayDT.minus({ days: 1 });
+    const yesterday = yesterdayDT.toISODate();
 
-    if (lastActivity === yesterdayStr) {
+    console.log(`🔥 Date calculations:`, {
+      today,
+      yesterday,
+      lastActivity
+    });
+
+    if (lastActivity === yesterday) {
       // Consecutive day! Increment streak
       const newStreak = streak.current_streak + 1;
       const longestStreak = Math.max(newStreak, streak.longest_streak);
@@ -3138,12 +3173,6 @@ app.listen(PORT, () => {
 🔗 Frontend URL: http://localhost:3000
 🔗 Backend URL: http://localhost:${PORT}
   `);
-
-  console.log('🕒 Server startup time check:');
-console.log('- System time:', new Date());
-console.log('- System timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
-console.log('- Jakarta time:', new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
-console.log('- Today should be:', new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"}).split(',')[0]);
 });
 
 //Available Endpoints:

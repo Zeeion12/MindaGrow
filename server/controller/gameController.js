@@ -143,8 +143,6 @@ exports.getUserGameProgress = async (req, res) => {
     try {
         const userId = req.user.id;
         
-        console.log(`📊 Fetching game progress for user ${userId}`);
-        
         const query = `
             SELECT 
                 ugp.*,
@@ -159,8 +157,6 @@ exports.getUserGameProgress = async (req, res) => {
         `;
         
         const result = await pool.query(query, [userId]);
-        
-        console.log(`📊 Found ${result.rows.length} game progress records`);
         
         // Transform data ke format yang diharapkan frontend
         const progressData = {};
@@ -177,8 +173,6 @@ exports.getUserGameProgress = async (req, res) => {
                 bestScore: row.best_score
             };
         });
-        
-        console.log('📊 Progress data:', progressData);
         
         res.json({ data: progressData });
     } catch (error) {
@@ -308,7 +302,6 @@ exports.updateGameProgress = async (req, res) => {
         
         // Update streak
         await updateUserStreak(client, userId);
-        console.log('🔥 Updated user streak');
         
         await client.query('COMMIT');
         
@@ -337,8 +330,6 @@ exports.updateGameProgress = async (req, res) => {
 exports.getUserStreak = async (req, res) => {
     try {
         const userId = req.user.id;
-        
-        console.log(`🔥 Fetching streak for user ${userId}`);
         
         const query = `
             SELECT 
@@ -375,13 +366,6 @@ exports.getUserStreak = async (req, res) => {
         // Check if active today
         const isActiveToday = lastActivity === today && streak.is_active;
         
-        console.log(`🔥 Streak comparison:`, { 
-            lastActivity, 
-            today, 
-            is_active_db: streak.is_active,
-            isActiveToday 
-        });
-        
         res.json({
             data: {
                 current_streak: streak.current_streak,
@@ -404,8 +388,6 @@ exports.getUserStreak = async (req, res) => {
 exports.getUserLevel = async (req, res) => {
     try {
         const userId = req.user.id;
-        
-        console.log(`📈 Fetching level for user ${userId}`);
         
         const query = `
             SELECT 
@@ -432,7 +414,6 @@ exports.getUserLevel = async (req, res) => {
         }
         
         const level = result.rows[0];
-        console.log(`📈 Level data:`, level);
         
         res.json({
             data: {
@@ -580,16 +561,6 @@ exports.getGames = async (req, res) => {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
-
-console.log('🔍 Checking gameController exports:');
-console.log('- getUserGameProgress:', typeof exports.getUserGameProgress);
-console.log('- updateGameProgress:', typeof exports.updateGameProgress);
-console.log('- getUserStreak:', typeof exports.getUserStreak);
-console.log('- getUserLevel:', typeof exports.getUserLevel);
-console.log('- getDailyMissions:', typeof exports.getDailyMissions);
-console.log('- getWeeklyLeaderboard:', typeof exports.getWeeklyLeaderboard);
-console.log('- getOverallLeaderboard:', typeof exports.getOverallLeaderboard);
-console.log('- getGames:', typeof exports.getGames);
 
 // Jika ada yang undefined, tambahkan fallback
 if (!exports.getGameProgress) {

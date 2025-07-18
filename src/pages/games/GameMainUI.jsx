@@ -121,18 +121,14 @@ export default function GameMainUI() {
             setLoading(true);
             setError(null);
             
-            console.log('🔄 Fetching all game data...');
-            
             const [progressResponse, streakResponse, levelResponse] = await Promise.all([
                 gameAPI.getProgress().then(res => {
-                    console.log('📊 Progress data received:', res.data);
                     return res;
                 }).catch(err => {
                     console.error('Error fetching game progress:', err);
                     return { data: {} };
                 }),
                 gameAPI.getUserStreak().then(res => {
-                    console.log('🔥 Streak data received:', res.data);
                     return res;
                 }).catch(err => {
                     console.error('Error fetching streak data:', err);
@@ -146,8 +142,6 @@ export default function GameMainUI() {
                     };
                 }),
                 gameAPI.getUserLevel().then(res => {
-                    console.log('📈 Level data received:', res.data);
-                    console.log('📈 Full response object:', res);
                     return res;
                 }).catch(err => {
                     console.error('Error fetching user level:', err);
@@ -162,8 +156,10 @@ export default function GameMainUI() {
                 })
             ]);
 
-            // **PERBAIKAN: Extract data dari response**
+            // **PERBAIKAN: Extract data dari response wrapper**
             const gameProgressData = progressResponse.data || {};
+            
+            // **KUNCI: Ambil data langsung, bukan wrapper**
             const streakData = streakResponse.data || {
                 current_streak: 0,
                 longest_streak: 0,
@@ -171,7 +167,6 @@ export default function GameMainUI() {
                 seconds_until_reset: 86400
             };
             
-            // **PENTING: Extract data.data untuk level**
             const levelData = levelResponse.data || {
                 current_level: 1,
                 current_xp: 0,
@@ -179,18 +174,10 @@ export default function GameMainUI() {
                 xp_to_next_level: 100
             };
 
-            console.log('🔍 About to set states with:', {
-                gameProgress: gameProgressData,
-                streak: streakData,
-                level: levelData
-            });
-
-            // Set states
+            // Set states dengan data yang sudah di-extract
             setGameProgress(gameProgressData);
             setStreakData(streakData);
-            setUserLevel(levelData); // Langsung data, bukan wrapper object
-
-            console.log('✅ All data updated successfully');
+            setUserLevel(levelData);
 
         } catch (error) {
             console.error('❌ Error fetching data:', error);
@@ -201,7 +188,6 @@ export default function GameMainUI() {
     };
 
     useEffect(() => {
-        console.log('🔄 useEffect triggered, fetching data...');
         fetchAllData();
     }, []); // Empty dependency array
 
@@ -379,55 +365,37 @@ export default function GameMainUI() {
                             </p>
                         </div>
                         
-                        {/* Streak Display in Header */}
+                       {/* Streak Display - Update kondisi */}
                         <div className={`rounded-lg p-4 shadow-md min-w-[220px] transition-all duration-300 ${
-                            streakData.is_active 
+                            (streakData.is_active || streakData.data?.is_active) 
                                 ? 'bg-gradient-to-r from-yellow-400 to-orange-600' 
                                 : 'bg-gradient-to-r from-gray-400 to-gray-600'
                         }`}>
-                            <div className="flex items-center justify-center space-x-3 mb-2">
-                                <div className={`text-5xl transition-all duration-300 ${
-                                    streakData.is_active 
+                            <div className="flex items-center justify-center space-x-3 mb-3">
+                                <div className={`text-5xl transition-all duration-300  ${
+                                    (streakData.is_active || streakData.data?.is_active) 
                                         ? 'animate-pulse filter drop-shadow-lg' 
                                         : 'grayscale opacity-60'
                                 }`}>
-                                    {streakData.is_active ? '🔥' : '🌙'}
+                                    {(streakData.is_active || streakData.data?.is_active) ? '🔥' : '🌙'}
                                 </div>
                                 <div className="text-center">
                                     <div className="text-3xl font-bold text-white">
-                                        {streakData.current_streak}
+                                        {streakData.current_streak || streakData.data?.current_streak || 0}
                                     </div>
-                                    <div className="text-md text-white">
+                                    <div className="text-sm text-white/90">
                                         Hari berturut-turut
                                     </div>
                                 </div>
                             </div>
                             
-                            {streakData.current_streak > 0 && streakData.is_active && (
-                                <div className="text-center">
-                                    <div className="text-4xl mb-2">🔥</div>
-                                    <div className="text-lg font-bold text-white">{streakData.current_streak} Hari</div>
-                                    <div className="text-sm text-white/90">Streak Fire!</div>
-                                    {streakData.current_streak >= 7 && (
-                                        <div className="text-xs text-yellow-200 mt-1">
-                                            +50 XP Bonus
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {streakData.current_streak > 0 && !streakData.is_active && (
-                                <div className="text-center text-white text-xs opacity-90">
-                                    <div>Streak nonaktif hari ini</div>
-                                    <div className="font-mono text-yellow-200">
-                                        Reset dalam: {formatCountdown(streakData.seconds_until_reset)}
+                            {/* Update semua kondisi dengan safe access */}
+                            {((streakData.current_streak || streakData.data?.current_streak) > 0) && 
+                            (streakData.is_active || streakData.data?.is_active) && (
+                                <div className="space-y-2">
+                                    <div className="text-white/90 text-sm">
+                                        Kamu sedang on fire! Jaga momentum ini!
                                     </div>
-                                </div>
-                            )}
-
-                            {streakData.current_streak === 0 && (
-                                <div className="text-center text-white text-xs opacity-90">
-                                    <div>Mulai streak dengan main 1 game!</div>
                                 </div>
                             )}
                         </div>
@@ -527,46 +495,6 @@ export default function GameMainUI() {
                         <Scoreboard />
                     </div>
                 </div>
-
-                {/* Tips Section */}
-                <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-yellow-800 mb-3">💡 Tips</h3>
-                    <ul className="text-yellow-700 space-y-2">
-                        <li>• Main minimal 1 game setiap hari untuk menjaga streak api</li>                    
-                        <li>• Selesaikan game 100% untuk mendapat bonus XP maksimal</li>
-                        <li>• Challenge diri sendiri dengan tingkat kesulitan yang berbeda</li>
-                        <li>• Selesaikan daily mission untuk XP tambahan</li>
-                        <li>• Lihat leaderboard untuk membandingkan progressmu dengan teman</li>
-                        <li>• Jaga streak untuk naik ke level yang lebih tinggi</li>
-                    </ul>
-                </div>
-
-                {/* Game Statistics */}
-                {Object.keys(gameProgress).length > 0 && (
-                    <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-                        <h3 className="text-lg font-semibold mb-4">📊 Statistik Game</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="text-center p-4 bg-blue-50 rounded-lg">
-                                <div className="text-2xl font-bold text-blue-600">
-                                    {Object.values(gameProgress).reduce((sum, prog) => sum + (prog.timesPlayed || 0), 0)}
-                                </div>
-                                <div className="text-sm text-blue-800">Total Game Dimainkan</div>
-                            </div>
-                            <div className="text-center p-4 bg-green-50 rounded-lg">
-                                <div className="text-2xl font-bold text-green-600">
-                                    {Object.values(gameProgress).reduce((sum, prog) => sum + (prog.totalXpEarned || 0), 0)}
-                                </div>
-                                <div className="text-sm text-green-800">Total XP dari Game</div>
-                            </div>
-                            <div className="text-center p-4 bg-purple-50 rounded-lg">
-                                <div className="text-2xl font-bold text-purple-600">
-                                    {Object.values(gameProgress).filter(prog => prog.isCompleted).length}
-                                </div>
-                                <div className="text-sm text-purple-800">Game Diselesaikan</div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </main>
         </div>
     );
