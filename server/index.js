@@ -11,6 +11,7 @@ const QRCode = require('qrcode');
 const Joi = require('joi');
 
 const TwoFactorService = require('./services/TwoFactorService');
+const cron = require('node-cron');
 
 require('dotenv').config();
 
@@ -89,6 +90,33 @@ app.use('/uploads/materials', express.static(path.join(__dirname, 'uploads', 'ma
 // Import and use courses router
 const coursesRouter = require('./routes/courses');
 app.use('/api/courses', coursesRouter);
+
+// Routes for games
+const gamesRouter = require('./routes/games');
+app.use('/api/games', gamesRouter);
+
+cron.schedule('0 0 * * *', async () => {
+  try {
+    console.log('Running daily streak reset...');
+    await pool.query('SELECT update_daily_streaks()');
+    console.log('Daily streak reset completed');
+  } catch (error) {
+    console.error('Error in daily streak reset:', error);
+  }
+});
+
+// Reset weekly ranking setiap hari Senin pada pukul 00:00
+cron.schedule('0 0 * * 1', async () => {
+  try {
+    console.log('Running weekly ranking reset...');
+    await pool.query('SELECT reset_weekly_rankings()');
+    console.log('Weekly ranking reset completed');
+  } catch (error) {
+    console.error('Error in weekly ranking reset:', error);
+  }
+});
+
+console.log('Scheduled jobs initialized');
 
 // Class Router
 const classRoutes = require('./routes/classRoutes');

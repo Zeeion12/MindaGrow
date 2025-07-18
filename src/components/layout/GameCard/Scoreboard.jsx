@@ -1,311 +1,246 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+// src/components/layout/GameCard/Scoreboard.jsx
+import { useState, useEffect } from 'react';
+import { gameAPI } from '../../../service/api';
 
 export default function Scoreboard() {
+    const [activeTab, setActiveTab] = useState('weekly');
     const [leaderboard, setLeaderboard] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('weekly'); // 'weekly' or 'overall'
-    const [currentUser, setCurrentUser] = useState(null);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        fetchLeaderboard();
-        getCurrentUser();
+        fetchLeaderboard(activeTab);
     }, [activeTab]);
 
-    const getCurrentUser = async () => {
+    const fetchLeaderboard = async (type) => {
         try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-
-            // Get current user info
-            const response = await axios.get('http://localhost:5000/api/games/dashboard', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (response.data.success) {
-                setCurrentUser(response.data.user);
-            }
-        } catch (error) {
-            console.error('Error fetching current user:', error);
-        }
-    };
-
-    const fetchLeaderboard = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                setLoading(false);
-                return;
-            }
-
-            const endpoint = activeTab === 'weekly' 
-                ? 'http://localhost:5000/api/leaderboard/weekly'
-                : 'http://localhost:5000/api/leaderboard/overall';
-
-            const response = await axios.get(endpoint, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (response.data.success) {
-                setLeaderboard(response.data.leaderboard);
-            }
+            setLoading(true);
+            setError(null);
+            
+            const response = await gameAPI.getLeaderboard(type);
+            setLeaderboard(response.data || []);
         } catch (error) {
             console.error('Error fetching leaderboard:', error);
-            // Fallback to dummy data
-            setLeaderboard([
-                { nama_lengkap: 'ITO', weekly_xp: 1250, total_xp: 5420, rank: 1 },
-                { nama_lengkap: 'Tio', weekly_xp: 1180, total_xp: 4890, rank: 2 },
-                { nama_lengkap: 'Fonsi', weekly_xp: 1050, total_xp: 4320, rank: 3 },
-                { nama_lengkap: 'Selenia', weekly_xp: 890, total_xp: 3980, rank: 4 },
-                { nama_lengkap: 'Dimas', weekly_xp: 750, total_xp: 3650, rank: 5 },
-                { nama_lengkap: 'Raka', weekly_xp: 680, total_xp: 3200, rank: 6 }
-            ]);
+            setError('Gagal memuat leaderboard');
         } finally {
             setLoading(false);
         }
     };
 
-    const getRankBadge = (rank) => {
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+    };
+
+    const getRankIcon = (rank) => {
         switch (rank) {
-            case 1: return { emoji: '🥇', color: 'text-yellow-600', bg: 'bg-yellow-100' };
-            case 2: return { emoji: '🥈', color: 'text-gray-600', bg: 'bg-gray-100' };
-            case 3: return { emoji: '🥉', color: 'text-orange-600', bg: 'bg-orange-100' };
-            default: return { emoji: `#${rank}`, color: 'text-blue-600', bg: 'bg-blue-100' };
+            case 1: return '🥇';
+            case 2: return '🥈';
+            case 3: return '🥉';
+            default: return `#${rank}`;
         }
     };
 
-    const getXpDisplay = (player) => {
-        return activeTab === 'weekly' ? player.weekly_xp || 0 : player.total_xp || 0;
-    };
-
-    const formatXP = (xp) => {
-        if (xp >= 1000) {
-            return `${(xp / 1000).toFixed(1)}k`;
+    const getRankColor = (rank) => {
+        switch (rank) {
+            case 1: return 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-white';
+            case 2: return 'bg-gradient-to-r from-gray-400 to-gray-600 text-white';
+            case 3: return 'bg-gradient-to-r from-orange-400 to-orange-600 text-white';
+            default: return 'bg-gray-100 text-gray-700';
         }
-        return xp.toString();
     };
 
-    const getCurrentUserRank = () => {
-        if (!currentUser) return null;
-        return leaderboard.findIndex(player => 
-            player.nama_lengkap === currentUser.nama_lengkap
-        ) + 1;
+    const formatNumber = (num) => {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toString();
+    };
+
+    const getNextResetInfo = () => {
+        if (activeTab === 'weekly') {
+            const now = new Date();
+            const nextMonday = new Date();
+            nextMonday.setDate(now.getDate() + (7 - now.getDay() + 1) % 7);
+            nextMonday.setHours(0, 0, 0, 0);
+            
+            const diffTime = nextMonday.getTime() - now.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            return `Reset ${diffDays === 0 ? 'hari ini' : `${diffDays} hari lagi`}`;
+        }
+        return 'Ranking keseluruhan';
     };
 
     if (loading) {
         return (
-            <div className="w-full bg-white rounded-lg shadow-md p-4">
-                <div className="animate-pulse">
-                    <div className="h-6 bg-gray-200 rounded mb-4"></div>
-                    <div className="space-y-3">
-                        {[1, 2, 3, 4, 5].map(i => (
-                            <div key={i} className="flex items-center space-x-3">
-                                <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
-                                <div className="flex-1 h-4 bg-gray-200 rounded"></div>
-                                <div className="w-12 h-4 bg-gray-200 rounded"></div>
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">🏆 Leaderboard</h2>
+                <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="animate-pulse flex items-center space-x-3 p-3 bg-gray-100 rounded-lg">
+                            <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                            <div className="flex-1">
+                                <div className="h-4 bg-gray-200 rounded w-3/4 mb-1"></div>
+                                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                             </div>
-                        ))}
-                    </div>
+                            <div className="w-12 h-4 bg-gray-200 rounded"></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">🏆 Leaderboard</h2>
+                <div className="text-center">
+                    <div className="text-red-500 text-sm mb-4">⚠️ {error}</div>
+                    <button 
+                        onClick={() => fetchLeaderboard(activeTab)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                    >
+                        Coba Lagi
+                    </button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="w-full bg-white rounded-lg shadow-md overflow-hidden">
-            {/* Header with Tabs */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold">🏆 Leaderboard</h3>
-                    <button 
-                        onClick={fetchLeaderboard}
-                        className="text-white/80 hover:text-white transition-colors"
-                    >
-                        🔄
-                    </button>
-                </div>
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-500 to-blue-600 p-6 text-white">
+                <h2 className="text-xl font-bold mb-4">🏆 Leaderboard</h2>
                 
-                {/* Tab Buttons */}
-                <div className="flex space-x-2">
+                {/* Tab Navigation */}
+                <div className="flex space-x-1 bg-white/20 backdrop-blur-sm rounded-lg p-1">
                     <button
-                        onClick={() => setActiveTab('weekly')}
-                        className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                        onClick={() => handleTabChange('weekly')}
+                        className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
                             activeTab === 'weekly'
-                                ? 'bg-white text-blue-600'
-                                : 'bg-white/20 text-white hover:bg-white/30'
+                                ? 'bg-white text-purple-600 shadow-sm'
+                                : 'text-white/80 hover:text-white hover:bg-white/10'
                         }`}
                     >
                         Mingguan
                     </button>
                     <button
-                        onClick={() => setActiveTab('overall')}
-                        className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                        onClick={() => handleTabChange('overall')}
+                        className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
                             activeTab === 'overall'
-                                ? 'bg-white text-blue-600'
-                                : 'bg-white/20 text-white hover:bg-white/30'
+                                ? 'bg-white text-purple-600 shadow-sm'
+                                : 'text-white/80 hover:text-white hover:bg-white/10'
                         }`}
                     >
                         Keseluruhan
                     </button>
                 </div>
+                
+                <div className="mt-3 text-center text-white/80 text-xs">
+                    {getNextResetInfo()}
+                </div>
             </div>
 
-            {/* Top 3 Podium */}
-            {leaderboard.length >= 3 && (
-                <div className="p-4 bg-gradient-to-b from-blue-50 to-white">
-                    <div className="flex items-end justify-center space-x-2 mb-4">
-                        {/* 2nd Place */}
-                        <div className="text-center">
-                            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mb-1">
-                                <span className="text-lg">🥈</span>
-                            </div>
-                            <div className="bg-gray-300 w-16 h-12 rounded-t-lg flex items-center justify-center">
-                                <div className="text-center">
-                                    <div className="text-xs font-bold text-gray-700">
-                                        {leaderboard[1]?.nama_lengkap.length > 6 
-                                            ? leaderboard[1]?.nama_lengkap.substring(0, 6) + '...'
-                                            : leaderboard[1]?.nama_lengkap}
-                                    </div>
-                                    <div className="text-xs text-gray-600">
-                                        {formatXP(getXpDisplay(leaderboard[1]))} XP
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 1st Place */}
-                        <div className="text-center">
-                            <div className="w-14 h-14 bg-yellow-200 rounded-full flex items-center justify-center mb-1">
-                                <span className="text-xl">🥇</span>
-                            </div>
-                            <div className="bg-yellow-400 w-18 h-16 rounded-t-lg flex items-center justify-center">
-                                <div className="text-center">
-                                    <div className="text-sm font-bold text-yellow-800">
-                                        {leaderboard[0]?.nama_lengkap.length > 6 
-                                            ? leaderboard[0]?.nama_lengkap.substring(0, 6) + '...'
-                                            : leaderboard[0]?.nama_lengkap}
-                                    </div>
-                                    <div className="text-xs text-yellow-700">
-                                        {formatXP(getXpDisplay(leaderboard[0]))} XP
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 3rd Place */}
-                        <div className="text-center">
-                            <div className="w-12 h-12 bg-orange-200 rounded-full flex items-center justify-center mb-1">
-                                <span className="text-lg">🥉</span>
-                            </div>
-                            <div className="bg-orange-300 w-16 h-10 rounded-t-lg flex items-center justify-center">
-                                <div className="text-center">
-                                    <div className="text-xs font-bold text-orange-800">
-                                        {leaderboard[2]?.nama_lengkap.length > 6 
-                                            ? leaderboard[2]?.nama_lengkap.substring(0, 6) + '...'
-                                            : leaderboard[2]?.nama_lengkap}
-                                    </div>
-                                    <div className="text-xs text-orange-700">
-                                        {formatXP(getXpDisplay(leaderboard[2]))} XP
-                                    </div>
-                                </div>
-                            </div>
+            {/* Leaderboard List */}
+            <div className="p-6">
+                {leaderboard.length === 0 ? (
+                    <div className="text-center py-8">
+                        <div className="text-4xl mb-2">📊</div>
+                        <div className="text-gray-500 text-sm">
+                            Belum ada data ranking untuk {activeTab === 'weekly' ? 'minggu ini' : 'saat ini'}
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Full Leaderboard List */}
-            <div className="p-4">
-                <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {leaderboard.map((player, index) => {
-                        const rank = player.rank || index + 1;
-                        const badge = getRankBadge(rank);
-                        const isCurrentUser = currentUser && player.nama_lengkap === currentUser.nama_lengkap;
-                        
-                        return (
+                ) : (
+                    <div className="space-y-3">
+                        {leaderboard.map((player, index) => (
                             <div
-                                key={index}
-                                className={`flex items-center justify-between p-3 rounded-lg transition-all hover:bg-gray-50 ${
-                                    isCurrentUser ? 'bg-blue-50 border-2 border-blue-200' : 'bg-white'
-                                } ${rank <= 3 ? 'shadow-sm' : ''}`}
+                                key={player.id}
+                                className={`flex items-center space-x-4 p-3 rounded-lg transition-all duration-300 hover:shadow-md ${
+                                    index < 3 ? 'border-2 border-opacity-50' : 'border border-gray-100'
+                                } ${
+                                    index === 0 ? 'border-yellow-300 bg-gradient-to-r from-yellow-50 to-orange-50' :
+                                    index === 1 ? 'border-gray-300 bg-gradient-to-r from-gray-50 to-gray-100' :
+                                    index === 2 ? 'border-orange-300 bg-gradient-to-r from-orange-50 to-yellow-50' :
+                                    'bg-white hover:bg-gray-50'
+                                }`}
                             >
-                                <div className="flex items-center space-x-3">
-                                    {/* Rank Badge */}
-                                    <div className={`w-8 h-8 rounded-full ${badge.bg} flex items-center justify-center`}>
-                                        <span className={`text-sm font-bold ${badge.color}`}>
-                                            {rank <= 3 ? badge.emoji : rank}
+                                {/* Rank Badge */}
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${getRankColor(player.rank)}`}>
+                                    {getRankIcon(player.rank)}
+                                </div>
+
+                                {/* Player Info */}
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+                                        {player.name}
+                                    </h3>
+                                    <div className="flex items-center space-x-3 text-xs text-gray-600">
+                                        <span className="flex items-center">
+                                            <span className="mr-1">🎮</span>
+                                            {player.games_played || 0} games
                                         </span>
-                                    </div>
-                                    
-                                    {/* Player Info */}
-                                    <div>
-                                        <div className={`font-medium ${isCurrentUser ? 'text-blue-700' : 'text-gray-800'}`}>
-                                            {player.nama_lengkap}
-                                            {isCurrentUser && <span className="text-blue-500 ml-2">👤</span>}
-                                        </div>
-                                        {activeTab === 'weekly' && player.games_played > 0 && (
-                                            <div className="text-xs text-gray-500">
-                                                {player.games_played} games played
-                                            </div>
-                                        )}
-                                        {activeTab === 'overall' && player.current_level && (
-                                            <div className="text-xs text-gray-500">
-                                                Level {player.current_level}
-                                            </div>
+                                        {activeTab === 'overall' && player.level && (
+                                            <span className="flex items-center">
+                                                <span className="mr-1">⭐</span>
+                                                Level {player.level}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
-                                
-                                {/* XP Display */}
+
+                                {/* XP Score */}
                                 <div className="text-right">
-                                    <div className={`font-bold ${
-                                        rank === 1 ? 'text-yellow-600' :
-                                        rank === 2 ? 'text-gray-600' :
-                                        rank === 3 ? 'text-orange-600' :
-                                        'text-blue-600'
-                                    }`}>
-                                        {formatXP(getXpDisplay(player))} XP
+                                    <div className="text-lg font-bold text-blue-600">
+                                        {formatNumber(player.total_xp)}
                                     </div>
-                                    {activeTab === 'weekly' && player.total_xp && (
-                                        <div className="text-xs text-gray-500">
-                                            Total: {formatXP(player.total_xp)}
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-gray-500">XP</div>
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
-
-                {/* Current User Rank if not in top list */}
-                {currentUser && getCurrentUserRank() === 0 && (
-                    <div className="mt-4 pt-3 border-t border-gray-200">
-                        <div className="text-center text-sm text-gray-600">
-                            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                                🎯 Kamu belum masuk ranking. Ayo main game untuk naik peringkat!
-                            </span>
-                        </div>
+                        ))}
                     </div>
                 )}
 
                 {/* Footer Info */}
-                <div className="mt-4 pt-3 border-t border-gray-200 text-center">
-                    <div className="text-xs text-gray-500">
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                    <div className="text-center text-xs text-gray-500">
                         {activeTab === 'weekly' ? (
-                            <>📅 Ranking mingguan • Reset setiap hari Minggu</>
+                            <>
+                                📅 Ranking mingguan direset setiap hari Senin pukul 00:00
+                                <br />
+                                🏃‍♂️ Main game sekarang untuk naik peringkat!
+                            </>
                         ) : (
-                            <>🏆 Ranking keseluruhan • Berdasarkan total XP</>
+                            <>
+                                🌟 Ranking berdasarkan total XP yang dikumpulkan
+                                <br />
+                                💪 Terus kumpulkan XP untuk naik peringkat!
+                            </>
                         )}
                     </div>
-                    {leaderboard.length > 0 && (
-                        <div className="text-xs text-gray-400 mt-1">
-                            Terakhir update: {new Date().toLocaleTimeString('id-ID', { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                            })}
-                        </div>
-                    )}
                 </div>
+
+                {/* Quick Stats */}
+                {leaderboard.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-100">
+                            <div className="text-lg font-bold text-blue-600">
+                                {leaderboard.length}
+                            </div>
+                            <div className="text-xs text-blue-600 font-medium">
+                                Total Peserta
+                            </div>
+                        </div>
+                        <div className="text-center p-3 bg-green-50 rounded-lg border border-green-100">
+                            <div className="text-lg font-bold text-green-600">
+                                {formatNumber(leaderboard[0]?.total_xp || 0)}
+                            </div>
+                            <div className="text-xs text-green-600 font-medium">
+                                XP Tertinggi
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

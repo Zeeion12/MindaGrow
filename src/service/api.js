@@ -65,9 +65,35 @@ export const courseAPI = {
 };
 
 export const gameAPI = {
-  getProgress: () => api.get('/games/progress'),
-  completeGame: (data) => api.post('/games/complete', data),
-  getUserStreak: () => api.get('/users/streak')
+  // Get user's game progress
+  getProgress: () => {
+    return api.get('/games/progress');
+  },
+
+  // Update game progress after playing
+  updateProgress: (gameData) => {
+    return api.post('/games/progress', gameData);
+  },
+
+  // Get user streak data with countdown timer
+  getUserStreak: () => {
+    return api.get('/games/streak');
+  },
+
+  // Get daily missions
+  getDailyMissions: () => {
+    return api.get('/games/daily-missions');
+  },
+
+  // Get leaderboard (weekly or overall)
+  getLeaderboard: (type = 'weekly') => {
+    return api.get(`/games/leaderboard?type=${type}`);
+  },
+
+  // Get user level info
+  getUserLevel: () => {
+    return api.get('/games/level');
+  }
 };
 
 export const progressAPI = {
