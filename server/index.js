@@ -14,6 +14,36 @@ const TwoFactorService = require('./services/TwoFactorService');
 
 require('dotenv').config();
 
+function getCurrentDate() {
+  // Ambil waktu Jakarta dan convert ke format YYYY-MM-DD
+  const jakartaTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"});
+  const jakartaDate = new Date(jakartaTime);
+  
+  // Format ke YYYY-MM-DD
+  const year = jakartaDate.getFullYear();
+  const month = String(jakartaDate.getMonth() + 1).padStart(2, '0');
+  const day = String(jakartaDate.getDate()).padStart(2, '0');
+  const formattedDate = `${year}-${month}-${day}`;
+  
+  console.log('🕒 getCurrentDate called:', {
+    jakartaTimeString: jakartaTime,
+    formattedDate: formattedDate
+  });
+  
+  return formattedDate;
+}
+
+function getSecondsUntilMidnight() {
+  const now = new Date();
+  const jakartaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+  
+  // Set midnight untuk Jakarta timezone
+  const midnight = new Date(jakartaTime);
+  midnight.setHours(24, 0, 0, 0);
+  
+  return Math.floor((midnight - jakartaTime) / 1000);
+}
+
 // Initialize Express app
 const app = express();
 
@@ -691,6 +721,245 @@ app.get('/api/games/progress', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/games/ranking', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user's total XP and rank
+    const rankQuery = await pool.query(`
+      WITH user_rankings AS (
+        SELECT 
+          ul.user_id,
+          ul.total_xp,
+          ROW_NUMBER() OVER (ORDER BY ul.total_xp DESC) as rank
+        FROM user_levels ul
+        WHERE ul.total_xp > 0
+      )
+      SELECT rank, total_xp 
+      FROM user_rankings 
+      WHERE user_id = $1
+    `, [userId]);
+
+    if (rankQuery.rows.length === 0) {
+      return res.json({
+        rank: 999,
+        totalXp: 0
+      });
+    }
+
+    res.json({
+      rank: rankQuery.rows[0].rank,
+      totalXp: rankQuery.rows[0].total_xp
+    });
+
+  } catch (error) {
+    console.error('Error fetching user ranking:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+app.get('/api/games/daily-missions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = getTodayDate();
+
+    // Get user's daily progress (gunakan game progress sebagai substitusi)
+    const progressQuery = await pool.query(`
+      SELECT COUNT(*) as games_played, SUM(correct_answers) as total_correct
+      FROM game_progress 
+      WHERE user_id = $1 AND DATE(updated_at) = $2
+    `, [userId, today]);
+
+    const progress = progressQuery.rows[0] || { games_played: 0, total_correct: 0 };
+
+    // Return structured missions data
+    const missions = [
+      {
+        id: 1,
+        title: "Complete 3 Games",
+        description: "Selesaikan 3 game hari ini dengan benar",
+        mission_type: "complete_games",
+        target_count: 3,
+        xp_reward: 50,
+        current_progress: parseInt(progress.games_played) || 0,
+        is_completed: (parseInt(progress.games_played) || 0) >= 3,
+        progressValue: parseInt(progress.games_played) || 0,
+        targetValue: 3,
+        isCompleted: (parseInt(progress.games_played) || 0) >= 3,
+        xpReward: 50
+      },
+      {
+        id: 2,
+        title: "Answer 10 Questions Correctly",
+        description: "Jawab 10 soal dengan benar hari ini",
+        mission_type: "solve_problems",
+        target_count: 10,
+        xp_reward: 75,
+        current_progress: parseInt(progress.total_correct) || 0,
+        is_completed: (parseInt(progress.total_correct) || 0) >= 10,
+        progressValue: parseInt(progress.total_correct) || 0,
+        targetValue: 10,
+        isCompleted: (parseInt(progress.total_correct) || 0) >= 10,
+        xpReward: 75
+      },
+      {
+        id: 3,
+        title: "Play Any Game",
+        description: "Mainkan game apapun hari ini",
+        mission_type: "play_any_game",
+        target_count: 1,
+        xp_reward: 25,
+        current_progress: (parseInt(progress.games_played) || 0) > 0 ? 1 : 0,
+        is_completed: (parseInt(progress.games_played) || 0) > 0,
+        progressValue: (parseInt(progress.games_played) || 0) > 0 ? 1 : 0,
+        targetValue: 1,
+        isCompleted: (parseInt(progress.games_played) || 0) > 0,
+        xpReward: 25
+      }
+    ];
+
+    res.json({
+      success: true,
+      missions: missions
+    });
+
+  } catch (error) {
+    console.error('Error fetching daily missions:', error);
+    res.json({
+      success: true,
+      missions: []
+    });
+  }
+});
+
+// Perbaiki endpoint di index.js
+app.get('/api/games/streak', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    console.log(`🔥 Fetching streak for user ${userId}`);
+    
+    const result = await pool.query(
+      'SELECT current_streak, longest_streak, last_activity_date, is_active FROM user_streaks WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      console.log('📭 No streak data found, returning defaults');
+      return res.json({
+        current_streak: 0,
+        longest_streak: 0,
+        is_active: false,
+        last_activity_date: null,
+        seconds_until_reset: getSecondsUntilMidnight()
+      });
+    }
+
+    const streak = result.rows[0];
+    const today = getCurrentDate(); // ← GUNAKAN FUNCTION BARU INI
+    const lastActivity = streak.last_activity_date ? 
+      new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
+
+    // Check apakah aktif hari ini
+    const isActiveToday = lastActivity === today;
+    
+    console.log(`🔥 Streak comparison:`, {
+      lastActivity,
+      today, // ← INI SEKARANG HARUS 2025-07-19
+      is_active_db: streak.is_active,
+      isActiveToday,
+      current_streak: streak.current_streak
+    });
+
+    // Update database jika status berbeda
+    if (streak.is_active !== isActiveToday) {
+      await pool.query(
+        'UPDATE user_streaks SET is_active = $1 WHERE user_id = $2',
+        [isActiveToday, userId]
+      );
+      console.log(`🔄 Updated streak active status to ${isActiveToday}`);
+    }
+
+    res.json({
+      current_streak: streak.current_streak,
+      longest_streak: streak.longest_streak,
+      is_active: isActiveToday,
+      last_activity_date: streak.last_activity_date,
+      seconds_until_reset: getSecondsUntilMidnight()
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting user streak:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      current_streak: 0,
+      longest_streak: 0,
+      is_active: false,
+      last_activity_date: null,
+      seconds_until_reset: 86400
+    });
+  }
+});
+
+app.get('/api/games/level', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    console.log(`📈 Fetching level for user ${userId}`);
+
+    // Query langsung dari siswa table sebagai sumber utama
+    const siswaResult = await pool.query(`
+      SELECT 
+        COALESCE(total_xp, 0) as total_xp,
+        COALESCE(current_level, 1) as current_level,
+        COALESCE(current_xp, 0) as current_xp
+      FROM siswa WHERE user_id = $1
+    `, [userId]);
+
+    let levelData;
+    
+    if (siswaResult.rows.length > 0 && siswaResult.rows[0].total_xp > 0) {
+      const siswaData = siswaResult.rows[0];
+      
+      // Recalculate untuk memastikan konsistensi
+      const totalXp = siswaData.total_xp;
+      const currentLevel = Math.floor(totalXp / 100) + 1;
+      const currentXp = totalXp % 100;
+      const xpToNextLevel = 100 - currentXp;
+      
+      levelData = {
+        current_level: currentLevel,
+        current_xp: currentXp,
+        total_xp: totalXp,
+        xp_to_next_level: xpToNextLevel
+      };
+    } else {
+      // Fallback jika belum ada data
+      levelData = {
+        current_level: 1,
+        current_xp: 0,
+        total_xp: 0,
+        xp_to_next_level: 100
+      };
+    }
+
+    console.log('📈 Level data:', levelData);
+    res.json(levelData);
+
+  } catch (error) {
+    console.error('❌ Error getting user level:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      current_level: 1,
+      current_xp: 0,
+      total_xp: 0,
+      xp_to_next_level: 100
+    });
+  }
+});
+
 // Update user streak function (internal) - FIXED VERSION
 async function updateUserStreak(userId) {
   const client = await pool.connect();
@@ -698,12 +967,10 @@ async function updateUserStreak(userId) {
   try {
     await client.query('BEGIN');
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getCurrentDate(); // Gunakan function baru
 
-    console.log(`🔥 Updating streak for user ${userId} on ${today.toISOString()}`);
+    console.log(`🔥 Updating streak for user ${userId} on ${today}`);
 
-    // Check if user streak exists
     const streakResult = await client.query(
       'SELECT * FROM user_streaks WHERE user_id = $1',
       [userId]
@@ -721,19 +988,18 @@ async function updateUserStreak(userId) {
     }
 
     const streak = streakResult.rows[0];
-    let lastActivityDate = new Date(streak.last_activity_date);
-    lastActivityDate.setHours(0, 0, 0, 0);
+    const lastActivity = streak.last_activity_date ? 
+      new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
 
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    console.log(`🔥 Current streak data:`, {
+      lastActivityDate: lastActivity,
+      today: today,
+      current_streak: streak.current_streak
+    });
 
-    console.log(`📅 Last activity: ${lastActivityDate.toISOString()}`);
-    console.log(`📅 Yesterday: ${yesterday.toISOString()}`);
-    console.log(`📅 Today: ${today.toISOString()}`);
-
-    // KUNCI: Cek apakah sudah main hari ini
-    if (lastActivityDate.getTime() === today.getTime()) {
-      // Sudah main hari ini, JANGAN update streak lagi, hanya aktifkan
+    // Check if already played today
+    if (lastActivity === today) {
+      // Already played today, just activate
       await client.query(
         'UPDATE user_streaks SET is_active = true WHERE user_id = $1',
         [userId]
@@ -743,8 +1009,13 @@ async function updateUserStreak(userId) {
       return { newStreak: streak.current_streak, wasUpdated: false };
     }
 
-    if (lastActivityDate.getTime() === yesterday.getTime()) {
-      // Kemarin main, hari ini main = consecutive day, increment streak
+    // Calculate yesterday
+    const yesterday = new Date(getCurrentDate());
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    if (lastActivity === yesterdayStr) {
+      // Consecutive day! Increment streak
       const newStreak = streak.current_streak + 1;
       const longestStreak = Math.max(newStreak, streak.longest_streak);
 
@@ -752,12 +1023,12 @@ async function updateUserStreak(userId) {
         'UPDATE user_streaks SET current_streak = $1, longest_streak = $2, last_activity_date = $3, is_active = true WHERE user_id = $4',
         [newStreak, longestStreak, today, userId]
       );
-      console.log(`🚀 Streak incremented to ${newStreak}`);
+      console.log(`🔥 Consecutive day! Incrementing streak: ${streak.current_streak} → ${newStreak}`);
       await client.query('COMMIT');
       return { newStreak: newStreak, wasUpdated: true };
     } else {
-      // Streak broken atau gap lebih dari 1 hari, start new streak
-      console.log('🔴 Streak broken! Gap detected, starting new streak');
+      // Gap > 1 day, streak broken
+      console.log('🔄 Streak broken! Starting new streak');
 
       await client.query(
         'UPDATE user_streaks SET current_streak = 1, last_activity_date = $1, streak_start_date = $1, is_active = true WHERE user_id = $2',
@@ -776,59 +1047,286 @@ async function updateUserStreak(userId) {
   }
 }
 
+// Update function updateGameProgress di index.js
+const updateGameProgress = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const userId = req.user.id;
+    const { gameId, questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted } = req.body;
+
+    console.log(`🎮 Updating game progress - User: ${userId}, Game: ${gameId}`, {
+      questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted
+    });
+
+    // Calculate XP earned
+    const baseXp = correctAnswers * 3;
+    const bonusXp = isCompleted ? 20 : 0;
+    const xpEarned = baseXp + bonusXp;
+
+    // Update game_progress table
+    const existingProgress = await client.query(
+      'SELECT * FROM game_progress WHERE user_id = $1 AND game_id = $2',
+      [userId, gameId]
+    );
+
+    if (existingProgress.rows.length > 0) {
+      await client.query(`
+        UPDATE game_progress SET 
+          total_questions_answered = total_questions_answered + $3,
+          correct_answers = correct_answers + $4,
+          wrong_answers = wrong_answers + $5,
+          completion_percentage = CASE 
+            WHEN $6 THEN '100.00'
+            ELSE ROUND(((correct_answers + $4)::float / (total_questions_answered + $3)) * 100, 2)::text
+          END,
+          is_completed = CASE WHEN $6 THEN true ELSE is_completed END,
+          total_xp_earned = total_xp_earned + $7,
+          best_score = GREATEST(best_score, $8),
+          times_played = times_played + 1,
+          last_played_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1 AND game_id = $2
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, isCompleted, xpEarned, score]);
+    } else {
+      await client.query(`
+        INSERT INTO game_progress (
+          user_id, game_id, total_questions_answered, correct_answers, wrong_answers,
+          completion_percentage, is_completed, total_xp_earned, best_score, times_played,
+          last_played_at, first_played_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, 
+          isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
+          isCompleted, xpEarned, score]);
+    }
+
+    // **PENTING: Update siswa table untuk sync level data**
+    await client.query(`
+      UPDATE siswa SET 
+        total_xp = COALESCE(total_xp, 0) + $2,
+        current_xp = (COALESCE(total_xp, 0) + $2) % 100,
+        current_level = FLOOR((COALESCE(total_xp, 0) + $2) / 100) + 1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $1
+    `, [userId, xpEarned]);
+
+    // Update user_levels table juga
+    await client.query(`
+      INSERT INTO user_levels (user_id, current_level, current_xp, total_xp, xp_to_next_level, updated_at)
+      SELECT 
+        $1, 
+        FLOOR((COALESCE(s.total_xp, 0)) / 100) + 1,
+        (COALESCE(s.total_xp, 0)) % 100,
+        COALESCE(s.total_xp, 0),
+        100 - ((COALESCE(s.total_xp, 0)) % 100),
+        CURRENT_TIMESTAMP
+      FROM siswa s WHERE s.user_id = $1
+      ON CONFLICT (user_id) 
+      DO UPDATE SET 
+        current_level = FLOOR((EXCLUDED.total_xp) / 100) + 1,
+        current_xp = (EXCLUDED.total_xp) % 100,
+        total_xp = EXCLUDED.total_xp,
+        xp_to_next_level = 100 - ((EXCLUDED.total_xp) % 100),
+        updated_at = CURRENT_TIMESTAMP
+    `, [userId]);
+
+    console.log(`📈 Updated user level with ${xpEarned} XP`);
+
+    // Update streak
+    const streakResult = await updateUserStreak(userId);
+    console.log(`🔥 Updated user streak`);
+
+    await client.query('COMMIT');
+
+    res.json({
+      message: 'Game progress updated successfully',
+      xpEarned,
+      streakUpdated: streakResult.wasUpdated,
+      currentStreak: streakResult.newStreak
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Error updating game progress:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+};
+
+app.post('/api/games/progress/:gameId', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const userId = req.user.id;
+    const gameId = req.params.gameId;
+    const { questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted } = req.body;
+
+    console.log(`🎮 Updating game progress - User: ${userId}, Game: ${gameId}`, {
+      questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted
+    });
+
+    // Calculate XP earned
+    const baseXp = correctAnswers * 3;
+    const bonusXp = isCompleted ? 20 : 0;
+    const xpEarned = baseXp + bonusXp;
+
+    console.log(`📊 Calculated - XP: ${xpEarned}, Completion: ${((correctAnswers / questionsAnswered) * 100)}, Completed: ${isCompleted}`);
+
+    // Update or insert game progress
+    const existingProgress = await client.query(
+      'SELECT * FROM game_progress WHERE user_id = $1 AND game_id = $2',
+      [userId, gameId]
+    );
+
+    if (existingProgress.rows.length > 0) {
+      // Update existing progress
+      const updated = await client.query(`
+        UPDATE game_progress SET 
+          total_questions_answered = total_questions_answered + $3,
+          correct_answers = correct_answers + $4,
+          wrong_answers = wrong_answers + $5,
+          completion_percentage = CASE 
+            WHEN $6 THEN '100.00'
+            ELSE ROUND(((correct_answers + $4)::float / (total_questions_answered + $3)) * 100, 2)::text
+          END,
+          is_completed = CASE WHEN $6 THEN true ELSE is_completed END,
+          total_xp_earned = total_xp_earned + $7,
+          best_score = GREATEST(best_score, $8),
+          times_played = times_played + 1,
+          last_played_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1 AND game_id = $2
+        RETURNING *
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, isCompleted, xpEarned, score]);
+      
+      console.log('✅ Updated existing progress:', updated.rows[0]);
+    } else {
+      // Insert new progress
+      const inserted = await client.query(`
+        INSERT INTO game_progress (
+          user_id, game_id, total_questions_answered, correct_answers, wrong_answers,
+          completion_percentage, is_completed, total_xp_earned, best_score, times_played,
+          last_played_at, first_played_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING *
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, 
+          isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
+          isCompleted, xpEarned, score]);
+      
+      console.log('✅ Created new progress:', inserted.rows[0]);
+    }
+
+    // **PENTING: Update siswa table untuk sync level data**
+    await client.query(`
+      UPDATE siswa SET 
+        total_xp = COALESCE(total_xp, 0) + $2,
+        current_xp = (COALESCE(total_xp, 0) + $2) % 100,
+        current_level = FLOOR((COALESCE(total_xp, 0) + $2) / 100) + 1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $1
+    `, [userId, xpEarned]);
+    console.log(`📈 Updated user level with ${xpEarned} XP`);
+
+    // Update user_levels table juga
+    await client.query(`
+      INSERT INTO user_levels (user_id, current_level, current_xp, total_xp, xp_to_next_level, updated_at)
+      SELECT 
+        $1, 
+        FLOOR((COALESCE(s.total_xp, 0)) / 100) + 1,
+        (COALESCE(s.total_xp, 0)) % 100,
+        COALESCE(s.total_xp, 0),
+        100 - ((COALESCE(s.total_xp, 0)) % 100),
+        CURRENT_TIMESTAMP
+      FROM siswa s WHERE s.user_id = $1
+      ON CONFLICT (user_id) 
+      DO UPDATE SET 
+        current_level = FLOOR((EXCLUDED.total_xp) / 100) + 1,
+        current_xp = (EXCLUDED.total_xp) % 100,
+        total_xp = EXCLUDED.total_xp,
+        xp_to_next_level = 100 - ((EXCLUDED.total_xp) % 100),
+        updated_at = CURRENT_TIMESTAMP
+    `, [userId]);
+
+    // Update streak
+    const streakResult = await updateUserStreak(userId);
+    console.log(`🔥 Updated user streak`);
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'Game progress updated successfully',
+      xpEarned,
+      streakUpdated: streakResult.wasUpdated,
+      currentStreak: streakResult.newStreak
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Error updating game progress:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // Complete game and update progress
 app.post('/api/games/complete', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const { gameId, correctAnswers, totalQuestions } = req.body;
+  const { gameId, correctAnswers, totalQuestions, score } = req.body;
 
   try {
     console.log(`🎮 Completing game:`, {
       userId,
       gameId,
       correctAnswers,
-      totalQuestions
+      totalQuestions,
+      score
     });
 
     // Validate input
     if (!gameId || typeof correctAnswers !== 'number' || typeof totalQuestions !== 'number') {
       return res.status(400).json({
+        success: false,
         message: 'Invalid input data',
         received: { gameId, correctAnswers, totalQuestions }
       });
     }
 
-    // Update or insert game progress
-    await pool.query(`
-      INSERT INTO game_progress (user_id, game_id, total_questions, correct_answers, updated_at)
-      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-      ON CONFLICT (user_id, game_id)
-      DO UPDATE SET 
-        total_questions = game_progress.total_questions + $3,
-        correct_answers = game_progress.correct_answers + $4,
-        updated_at = CURRENT_TIMESTAMP
-    `, [userId, gameId, totalQuestions, correctAnswers]);
+    // Calculate game result
+    const wrongAnswers = totalQuestions - correctAnswers;
+    const gameResult = {
+      questionsAnswered: totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      score: score || Math.round((correctAnswers / totalQuestions) * 100),
+      timeSpent: 60, // Default time
+      isCompleted: (correctAnswers / totalQuestions) >= 0.8 // 80% untuk complete
+    };
 
-    console.log('✅ Game progress updated in database');
+    // Call the main progress update endpoint
+    req.params.gameId = gameId;
+    req.body = gameResult;
+    
+    // Forward to the main endpoint
+    return res.redirect(307, `/api/games/progress/${gameId}`);
 
-    // Update streak HANYA SEKALI PER HARI
-    const streakResult = await updateUserStreak(userId);
-
-    console.log('✅ Streak update result:', streakResult);
-
-    // Log activity
-    await pool.query(
-      'INSERT INTO activity_logs (user_id, activity_type, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
-      [userId, 'game_complete', 'game', gameId]
-    );
-
-    res.json({
-      message: 'Game progress updated successfully',
-      streakUpdated: streakResult.wasUpdated,
-      currentStreak: streakResult.newStreak
-    });
   } catch (error) {
     console.error('❌ Error completing game:', error);
     res.status(500).json({
+      success: false,
       message: 'Server error',
       error: error.message
     });
@@ -2419,74 +2917,6 @@ app.get('/api/games/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
-async function updateWeeklyLeaderboard(userId, xpGained, client) {
-  const weekStartDate = getWeekStartDate();
-
-  await client.query(`
-    INSERT INTO weekly_leaderboard (user_id, week_start_date, total_xp, games_played)
-    VALUES ($1, $2, $3, 1)
-    ON CONFLICT (user_id, week_start_date)
-    DO UPDATE SET 
-      total_xp = weekly_leaderboard.total_xp + $3,
-      games_played = weekly_leaderboard.games_played + 1,
-      updated_at = CURRENT_TIMESTAMP
-  `, [userId, weekStartDate, xpGained]);
-}
-
-async function checkDailyMissions(userId, client) {
-  const today = getTodayDate();
-
-  // Get today's quiz completion data
-  const quizResult = await client.query(`
-    SELECT * FROM daily_quiz_completions WHERE user_id = $1 AND quiz_date = $2
-  `, [userId, today]);
-
-  const quizData = quizResult.rows[0];
-  if (!quizData) return;
-
-  // Check mission 1: Complete 3 quizzes
-  if (quizData.completed_quizzes >= 3) {
-    await client.query(`
-      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
-      VALUES ($1, 1, $2, true, CURRENT_TIMESTAMP, $3)
-      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
-    `, [userId, quizData.completed_quizzes, today]);
-
-    // Award XP
-    await client.query(`
-      UPDATE siswa SET total_xp = total_xp + 50 WHERE user_id = $1
-    `, [userId]);
-  }
-
-  // Check mission 3: Solve 10 practice problems
-  if (quizData.correct_answers >= 10) {
-    await client.query(`
-      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
-      VALUES ($1, 3, $2, true, CURRENT_TIMESTAMP, $3)
-      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
-    `, [userId, quizData.correct_answers, today]);
-
-    // Award XP
-    await client.query(`
-      UPDATE siswa SET total_xp = total_xp + 100 WHERE user_id = $1
-    `, [userId]);
-  }
-
-  // Check mission 4: Play any game
-  if (quizData.completed_quizzes > 0) {
-    await client.query(`
-      INSERT INTO user_daily_missions (user_id, mission_id, current_progress, is_completed, completed_at, mission_date)
-      VALUES ($1, 4, 1, true, CURRENT_TIMESTAMP, $2)
-      ON CONFLICT (user_id, mission_id, mission_date) DO NOTHING
-    `, [userId, today]);
-
-    // Award XP
-    await client.query(`
-      UPDATE siswa SET total_xp = total_xp + 25 WHERE user_id = $1
-    `, [userId]);
-  }
-}
-
 // ===============================
 // ADDITIONAL ENDPOINTS
 // ===============================
@@ -2708,6 +3138,12 @@ app.listen(PORT, () => {
 🔗 Frontend URL: http://localhost:3000
 🔗 Backend URL: http://localhost:${PORT}
   `);
+
+  console.log('🕒 Server startup time check:');
+console.log('- System time:', new Date());
+console.log('- System timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+console.log('- Jakarta time:', new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+console.log('- Today should be:', new Date().toLocaleString("en-US", {timeZone: "Asia/Jakarta"}).split(',')[0]);
 });
 
 //Available Endpoints:

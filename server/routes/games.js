@@ -1,4 +1,4 @@
-// server/routes/games.js
+// server/routes/games.js - FIXED VERSION
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const gameController = require('../controller/gameController');
@@ -31,7 +31,10 @@ const authenticateToken = (req, res, next) => {
 router.get('/progress', authenticateToken, gameController.getUserGameProgress);
 
 // GET /api/games/progress/:gameId - Ambil progress game tertentu
-router.get('/progress/:gameId', authenticateToken, gameController.getGameProgress);
+router.get('/progress/:gameId', authenticateToken, (req, res) => {
+    // For now, redirect to general progress
+    gameController.getUserGameProgress(req, res);
+});
 
 // POST /api/games/progress/:gameId - Update progress setelah main game
 router.post('/progress/:gameId', authenticateToken, gameController.updateGameProgress);

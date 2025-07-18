@@ -9,6 +9,7 @@ export default function Scoreboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [lastUpdate, setLastUpdate] = useState(null);
+    const [userRank, setUserRank] = useState(null);
 
     useEffect(() => {
         fetchLeaderboards();
@@ -23,7 +24,7 @@ export default function Scoreboard() {
             setLoading(true);
             setError(null);
 
-            const [weeklyResponse, overallResponse] = await Promise.all([
+            const [weeklyResponse, overallResponse, rankResponse] = await Promise.all([
                 gameAPI.getWeeklyLeaderboard(10).catch(err => {
                     console.error('Error fetching weekly leaderboard:', err);
                     return { data: [] };
@@ -31,11 +32,16 @@ export default function Scoreboard() {
                 gameAPI.getOverallLeaderboard(10).catch(err => {
                     console.error('Error fetching overall leaderboard:', err);
                     return { data: [] };
+                }),
+                gameAPI.getUserRanking().catch(err => {
+                    console.error('Error fetching user ranking:', err);
+                    return { data: { rank: 999, totalXp: 0 } };
                 })
             ]);
 
             setWeeklyLeaderboard(weeklyResponse.data || []);
             setOverallLeaderboard(overallResponse.data || []);
+            setUserRank(rankResponse.data || { rank: 999, totalXp: 0 });
             setLastUpdate(new Date());
 
         } catch (error) {
@@ -63,6 +69,12 @@ export default function Scoreboard() {
             case 3: return '🥉';
             default: return `#${rank}`;
         }
+    };
+
+    const formatXP = (xp) => {
+        if (xp >= 1000000) return (xp / 1000000).toFixed(1) + 'M';
+        if (xp >= 1000) return (xp / 1000).toFixed(1) + 'K';
+        return xp.toString();
     };
 
     const getWeeklyResetTime = () => {
@@ -123,8 +135,8 @@ export default function Scoreboard() {
                         onClick={() => setActiveTab('weekly')}
                         className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                             activeTab === 'weekly'
-                                ? 'bg-white text-purple-600 shadow-sm'
-                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                ? 'bg-white text-purple-600'
+                                : 'text-white hover:bg-white/10'
                         }`}
                     >
                         Mingguan
@@ -133,35 +145,49 @@ export default function Scoreboard() {
                         onClick={() => setActiveTab('overall')}
                         className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                             activeTab === 'overall'
-                                ? 'bg-white text-purple-600 shadow-sm'
-                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                ? 'bg-white text-purple-600'
+                                : 'text-white hover:bg-white/10'
                         }`}
                     >
                         Keseluruhan
                     </button>
                 </div>
+
+                {/* Reset Timer for Weekly */}
+                {activeTab === 'weekly' && (
+                    <div className="mt-2 text-xs opacity-75">
+                        🕒 Reset: {getWeeklyResetTime()}
+                    </div>
+                )}
             </div>
+
+            {/* User's Rank */}
+            {userRank && (
+                <div className="bg-blue-50 border-b border-blue-100 p-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                {userRank.rank > 999 ? '999+' : userRank.rank}
+                            </div>
+                            <div>
+                                <div className="font-medium text-gray-800">Peringkatmu</div>
+                                <div className="text-sm text-gray-600">
+                                    {formatXP(userRank.totalXp)} XP
+                                </div>
+                            </div>
+                        </div>
+                        <div className="text-sm text-blue-600 font-medium">
+                            Kamu
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Content */}
             <div className="p-4">
-                {/* Info Bar */}
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between items-center text-xs text-gray-600">
-                        <span>
-                            {activeTab === 'weekly' 
-                                ? `📅 Reset setiap Senin • ${getWeeklyResetTime()} lagi`
-                                : '📊 Total akumulasi sejak bergabung'
-                            }
-                        </span>
-                        {lastUpdate && (
-                            <span>• Update: {formatLastUpdate()}</span>
-                        )}
-                    </div>
-                </div>
-
                 {/* Error State */}
                 {error && (
-                    <div className="text-center py-8">
+                    <div className="text-center py-6">
                         <div className="text-red-500 text-sm mb-2">⚠️ {error}</div>
                         <button 
                             onClick={fetchLeaderboards}
@@ -174,88 +200,102 @@ export default function Scoreboard() {
 
                 {/* Empty State */}
                 {!error && currentData.length === 0 && !loading && (
-                    <div className="text-center py-8">
-                        <div className="text-gray-400 text-6xl mb-3">🎯</div>
-                        <div className="text-gray-500 text-sm">
-                            {activeTab === 'weekly' 
-                                ? 'Belum ada data minggu ini' 
-                                : 'Belum ada data leaderboard'
-                            }
-                        </div>
+                    <div className="text-center py-6">
+                        <div className="text-gray-400 text-4xl mb-2">🏆</div>
+                        <div className="text-gray-500 text-sm">Belum ada data leaderboard</div>
                     </div>
                 )}
 
                 {/* Leaderboard List */}
                 {!error && currentData.length > 0 && (
-                    <div className="space-y-2">
-                        {currentData.map((user, index) => (
-                            <div 
-                                key={user.userId} 
-                                className={`flex items-center justify-between p-3 rounded-lg transition-colors hover:bg-gray-50 ${
-                                    index < 3 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200' : 'bg-gray-50'
-                                }`}
-                            >
-                                {/* Rank & User Info */}
-                                <div className="flex items-center space-x-3">
-                                    <div className={`text-lg font-bold ${index < 3 ? 'text-orange-600' : 'text-gray-600'}`}>
-                                        {getRankIcon(user.rank || index + 1)}
-                                    </div>
-                                    
-                                    <div className="flex-1">
-                                        <div className={`font-medium text-sm ${index < 3 ? 'text-orange-800' : 'text-gray-800'}`}>
-                                            {user.username || 'Anonymous'}
+                    <div className="space-y-3">
+                        {currentData.map((player, index) => {
+                            const rank = index + 1;
+                            const isTopThree = rank <= 3;
+                            
+                            return (
+                                <div 
+                                    key={player.id || index}
+                                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                                        isTopThree 
+                                            ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200' 
+                                            : 'bg-gray-50 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    <div className="flex items-center space-x-3">
+                                        <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
+                                            isTopThree 
+                                                ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white' 
+                                                : 'bg-gray-300 text-gray-700'
+                                        }`}>
+                                            {typeof getRankIcon(rank) === 'string' && getRankIcon(rank).includes('🥇') ? 
+                                                getRankIcon(rank) : 
+                                                rank
+                                            }
                                         </div>
                                         
-                                        {/* Additional Info based on tab */}
-                                        <div className="text-xs text-gray-500 space-x-2">
-                                            {activeTab === 'weekly' ? (
-                                                <>
-                                                    <span>🎮 {user.gamesPlayed || 0} game</span>
-                                                    {user.streakDays > 0 && <span>🔥 {user.streakDays} hari</span>}
-                                                    {user.missionsCompleted > 0 && <span>✅ {user.missionsCompleted} misi</span>}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <span>🎮 {user.totalGamesPlayed || 0} game</span>
-                                                    <span>📊 Level {user.currentLevel || 1}</span>
-                                                    {user.totalStreakDays > 0 && <span>🔥 {user.totalStreakDays} hari</span>}
-                                                </>
-                                            )}
+                                        <div className="flex items-center space-x-2">
+                                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                                {(player.username || player.name || 'User').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-gray-800">
+                                                    {player.username || player.name || `User ${player.id}`}
+                                                </div>
+                                                <div className="text-sm text-gray-600">
+                                                    Level {player.level || 1}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* XP Score */}
-                                <div className="text-right">
-                                    <div className={`font-bold ${index < 3 ? 'text-orange-600' : 'text-blue-600'}`}>
-                                        {activeTab === 'weekly' 
-                                            ? (user.weeklyXp || 0).toLocaleString()
-                                            : (user.totalXp || 0).toLocaleString()
-                                        }
+                                    <div className="text-right">
+                                        <div className="font-bold text-gray-800">
+                                            {formatXP(player.totalXp || player.total_xp || 0)} XP
+                                        </div>
+                                        {activeTab === 'weekly' && player.gamesPlayed && (
+                                            <div className="text-xs text-gray-500">
+                                                {player.gamesPlayed} games
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="text-xs text-gray-500">XP</div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
 
-                {/* Footer */}
-                <div className="mt-4 pt-3 border-t border-gray-200">
-                    <div className="text-center">
-                        <div className="text-xs text-gray-500 mb-2">
-                            {activeTab === 'weekly' 
-                                ? '🎯 Main game untuk masuk ranking mingguan!'
-                                : '🚀 Kumpulkan XP untuk naik peringkat!'
-                            }
-                        </div>
-                        
-                        {/* Current User Rank (if available) */}
-                        <div className="text-xs font-medium text-blue-600">
-                            Rank kamu: Loading...
+                {/* Last Update Info */}
+                {lastUpdate && (
+                    <div className="mt-4 text-center text-xs text-gray-500">
+                        Terakhir diperbarui: {formatLastUpdate()}
+                    </div>
+                )}
+
+                {/* Quick Stats */}
+                {currentData.length > 0 && (
+                    <div className="mt-4 bg-gray-50 rounded-lg p-3">
+                        <div className="text-center">
+                            <div className="text-sm font-medium text-gray-700 mb-2">
+                                📊 Statistik {activeTab === 'weekly' ? 'Mingguan' : 'Keseluruhan'}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-xs">
+                                <div>
+                                    <div className="font-bold text-blue-600">
+                                        {currentData.length}
+                                    </div>
+                                    <div className="text-gray-600">Total Player</div>
+                                </div>
+                                <div>
+                                    <div className="font-bold text-green-600">
+                                        {formatXP(Math.max(...currentData.map(p => p.totalXp || p.total_xp || 0)))}
+                                    </div>
+                                    <div className="text-gray-600">Tertinggi</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

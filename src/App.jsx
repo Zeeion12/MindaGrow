@@ -23,6 +23,9 @@ import ClassDetailUI from './pages/kelas/ClassDetailUI';
 // Import komponen game
 import GameMainUI from './pages/games/GameMainUI';
 import GameContainer from './pages/games/GameContainer';
+import PatternPuzzleGame from './pages/games/PatternPuzzleGame';
+import YesOrNoGame from './pages/games/YesOrNoGame';
+import MazeChallengeGame from './pages/games/MazeChallengeGame';
 
 // Import komponen notifikasi siswa
 import NotifikasiSiswa from './pages/setting/NotifikasiSiswa';
@@ -140,6 +143,10 @@ function App() {
               <GameContainer />
             </ProtectedRoute>
           } />
+
+          <Route path="/games/patternpuzzle" element={<PatternPuzzleGame />} />
+          <Route path="/games/yesorno" element={<YesOrNoGame />} />
+          <Route path="/games/mazechallenge" element={<MazeChallengeGame />} />
 
           {/*Route khusus Noitf Siswa*/}
           <Route path="/notifikasi" element={

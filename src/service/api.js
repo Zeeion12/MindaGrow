@@ -71,7 +71,8 @@ export const gameAPI = {
   
   // Get user's game progress (all games)
   getProgress: () => {
-    return api.get('/games/progress');
+    const timestamp = Date.now();
+    return api.get(`/games/progress?_=${timestamp}`);
   },
 
   // Get progress for specific game
@@ -85,8 +86,8 @@ export const gameAPI = {
   },
 
   // Legacy method (keep for backward compatibility)
-  updateProgress: (gameData) => {
-    return api.post('/games/progress', gameData);
+  updateGameProgress: (gameId, gameResult) => {
+    return api.post(`/games/progress/${gameId}`, gameResult);
   },
 
   // ============================================
@@ -95,7 +96,8 @@ export const gameAPI = {
   
   // Get user streak data with countdown timer
   getUserStreak: () => {
-    return api.get('/games/streak');
+    const timestamp = Date.now();
+    return api.get(`/games/streak?_=${timestamp}`);
   },
 
   // Update streak (called after playing game)
@@ -109,8 +111,10 @@ export const gameAPI = {
   
   // Get user level info
   getUserLevel: () => {
-    return api.get('/games/level');
+    const timestamp = Date.now();
+    return api.get(`/games/level?_=${timestamp}`);
   },
+
 
   // ============================================
   // DAILY MISSIONS

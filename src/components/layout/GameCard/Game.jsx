@@ -37,6 +37,20 @@ export default function Game({
         }
     };
 
+    const handleGameFinish = async (gameResult) => {
+        try {
+            // Call parent's handleGameComplete function
+            if (onGameComplete) {
+                await onGameComplete(gameId, gameResult);
+            }
+            
+            // Navigate back to main game UI
+            navigate('/games');
+        } catch (error) {
+            console.error('Error finishing game:', error);
+        }
+    };
+
     const handleGameClick = () => {
         navigate(`/games/${gameId}`);
     };
