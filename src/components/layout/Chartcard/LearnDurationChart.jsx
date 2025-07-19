@@ -10,8 +10,9 @@ import {
     ResponsiveContainer,
     ReferenceLine,
 } from "recharts"
-import { FiDownload, FiCalendar, FiClock, FiTrendingUp, FiInfo } from "react-icons/fi"
-import axios from 'axios'; // Pastikan Anda sudah menginstal axios (npm install axios)
+import { FiDownload, FiCalendar, FiClock, FiTrendingUp, FiInfo, FiCpu } from "react-icons/fi"
+import axios from 'axios';
+import AIInsights from '../../AIInsights';
 
 // Fungsi untuk memformat durasi dari menit ke jam dan menit
 const formatDuration = (minutes) => {
@@ -49,10 +50,35 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function LearnDurationChart() {
+    // State untuk data chart
     const [year, setYear] = useState(new Date().getFullYear().toString());
     const [monthlyLearningData, setMonthlyLearningData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // State untuk insights
+    const [insights, setInsights] = useState(null);
+    const [insightsLoading, setInsightsLoading] = useState(false);
+    const [showInsights, setShowInsights] = useState(false);
+
+    // Fungsi untuk fetch insights
+    const fetchInsights = async () => {
+        if (insightsLoading) return;
+
+        setInsightsLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`http://localhost:5000/api/analytics/learning-insights?year=${year}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInsights(response.data.data.insights);
+            setShowInsights(true);
+        } catch (error) {
+            console.error('Error fetching insights:', error);
+        } finally {
+            setInsightsLoading(false);
+        }
+    };
 
     // Fetch data from backend
     useEffect(() => {
@@ -176,13 +202,23 @@ export default function LearnDurationChart() {
                         >
                             <FiDownload className="size-4" />Unduh Data
                         </button>
+                        <button
+                            onClick={fetchInsights}
+                            disabled={insightsLoading || monthlyLearningData.length === 0}
+                            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white 
+                            shadow-sm rounded-md px-3 py-1.5 text-sm font-medium flex items-center gap-1.5 
+                            transition-colors disabled:cursor-not-allowed"
+                        >
+                            <FiCpu className="size-4" />
+                            {insightsLoading ? 'Menganalisis...' : 'AI Analysis'}
+                        </button>
                     </div>
                 </div>
             </div>
 
             {/* Card Content */}
             <div className="p-4">
-                {/* Stat Linechartnya */}
+                {/* Stat Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                     <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                         <div className="flex items-center gap-2">
@@ -222,6 +258,17 @@ export default function LearnDurationChart() {
                         </div>
                     </div>
                 </div>
+
+                {/* AI Insights - POSISI YANG BENAR */}
+                {(showInsights || insightsLoading) && (
+                    <div className="mb-4">
+                        <AIInsights
+                            insights={insights}
+                            loading={insightsLoading}
+                            onClose={() => setShowInsights(false)}
+                        />
+                    </div>
+                )}
 
                 {/* Line Chart */}
                 <div className="mt-4 bg-white rounded-xl p-3 border border-slate-100">

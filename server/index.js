@@ -18,12 +18,12 @@ require('dotenv').config();
 function getCurrentDate() {
   // Menggunakan Luxon untuk akurasi timezone yang lebih baik
   const jakartaDate = DateTime.now().setZone("Asia/Jakarta").toISODate();
-  
+
   console.log('🕒 getCurrentDate called:', {
     jakartaDateTime: DateTime.now().setZone("Asia/Jakarta").toString(),
     formattedDate: jakartaDate
   });
-  
+
   return jakartaDate; // Format: YYYY-MM-DD
 }
 
@@ -31,13 +31,13 @@ function getSecondsUntilMidnight() {
   const now = DateTime.now().setZone("Asia/Jakarta");
   const midnight = now.plus({ days: 1 }).startOf('day');
   const seconds = Math.floor(midnight.diff(now, 'seconds').seconds);
-  
+
   console.log('🕒 getSecondsUntilMidnight called:', {
     jakartaNow: now.toString(),
     midnightJakarta: midnight.toString(),
     secondsUntilMidnight: seconds
   });
-  
+
   return seconds;
 }
 
@@ -139,10 +139,10 @@ app.use('/api/games', gamesRouter);
 cron.schedule('0 0 * * 1', async () => {
   try {
     console.log('Resetting weekly rankings...');
-    
+
     // Archive current week rankings before reset
     const { pool } = require('./config/db');
-    
+
     await pool.query(`
       INSERT INTO weekly_rankings_archive 
       SELECT *, CURRENT_TIMESTAMP as archived_at 
@@ -151,16 +151,16 @@ cron.schedule('0 0 * * 1', async () => {
         SELECT MAX(week_start_date) FROM weekly_rankings
       )
     `);
-    
+
     // Clear current week rankings untuk minggu baru
     const today = new Date();
     const day = today.getDay();
     const diff = today.getDate() - day + 1; // Senin
     const monday = new Date(today.setDate(diff));
     monday.setHours(0, 0, 0, 0);
-    
+
     await pool.query('DELETE FROM weekly_rankings WHERE week_start_date < $1', [monday]);
-    
+
     console.log('Weekly rankings reset completed');
   } catch (error) {
     console.error('Error resetting weekly rankings:', error);
@@ -170,9 +170,9 @@ cron.schedule('0 0 * * 1', async () => {
 // Schedule streak check setiap tengah malam
 cron.schedule('0 0 * * *', async () => {
   try {
-    
+
     const { pool } = require('./config/db');
-    
+
     // Reset streak yang tidak aktif kemarin
     await pool.query(`
       UPDATE user_streaks 
@@ -182,7 +182,7 @@ cron.schedule('0 0 * * *', async () => {
       WHERE last_activity_date < CURRENT_DATE 
       AND is_active = TRUE
     `);
-    
+
     console.log('Streak check completed');
   } catch (error) {
     console.error('Error checking streaks:', error);
@@ -204,6 +204,18 @@ app.use('/api', materialRoutes);
 // Submission Routes
 const submissionRoutes = require('./routes/submissionRoutes');
 app.use('/api', submissionRoutes);
+
+// Student Score Routes
+const studentScoreRoutes = require('./routes/studentScoreRoutes');
+app.use('/api', studentScoreRoutes);
+
+// Score Analysis Routes
+const scoreAnalysisRoutes = require('./routes/scoreAnalysisRoutes');
+app.use('/api/analytics', scoreAnalysisRoutes);
+
+// Open Ai For Learning Duration route
+const analyticsRoutes = require('./routes/analytics');
+app.use('/api/analytics', analyticsRoutes);
 
 // Serve static files untuk uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -473,6 +485,90 @@ const initDB = async () => {
       )
     `);
 
+    // Classes table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS classes (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        grade VARCHAR(50),
+        subject VARCHAR(255),
+        teacher_id INTEGER NOT NULL REFERENCES users(id),
+        description TEXT,
+        class_code VARCHAR(10) UNIQUE,
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_class_status CHECK (status IN ('active', 'inactive', 'archived'))
+      )
+    `);
+
+    // Class members table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS class_members (
+        id SERIAL PRIMARY KEY,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'active',
+        
+        CONSTRAINT chk_member_status CHECK (status IN ('active', 'inactive')),
+        CONSTRAINT unique_class_member UNIQUE (class_id, user_id)
+      )
+    `);
+
+    // Assignments table (sesuai dengan struktur yang ada)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS assignments (
+        id SERIAL PRIMARY KEY,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        teacher_id INTEGER NOT NULL REFERENCES users(id),
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        due_date TIMESTAMP,
+        points INTEGER DEFAULT 100,
+        file_url VARCHAR(500),
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_assignment_status CHECK (status IN ('active', 'inactive', 'deleted'))
+      )
+    `);
+
+    // Submissions table (sesuai dengan struktur yang ada)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS submissions (
+        id SERIAL PRIMARY KEY,
+        assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id),
+        comment TEXT,
+        file_url VARCHAR(500),
+        file_size VARCHAR(50),
+        score DECIMAL(5,2),
+        feedback TEXT,
+        status VARCHAR(50) DEFAULT 'submitted',
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        graded_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT chk_submission_status CHECK (status IN ('submitted', 'graded', 'late', 'pending_grading')),
+        CONSTRAINT unique_submission UNIQUE (assignment_id, student_id)
+      )
+    `);
+
+    // Indexes untuk performance
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
+      CREATE INDEX IF NOT EXISTS idx_class_members_class ON class_members(class_id);
+      CREATE INDEX IF NOT EXISTS idx_class_members_user ON class_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_class ON assignments(class_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON assignments(teacher_id);
+      CREATE INDEX IF NOT EXISTS idx_submissions_assignment ON submissions(assignment_id);
+      CREATE INDEX IF NOT EXISTS idx_submissions_student ON submissions(student_id);
+    `);
+
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
       CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
@@ -657,7 +753,7 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
   try {
     console.log(`🔥 Fetching streak for user ${userId}`);
-    
+
     const result = await pool.query(
       'SELECT current_streak, longest_streak, last_activity_date, is_active FROM user_streaks WHERE user_id = $1',
       [userId]
@@ -676,12 +772,12 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
     const streak = result.rows[0];
     const today = getCurrentDate(); // Using Luxon
-    const lastActivity = streak.last_activity_date ? 
+    const lastActivity = streak.last_activity_date ?
       DateTime.fromJSDate(new Date(streak.last_activity_date)).toISODate() : null;
 
     // Check apakah aktif hari ini
     const isActiveToday = lastActivity === today;
-    
+
     console.log(`🔥 Streak comparison:`, {
       lastActivity,
       today,
@@ -709,8 +805,8 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting user streak:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
+    res.status(500).json({
+      message: 'Server error',
       error: error.message,
       current_streak: 0,
       longest_streak: 0,
@@ -867,7 +963,7 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
   try {
     console.log(`🔥 Fetching streak for user ${userId}`);
-    
+
     const result = await pool.query(
       'SELECT current_streak, longest_streak, last_activity_date, is_active FROM user_streaks WHERE user_id = $1',
       [userId]
@@ -886,12 +982,12 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
     const streak = result.rows[0];
     const today = getCurrentDate(); // ← GUNAKAN FUNCTION BARU INI
-    const lastActivity = streak.last_activity_date ? 
+    const lastActivity = streak.last_activity_date ?
       new Date(streak.last_activity_date).toISOString().split('T')[0] : null;
 
     // Check apakah aktif hari ini
     const isActiveToday = lastActivity === today;
-    
+
     console.log(`🔥 Streak comparison:`, {
       lastActivity,
       today, // ← INI SEKARANG HARUS 2025-07-19
@@ -919,8 +1015,8 @@ app.get('/api/games/streak', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting user streak:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
+    res.status(500).json({
+      message: 'Server error',
       error: error.message,
       current_streak: 0,
       longest_streak: 0,
@@ -947,16 +1043,16 @@ app.get('/api/games/level', authenticateToken, async (req, res) => {
     `, [userId]);
 
     let levelData;
-    
+
     if (siswaResult.rows.length > 0 && siswaResult.rows[0].total_xp > 0) {
       const siswaData = siswaResult.rows[0];
-      
+
       // Recalculate untuk memastikan konsistensi
       const totalXp = siswaData.total_xp;
       const currentLevel = Math.floor(totalXp / 100) + 1;
       const currentXp = totalXp % 100;
       const xpToNextLevel = 100 - currentXp;
-      
+
       levelData = {
         current_level: currentLevel,
         current_xp: currentXp,
@@ -978,8 +1074,8 @@ app.get('/api/games/level', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error getting user level:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
+    res.status(500).json({
+      message: 'Server error',
       error: error.message,
       current_level: 1,
       current_xp: 0,
@@ -1017,7 +1113,7 @@ async function updateUserStreak(userId) {
     }
 
     const streak = streakResult.rows[0];
-    const lastActivity = streak.last_activity_date ? 
+    const lastActivity = streak.last_activity_date ?
       DateTime.fromJSDate(new Date(streak.last_activity_date)).toISODate() : null;
 
     console.log(`🔥 Current streak data:`, {
@@ -1085,10 +1181,10 @@ async function updateUserStreak(userId) {
 // Update function updateGameProgress di index.js
 const updateGameProgress = async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const userId = req.user.id;
     const { gameId, questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted } = req.body;
 
@@ -1132,9 +1228,9 @@ const updateGameProgress = async (req, res) => {
           completion_percentage, is_completed, total_xp_earned, best_score, times_played,
           last_played_at, first_played_at, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, 
-          isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
-          isCompleted, xpEarned, score]);
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers,
+        isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
+        isCompleted, xpEarned, score]);
     }
 
     // **PENTING: Update siswa table untuk sync level data**
@@ -1196,10 +1292,10 @@ const updateGameProgress = async (req, res) => {
 
 app.post('/api/games/progress/:gameId', authenticateToken, async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
-    
+
     const userId = req.user.id;
     const gameId = req.params.gameId;
     const { questionsAnswered, correctAnswers, wrongAnswers, score, timeSpent, isCompleted } = req.body;
@@ -1241,7 +1337,7 @@ app.post('/api/games/progress/:gameId', authenticateToken, async (req, res) => {
         WHERE user_id = $1 AND game_id = $2
         RETURNING *
       `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, isCompleted, xpEarned, score]);
-      
+
       console.log('✅ Updated existing progress:', updated.rows[0]);
     } else {
       // Insert new progress
@@ -1252,10 +1348,10 @@ app.post('/api/games/progress/:gameId', authenticateToken, async (req, res) => {
           last_played_at, first_played_at, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *
-      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers, 
-          isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
-          isCompleted, xpEarned, score]);
-      
+      `, [userId, gameId, questionsAnswered, correctAnswers, wrongAnswers,
+        isCompleted ? '100.00' : ((correctAnswers / questionsAnswered) * 100).toFixed(2),
+        isCompleted, xpEarned, score]);
+
       console.log('✅ Created new progress:', inserted.rows[0]);
     }
 
@@ -1354,7 +1450,7 @@ app.post('/api/games/complete', authenticateToken, async (req, res) => {
     // Call the main progress update endpoint
     req.params.gameId = gameId;
     req.body = gameResult;
-    
+
     // Forward to the main endpoint
     return res.redirect(307, `/api/games/progress/${gameId}`);
 
