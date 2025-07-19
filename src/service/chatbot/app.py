@@ -405,7 +405,7 @@ def get_openai_response(messages, student_data=None):
         # Try new OpenAI client first
         if hasattr(openai_client, 'chat') and hasattr(openai_client.chat, 'completions'):
             response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_message},
                     *messages
@@ -418,7 +418,7 @@ def get_openai_response(messages, student_data=None):
         # Fallback to old OpenAI API
         elif hasattr(openai_client, 'ChatCompletion'):
             response = openai_client.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_message},
                     *messages
