@@ -29,20 +29,6 @@ CREATE TYPE public.attempt_type_enum AS ENUM (
 
 
 --
--- Name: calculate_xp_for_level(integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.calculate_xp_for_level(level integer) RETURNS integer
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Formula: Level * 100 + (Level - 1) * 50
-    RETURN level * 100 + (level - 1) * 50;
-END;
-$$;
-
-
---
 -- Name: initialize_user_levels(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -71,48 +57,6 @@ BEGIN
     -- For now, it's just a placeholder
     -- In production, you'd typically handle this via cron job or application scheduler
     NULL;
-END;
-$$;
-
-
---
--- Name: reset_weekly_rankings(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.reset_weekly_rankings() RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Hanya reset jika hari ini adalah hari Senin
-    IF EXTRACT(DOW FROM CURRENT_DATE) = 1 THEN
-        -- Update ranking minggu lalu
-        WITH ranked_users AS (
-            SELECT 
-                user_id,
-                weekly_xp,
-                ROW_NUMBER() OVER (ORDER BY weekly_xp DESC) as rank_pos
-            FROM weekly_rankings 
-            WHERE week_start_date = CURRENT_DATE - INTERVAL '7 days'
-        )
-        UPDATE weekly_rankings 
-        SET rank_position = ranked_users.rank_pos
-        FROM ranked_users 
-        WHERE weekly_rankings.user_id = ranked_users.user_id
-        AND weekly_rankings.week_start_date = CURRENT_DATE - INTERVAL '7 days';
-        
-        -- Create new week entries for active users
-        INSERT INTO weekly_rankings (user_id, week_start_date, week_end_date)
-        SELECT DISTINCT 
-            ul.user_id,
-            CURRENT_DATE,
-            CURRENT_DATE + INTERVAL '6 days'
-        FROM user_levels ul
-        WHERE NOT EXISTS (
-            SELECT 1 FROM weekly_rankings wr 
-            WHERE wr.user_id = ul.user_id 
-            AND wr.week_start_date = CURRENT_DATE
-        );
-    END IF;
 END;
 $$;
 
@@ -181,27 +125,6 @@ CREATE FUNCTION public.sync_admin_update_to_users() RETURNS trigger
 
 
 --
--- Name: update_daily_streaks(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_daily_streaks() RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Reset streak untuk user yang tidak aktif kemarin
-    UPDATE user_streaks 
-    SET 
-        current_streak = 0,
-        is_active = FALSE,
-        streak_end_date = CURRENT_DATE - INTERVAL '1 day'
-    WHERE 
-        last_activity_date < CURRENT_DATE - INTERVAL '1 day'
-        AND is_active = TRUE;
-END;
-$$;
-
-
---
 -- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -211,65 +134,6 @@ CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_user_level(integer, integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_user_level(p_user_id integer, p_xp_gained integer) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    current_data RECORD;
-    new_level INTEGER;
-    xp_needed INTEGER;
-BEGIN
-    -- Get current user level data
-    SELECT * INTO current_data 
-    FROM user_levels 
-    WHERE user_id = p_user_id;
-    
-    -- If user doesn't exist in user_levels, create record
-    IF NOT FOUND THEN
-        INSERT INTO user_levels (user_id, current_xp, total_xp) 
-        VALUES (p_user_id, p_xp_gained, p_xp_gained);
-        RETURN;
-    END IF;
-    
-    -- Update XP
-    UPDATE user_levels 
-    SET 
-        current_xp = current_xp + p_xp_gained,
-        total_xp = total_xp + p_xp_gained,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = p_user_id;
-    
-    -- Check for level up
-    SELECT current_xp, current_level INTO current_data
-    FROM user_levels 
-    WHERE user_id = p_user_id;
-    
-    new_level := current_data.current_level;
-    
-    -- Calculate if level up is needed
-    WHILE current_data.current_xp >= calculate_xp_for_level(new_level + 1) LOOP
-        new_level := new_level + 1;
-    END LOOP;
-    
-    -- Update level if changed
-    IF new_level > current_data.current_level THEN
-        xp_needed := calculate_xp_for_level(new_level + 1);
-        
-        UPDATE user_levels 
-        SET 
-            current_level = new_level,
-            xp_to_next_level = xp_needed - current_xp,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = p_user_id;
-    END IF;
 END;
 $$;
 
@@ -682,14 +546,13 @@ ALTER SEQUENCE public.courses_id_seq OWNED BY public.courses.id;
 
 CREATE TABLE public.daily_missions (
     id integer NOT NULL,
-    mission_type character varying(50) NOT NULL,
-    title character varying(200) NOT NULL,
+    title character varying(255) NOT NULL,
     description text,
+    mission_type character varying(50) NOT NULL,
     target_count integer DEFAULT 1,
-    xp_reward integer DEFAULT 25,
-    icon character varying(50),
+    xp_reward integer DEFAULT 10,
     is_active boolean DEFAULT true,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -790,13 +653,10 @@ ALTER SEQUENCE public.enrollments_id_seq OWNED BY public.enrollments.id;
 
 CREATE TABLE public.game_progress (
     id integer NOT NULL,
-    user_id integer,
-    game_id character varying(50),
+    user_id integer NOT NULL,
+    game_id character varying(50) NOT NULL,
     total_questions integer DEFAULT 0,
     correct_answers integer DEFAULT 0,
-    percentage numeric(5,2) DEFAULT 0.00,
-    is_completed boolean DEFAULT false,
-    last_played_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
@@ -829,13 +689,16 @@ ALTER SEQUENCE public.game_progress_id_seq OWNED BY public.game_progress.id;
 CREATE TABLE public.game_sessions (
     id integer NOT NULL,
     user_id integer,
-    game_id character varying(50),
+    game_id integer,
+    score integer DEFAULT 0,
+    max_score integer DEFAULT 100,
+    duration_seconds integer DEFAULT 0,
     questions_answered integer DEFAULT 0,
     correct_answers integer DEFAULT 0,
-    xp_earned integer DEFAULT 0,
-    started_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    completed_at timestamp without time zone,
-    session_data jsonb
+    hints_used integer DEFAULT 0,
+    moves_made integer DEFAULT 0,
+    is_completed boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -865,13 +728,14 @@ ALTER SEQUENCE public.game_sessions_id_seq OWNED BY public.game_sessions.id;
 
 CREATE TABLE public.games (
     id integer NOT NULL,
-    game_id character varying(50) NOT NULL,
-    name character varying(100) NOT NULL,
+    name character varying(255) NOT NULL,
     description text,
-    difficulty character varying(20) DEFAULT 'Medium'::character varying,
-    max_questions integer DEFAULT 10,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    category character varying(100),
+    total_questions integer DEFAULT 10,
+    questions_data jsonb,
+    xp_per_question integer DEFAULT 5,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -1007,6 +871,26 @@ CREATE TABLE public.lessons (
 
 
 --
+-- Name: lessons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.lessons_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: lessons_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.lessons_id_seq OWNED BY public.lessons.id;
+
+
+--
 -- Name: login_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1097,9 +981,7 @@ CREATE TABLE public.modules (
     content text,
     is_free boolean DEFAULT false,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    file_url character varying(500),
-    file_type character varying(50)
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -1202,20 +1084,18 @@ CREATE TABLE public.submissions (
     id integer NOT NULL,
     assignment_id integer NOT NULL,
     student_id integer NOT NULL,
-    title character varying(255),
-    description text,
-    file_url character varying(500),
-    file_size character varying(20),
-    submitted_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    status character varying(50) DEFAULT 'submitted'::character varying,
+    comment text NOT NULL,
+    file_url text,
+    file_size character varying(50),
+    submitted_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     score integer,
     feedback text,
-    graded_at timestamp with time zone,
-    graded_by integer,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_score CHECK (((score >= 0) AND (score <= 100))),
-    CONSTRAINT chk_submission_status CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('submitted'::character varying)::text, ('graded'::character varying)::text, ('returned'::character varying)::text])))
+    status character varying(50) DEFAULT 'submitted'::character varying,
+    graded_at timestamp without time zone,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_submission_score CHECK (((score >= 0) AND (score <= 100))),
+    CONSTRAINT chk_submission_status CHECK (((status)::text = ANY ((ARRAY['submitted'::character varying, 'graded'::character varying, 'returned'::character varying])::text[])))
 );
 
 
@@ -1390,9 +1270,9 @@ CREATE TABLE public.user_daily_missions (
     mission_id integer,
     current_progress integer DEFAULT 0,
     is_completed boolean DEFAULT false,
-    completed_at timestamp without time zone,
+    completed_at timestamp with time zone,
     mission_date date DEFAULT CURRENT_DATE,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -1459,42 +1339,6 @@ ALTER SEQUENCE public.user_game_progress_id_seq OWNED BY public.user_game_progre
 
 
 --
--- Name: user_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.user_levels (
-    id integer NOT NULL,
-    user_id integer,
-    current_level integer DEFAULT 1,
-    current_xp integer DEFAULT 0,
-    total_xp integer DEFAULT 0,
-    xp_to_next_level integer DEFAULT 100,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: user_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.user_levels_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: user_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.user_levels_id_seq OWNED BY public.user_levels.id;
-
-
---
 -- Name: user_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1538,15 +1382,15 @@ ALTER SEQUENCE public.user_sessions_id_seq OWNED BY public.user_sessions.id;
 
 CREATE TABLE public.user_streaks (
     id integer NOT NULL,
-    user_id integer,
+    user_id integer NOT NULL,
     current_streak integer DEFAULT 0,
     longest_streak integer DEFAULT 0,
-    is_active boolean DEFAULT false,
     last_activity_date date,
     streak_start_date date,
-    streak_end_date date,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    last_reset_date date DEFAULT CURRENT_DATE,
+    is_active boolean DEFAULT false
 );
 
 
@@ -1617,27 +1461,27 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
 
 --
--- Name: weekly_rankings; Type: TABLE; Schema: public; Owner: -
+-- Name: weekly_leaderboard; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.weekly_rankings (
+CREATE TABLE public.weekly_leaderboard (
     id integer NOT NULL,
     user_id integer,
     week_start_date date NOT NULL,
-    week_end_date date NOT NULL,
-    weekly_xp integer DEFAULT 0,
+    total_xp integer DEFAULT 0,
     games_played integer DEFAULT 0,
+    missions_completed integer DEFAULT 0,
     rank_position integer,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
 --
--- Name: weekly_rankings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: weekly_leaderboard_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE public.weekly_rankings_id_seq
+CREATE SEQUENCE public.weekly_leaderboard_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -1647,10 +1491,10 @@ CREATE SEQUENCE public.weekly_rankings_id_seq
 
 
 --
--- Name: weekly_rankings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: weekly_leaderboard_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE public.weekly_rankings_id_seq OWNED BY public.weekly_rankings.id;
+ALTER SEQUENCE public.weekly_leaderboard_id_seq OWNED BY public.weekly_leaderboard.id;
 
 
 --
@@ -1780,6 +1624,13 @@ ALTER TABLE ONLY public.lesson_progress ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: lessons id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lessons ALTER COLUMN id SET DEFAULT nextval('public.lessons_id_seq'::regclass);
+
+
+--
 -- Name: login_attempts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1864,13 +1715,6 @@ ALTER TABLE ONLY public.user_game_progress ALTER COLUMN id SET DEFAULT nextval('
 
 
 --
--- Name: user_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_levels ALTER COLUMN id SET DEFAULT nextval('public.user_levels_id_seq'::regclass);
-
-
---
 -- Name: user_sessions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1892,10 +1736,10 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 
 --
--- Name: weekly_rankings id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: weekly_leaderboard id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.weekly_rankings ALTER COLUMN id SET DEFAULT nextval('public.weekly_rankings_id_seq'::regclass);
+ALTER TABLE ONLY public.weekly_leaderboard ALTER COLUMN id SET DEFAULT nextval('public.weekly_leaderboard_id_seq'::regclass);
 
 
 --
@@ -1921,8 +1765,9 @@ INSERT INTO public.admin (id, nama, email, password, role, created_at, updated_a
 -- Data for Name: assignments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at) VALUES (1, 3, 14, 'test', 'test', '2025-07-11 23:00:00+07', 100, '2025-07-09 21:13:50.386394+07', 'uploads/assignments/assignment_1752070427027-320438278.pdf', 'active', '2025-07-09 21:13:50.386394+07');
 INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at) VALUES (2, 5, 13, 'Ketahanan Pangan', 'Rangkumlah', '2025-07-11 23:59:00+07', 98, '2025-07-10 11:46:20.744908+07', 'uploads/assignments/assignment_1752122780702-71349981.docx', 'inactive', '2025-07-12 23:14:41.563764+07');
+INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at) VALUES (1, 3, 14, 'test', 'test', '2025-07-11 23:00:00+07', 100, '2025-07-09 21:13:50.386394+07', 'uploads/assignments/assignment_1752070427027-320438278.pdf', 'inactive', '2025-07-18 13:42:35.904623+07');
+INSERT INTO public.assignments (id, class_id, teacher_id, title, description, due_date, points, created_at, file_url, status, updated_at) VALUES (3, 2, 14, 'Operasi Bilangan Bulat', 'Kerjakan soal pada file yang sudah saya lampirkan, jangan lupa kumpulkan, Selamat mengerjakan 😁', '2025-07-18 23:00:00+07', 100, '2025-07-18 13:57:10.655069+07', 'uploads/assignments/assignment_1752821830542-219858828.pdf', 'active', '2025-07-18 13:57:10.655069+07');
 
 
 --
@@ -1982,25 +1827,19 @@ INSERT INTO public.classes (id, name, grade, teacher_id, description, schedule, 
 -- Data for Name: courses; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.courses (id, title, description, thumbnail, price, level, duration, category_id, instructor_id, instructor_role, created_by, status, created_at, updated_at) VALUES (7, 'Sumber Daya Alam', 'Energi Terbarukan dirancang untuk memberikan pemahaman mendalam tentang bagaimana prinsip-prinsip biologi digunakan dalam pengembangan dan penerapan sumber energi ramah lingkungan. Fokus utama kursus ini adalah pada sumber energi yang berasal dari makhluk hidup atau proses biologis, seperti biomassa, biofuel, dan fotosintesis buatan.
-
-1. Peserta akan mempelajari berbagai jenis energi terbarukan yang berkaitan langsung dengan proses biologis, termasuk:
-2. Bioenergi: energi yang dihasilkan dari bahan organik seperti tanaman, limbah pertanian, dan kotoran hewan.
-3. Biogas dan biofuel: hasil konversi bahan hayati menjadi bahan bakar cair atau gas, seperti etanol dan biodiesel.
-
-Fotosintesis buatan: inovasi teknologi yang meniru proses alami tanaman dalam mengubah sinar matahari menjadi energi.
-
-Melalui pendekatan interdisipliner yang menggabungkan biologi, ekologi, dan teknologi lingkungan, kursus ini juga membahas dampak ekologis dari penggunaan energi fosil dan urgensi peralihan ke sumber energi terbarukan yang lebih berkelanjutan.', NULL, 0.00, 'beginner', 60, 2, 13, 'guru', 13, 'active', '2025-07-14 10:36:56.266512', '2025-07-14 10:36:56.266512');
+INSERT INTO public.courses (id, title, description, thumbnail, price, level, duration, category_id, instructor_id, instructor_role, created_by, status, created_at, updated_at) VALUES (5, 'Bahasa Arab untuk Pemula', 'Kursus ini dibuat untuk testing', 'uploads/courses/1752079935795-480745696.webp', 0.00, 'beginner', 60, 11, 13, 'guru', 10, 'active', '2025-06-28 10:28:27.917121', '2025-07-09 23:52:15.841499');
+INSERT INTO public.courses (id, title, description, thumbnail, price, level, duration, category_id, instructor_id, instructor_role, created_by, status, created_at, updated_at) VALUES (4, 'Bahasa Indonesia Lanjutan', 'Kursus ini dibuat untuk testing', 'uploads/courses/1752079963754-971003196.jpeg', 75000.00, 'advanced', 240, 8, 14, 'guru', 10, 'active', '2025-06-28 10:20:39.866916', '2025-07-09 23:52:43.796637');
+INSERT INTO public.courses (id, title, description, thumbnail, price, level, duration, category_id, instructor_id, instructor_role, created_by, status, created_at, updated_at) VALUES (2, 'Verb', 'Kursus ini dibuat untuk testing', 'uploads/courses/1752079990930-442910427.jpeg', 0.00, 'beginner', 60, 9, 5, 'guru', 13, 'active', '2025-06-27 11:19:44.698268', '2025-07-09 23:53:10.972876');
 
 
 --
 -- Data for Name: daily_missions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.daily_missions (id, mission_type, title, description, target_count, xp_reward, icon, is_active, created_at) VALUES (1, 'complete_quizzes', 'Complete 3 quizzes', 'Selesaikan 3 kuis hari ini dengan benar', 3, 50, '🧠', true, '2025-07-18 09:28:33.005552');
-INSERT INTO public.daily_missions (id, mission_type, title, description, target_count, xp_reward, icon, is_active, created_at) VALUES (2, 'watch_videos', 'Watch 5 tutorial videos', 'Tonton 5 video pembelajaran untuk menambah wawasan', 5, 30, '📺', true, '2025-07-18 09:28:33.005552');
-INSERT INTO public.daily_missions (id, mission_type, title, description, target_count, xp_reward, icon, is_active, created_at) VALUES (3, 'solve_problems', 'Solve 10 practice problems', 'Selesaikan 10 soal latihan dengan benar', 10, 100, '🧮', true, '2025-07-18 09:28:33.005552');
-INSERT INTO public.daily_missions (id, mission_type, title, description, target_count, xp_reward, icon, is_active, created_at) VALUES (4, 'play_game', 'Play any game', 'Mainkan game apapun hari ini', 1, 25, '🎮', true, '2025-07-18 09:28:33.005552');
+INSERT INTO public.daily_missions (id, title, description, mission_type, target_count, xp_reward, is_active, created_at) VALUES (1, 'Complete 3 quizzes', 'Selesaikan 3 kuis hari ini', 'quiz', 3, 50, true, '2025-07-12 09:36:23.57473+07');
+INSERT INTO public.daily_missions (id, title, description, mission_type, target_count, xp_reward, is_active, created_at) VALUES (2, 'Watch 5 tutorial videos', 'Tonton 5 video tutorial', 'video', 5, 30, true, '2025-07-12 09:36:23.57473+07');
+INSERT INTO public.daily_missions (id, title, description, mission_type, target_count, xp_reward, is_active, created_at) VALUES (3, 'Solve 10 practice problems', 'Selesaikan 10 soal latihan', 'practice', 10, 100, true, '2025-07-12 09:36:23.57473+07');
+INSERT INTO public.daily_missions (id, title, description, mission_type, target_count, xp_reward, is_active, created_at) VALUES (4, 'Play any game', 'Mainkan game apapun', 'game', 1, 25, true, '2025-07-12 09:36:23.57473+07');
 
 
 --
@@ -2014,7 +1853,7 @@ INSERT INTO public.daily_quiz_completions (id, user_id, quiz_date, completed_qui
 -- Data for Name: enrollments; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.enrollments (id, user_id, course_id, enrolled_at, status, completed_at) VALUES (5, 1, 7, '2025-07-14 10:37:41.948493', 'active', NULL);
+INSERT INTO public.enrollments (id, user_id, course_id, enrolled_at, status, completed_at) VALUES (1, 2, 5, '2025-07-18 22:04:18.92569', 'active', NULL);
 
 
 --
@@ -2033,9 +1872,9 @@ INSERT INTO public.enrollments (id, user_id, course_id, enrolled_at, status, com
 -- Data for Name: games; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.games (id, game_id, name, description, difficulty, max_questions, created_at, updated_at) VALUES (1, 'patternpuzzle', 'Tebak Pola (Pattern Puzzle)', 'Asah logika dengan menebak pola yang tersembunyi', 'Medium', 10, '2025-07-18 09:28:33.005552', '2025-07-18 09:28:33.005552');
-INSERT INTO public.games (id, game_id, name, description, difficulty, max_questions, created_at, updated_at) VALUES (2, 'yesorno', 'Yes or No', 'Tes pengetahuan dengan pertanyaan ya atau tidak', 'Easy', 15, '2025-07-18 09:28:33.005552', '2025-07-18 09:28:33.005552');
-INSERT INTO public.games (id, game_id, name, description, difficulty, max_questions, created_at, updated_at) VALUES (3, 'mazechallenge', 'Maze Challenge', 'Temukan jalan keluar dari labirin yang menantang', 'Hard', 8, '2025-07-18 09:28:33.005552', '2025-07-18 09:28:33.005552');
+INSERT INTO public.games (id, name, description, category, total_questions, questions_data, xp_per_question, is_active, created_at) VALUES (1, 'Pattern Puzzle', 'Tebak pola selanjutnya', 'Logic', 20, '{"type": "pattern", "sample_patterns": [{"answer": "🔴", "sequence": ["🔴", "🔵", "🔴", "🔵"]}, {"answer": "9", "sequence": ["1", "3", "5", "7"]}], "difficulty_levels": [1, 2, 3]}', 5, true, '2025-07-12 17:42:07.154508+07');
+INSERT INTO public.games (id, name, description, category, total_questions, questions_data, xp_per_question, is_active, created_at) VALUES (2, 'Yes or No', 'Jawab benar atau salah', 'Knowledge', 25, '{"type": "true_false", "topics": ["science", "general_knowledge", "logic"], "sample_questions": [{"answer": true, "statement": "Matahari terbit dari timur"}, {"answer": false, "statement": "Bumi berbentuk datar"}]}', 4, true, '2025-07-12 17:42:07.154508+07');
+INSERT INTO public.games (id, name, description, category, total_questions, questions_data, xp_per_question, is_active, created_at) VALUES (3, 'Maze Challenge', 'Selesaikan labirin', 'Strategy', 15, '{"type": "maze", "features": ["hints", "timer", "optimal_path"], "maze_sizes": ["5x5", "7x7", "9x9"], "difficulty_levels": ["easy", "medium", "hard"]}', 8, true, '2025-07-12 17:42:07.154508+07');
 
 
 --
@@ -2585,66 +2424,38 @@ INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success,
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (511, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-13 03:05:55.84396');
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (512, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-13 03:09:38.151097');
 INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (513, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-13 03:09:42.328649');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (514, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-13 13:24:57.419115');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (515, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-13 13:25:42.783608');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (516, 'lintang.langitan@gmail.com', '::1', 'login', true, NULL, '2025-07-13 13:26:11.296337');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (517, 'lintang.langitan@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-13 13:26:19.37554');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (518, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-13 13:29:40.144484');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (519, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-13 13:29:50.508557');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (520, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 07:35:41.061205');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (521, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 07:35:52.205136');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (522, 'Budi@gmail.com', '::1', 'login', true, NULL, '2025-07-14 08:06:23.958507');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (523, 'Budi@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 08:06:36.572717');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (524, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 08:27:27.540328');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (525, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 08:27:37.379546');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (526, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 08:39:30.064546');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (527, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 08:41:17.399361');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (528, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:07:30.377404');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (529, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:07:34.739442');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (530, 'admin@platform.com', '::1', 'login', true, NULL, '2025-07-14 09:22:00.584898');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (531, 'admin@platform.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:22:16.060709');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (532, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:24:00.217526');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (533, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:24:07.951599');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (534, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:26:56.667374');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (535, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:27:09.933208');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (536, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:31:59.374193');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (537, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:32:05.996262');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (538, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:45:07.691845');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (539, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:45:17.480723');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (540, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 09:49:04.673814');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (541, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 09:49:17.45093');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (542, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:06:49.978805');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (543, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:07:00.44261');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (544, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:17:01.340462');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (545, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:17:06.058054');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (546, 'admin@platform.com', '::1', 'login', true, NULL, '2025-07-14 10:17:41.30395');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (547, 'admin@platform.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:17:48.239223');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (548, 'admin@platform.com', '::1', 'login', true, NULL, '2025-07-14 10:28:37.563374');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (549, 'admin@platform.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:28:48.060921');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (550, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:29:44.653931');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (551, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:29:55.455173');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (552, 'Budi@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:30:26.960384');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (553, 'Budi@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:30:34.419374');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (554, 'Budi@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:32:23.563311');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (555, 'Budi@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:32:29.330687');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (556, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-14 10:37:13.485645');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (557, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 10:37:18.680547');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (558, 'tejo@gmail.com', '::1', 'login', true, NULL, '2025-07-16 21:11:53.767748');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (559, '947200012', '::1', 'login', false, 'User not found', '2025-07-16 21:12:07.89981');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (560, 'tejo@gmail.com', '::1', 'login', true, NULL, '2025-07-16 21:12:11.414329');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (561, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-16 22:16:57.342531');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (562, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-16 22:17:10.373214');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (563, 'Budi@gmail.com', '::1', 'login', true, NULL, '2025-07-16 22:59:52.347416');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (564, 'tejo@gmail.com', '::1', 'login', false, 'Invalid password', '2025-07-16 23:00:26.284356');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (565, 'tejo@gmail.com', '::1', 'login', true, NULL, '2025-07-16 23:00:36.833516');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (566, 'tejo@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-16 23:00:45.47706');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (567, 'Budi@gmail.com', '::1', 'login', true, NULL, '2025-07-16 23:01:17.558909');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (568, 'Budi@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-16 23:01:29.308033');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (569, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-17 12:27:53.50794');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (570, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-17 12:28:04.004757');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (571, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-17 23:54:40.98276');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (572, 'dimasrizky822@gmail.com', '::1', '2fa_verify', false, 'Invalid 2FA token', '2025-07-17 23:55:04.367017');
-INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (573, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-17 23:55:11.977416');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (514, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-14 14:06:01.220453');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (515, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 14:06:08.454549');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (516, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-14 14:07:03.452568');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (517, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-14 14:07:07.71346');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (518, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-16 20:35:10.589561');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (519, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-16 20:37:49.83504');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (520, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-16 20:51:26.851011');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (521, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-16 20:51:49.084871');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (522, 'ayu@gmail.com', '::1', 'login', false, 'Invalid password', '2025-07-16 21:06:51.379475');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (523, 'ayu@gmail.com', '::1', 'login', false, 'Invalid password', '2025-07-16 21:07:08.594257');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (524, 'ayu@gmail.com', '::1', 'login', false, 'Invalid password', '2025-07-16 21:07:12.310009');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (525, 'ayu@gmail.com', '::1', 'login', false, 'Invalid password', '2025-07-16 21:07:16.235359');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (526, 'dimasrizky822@gmail.com', '::1', 'login', true, NULL, '2025-07-17 08:26:12.472103');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (527, 'dimasrizky822@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-17 08:26:23.041731');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (528, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 02:47:32.838883');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (529, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 02:47:45.293119');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (530, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 09:12:42.47486');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (531, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 09:13:51.501012');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (532, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-18 13:42:05.547653');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (533, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 13:42:20.833844');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (534, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 13:58:56.803241');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (535, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 13:59:08.087863');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (536, 'Siti.Amh123@gmail.com', '::1', 'login', true, NULL, '2025-07-18 14:20:33.622692');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (537, 'Siti.Amh123@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 14:20:43.077447');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (538, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 14:21:36.780264');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (539, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 14:21:43.996626');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (540, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 20:13:05.210543');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (541, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 20:13:17.113295');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (542, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-18 21:25:41.609397');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (543, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-18 21:26:06.37577');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (544, 'tio@gmail.com', '::1', 'login', true, NULL, '2025-07-19 08:24:33.130731');
+INSERT INTO public.login_attempts (id, email, ip_address, attempt_type, success, error_message, created_at) VALUES (545, 'tio@gmail.com', '::1', '2fa_verify', true, NULL, '2025-07-19 08:24:45.891003');
 
 
 --
@@ -2684,6 +2495,7 @@ INSERT INTO public.siswa (id, user_id, nis, nama_lengkap, nik_orangtua, no_telep
 -- Data for Name: submissions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.submissions (id, assignment_id, student_id, comment, file_url, file_size, submitted_at, score, feedback, status, graded_at, created_at, updated_at) VALUES (1, 3, 2, 'Wokeeeh', NULL, NULL, '2025-07-18 14:20:14.06888', 100, 'Bagus benar semua ya tio', 'graded', '2025-07-18 14:21:10.329805', '2025-07-18 14:20:14.06888', '2025-07-18 14:21:10.329805');
 
 
 --
@@ -2715,6 +2527,9 @@ INSERT INTO public.temp_2fa_tokens (id, user_id, temp_token, secret, expires_at,
 -- Data for Name: user_daily_missions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.user_daily_missions (id, user_id, mission_id, current_progress, is_completed, completed_at, mission_date, created_at) VALUES (1, 1, 3, 22, true, '2025-07-12 18:00:22.321796+07', '2025-07-12', '2025-07-12 18:00:22.321796+07');
+INSERT INTO public.user_daily_missions (id, user_id, mission_id, current_progress, is_completed, completed_at, mission_date, created_at) VALUES (2, 1, 4, 1, true, '2025-07-12 18:00:22.321796+07', '2025-07-12', '2025-07-12 18:00:22.321796+07');
+INSERT INTO public.user_daily_missions (id, user_id, mission_id, current_progress, is_completed, completed_at, mission_date, created_at) VALUES (5, 1, 1, 3, true, '2025-07-12 18:04:00.816758+07', '2025-07-12', '2025-07-12 18:04:00.816758+07');
 
 
 --
@@ -2722,12 +2537,6 @@ INSERT INTO public.temp_2fa_tokens (id, user_id, temp_token, secret, expires_at,
 --
 
 INSERT INTO public.user_game_progress (id, user_id, game_id, level, score, completion_percentage, last_played_at, total_play_time, created_at, updated_at, questions_completed, correct_answers, total_questions, session_count) VALUES (1, 1, 2, 1, 24, 0, '2025-07-13 01:46:10.97505+07', 0, '2025-07-12 18:00:22.321796+07', '2025-07-12 18:00:22.321796+07', 195, 182, 25, 8);
-
-
---
--- Data for Name: user_levels; Type: TABLE DATA; Schema: public; Owner: -
---
-
 
 
 --
@@ -2885,6 +2694,7 @@ INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (149, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTIxMDc5ODgsImV4cCI6MTc1MjE5NDM4OH0.WxDfxez-zvjnA81_c5WRp4TXsRFmwb7C4lqZ7Q4wRdU', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 07:39:48.865', '2025-07-10 07:39:48.865873', '2025-07-10 07:40:47.660294', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (150, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyMTA4MDcyLCJleHAiOjE3NTIxOTQ0NzJ9.Z5p3pNAsBxVVHkuGSU0hynTpuXjkVsd5tykxerIo5H0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 07:41:12.966', '2025-07-10 07:41:12.966834', '2025-07-10 07:45:13.755627', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (151, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjExMTUzMCwiZXhwIjoxNzUyMTk3OTMwfQ.YDzXFV96-I6V3053xmzUJK09kkw1Fc_ywy5I7iWQjpE', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 08:38:50.405', '2025-07-10 08:38:50.408922', '2025-07-10 08:45:06.018796', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (185, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjI5MDc5NywiZXhwIjoxNzUyMzc3MTk3fQ.DI76UgcO67OWhFdYYgUmEYOOMrxRvSP5gmd0wf2j0P0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-13 10:26:37.111', '2025-07-12 10:26:37.112945', '2025-07-12 10:26:37.112945', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (152, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsInJvbGUiOiJzaXN3YSIsImlhdCI6MTc1MjExNTcyMSwiZXhwIjoxNzUyMjAyMTIxfQ.fJ8UDCHOcfkV2GJDsallIjY10tLYKJUTI_442e_moQA', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzUyMTE1NzIxLCJleHAiOjE3NTI3MjA1MjF9.Dc8bT7uN66COVs7Xmq6i6m9LEPaXA5t7EOHofXQMm3k', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 09:48:41.812', '2025-07-10 09:48:41.89631', '2025-07-10 09:48:41.89631', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (153, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjEyMTIwOSwiZXhwIjoxNzUyMjA3NjA5fQ.xcI8wm7eUm68CFHIF27NRDN4zwH7wc8mIM4hZw_yczY', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 11:20:09.388', '2025-07-10 11:20:09.388756', '2025-07-10 11:20:12.433451', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (154, 10, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJhZG1pbiIsImVtYWlsIjoiYWRtaW5AcGxhdGZvcm0uY29tIiwiaWF0IjoxNzUyMTIxMjI4LCJleHAiOjE3NTIyMDc2Mjh9.zxj5VdwxgL8WzLBrWarPQWQI608btTN4ul0zeMivhTw', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-11 11:20:28.748', '2025-07-10 11:20:28.749092', '2025-07-10 11:20:28.749092', true);
@@ -2903,7 +2713,6 @@ INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (168, 13, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTMsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJCdWRpQGdtYWlsLmNvbSIsImlhdCI6MTc1MjIzOTkwNSwiZXhwIjoxNzUyMzI2MzA1fQ.q58gOcOwYqhq2K3bfDtMdAan-8-abUEwu5jWB4Fttj0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 20:18:25.531', '2025-07-11 20:18:25.532685', '2025-07-11 20:19:19.362985', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (167, 18, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTgsInJvbGUiOiJzaXN3YSIsImVtYWlsIjoibGludGFuZy5sYW5naXRhbkBnbWFpbC5jb20iLCJpYXQiOjE3NTIyMzk1ODUsImV4cCI6MTc1MjMyNTk4NX0.bIDgxCSxV3ZuAf_VmbJJ39jGRAU2Zls3vxgEwt1CBxs', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 20:13:05.666', '2025-07-11 20:13:05.667727', '2025-07-11 20:17:29.72536', false);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (169, 10, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJhZG1pbiIsImVtYWlsIjoiYWRtaW5AcGxhdGZvcm0uY29tIiwiaWF0IjoxNzUyMjQwMDc4LCJleHAiOjE3NTIzMjY0Nzh9.7t0dfKxqe249FIhNGX8z_OlZdujcEAdFB0UyBeIJmTw', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 20:21:18.778', '2025-07-11 20:21:18.779811', '2025-07-11 20:21:18.779811', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (185, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjI5MDc5NywiZXhwIjoxNzUyMzc3MTk3fQ.DI76UgcO67OWhFdYYgUmEYOOMrxRvSP5gmd0wf2j0P0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-13 10:26:37.111', '2025-07-12 10:26:37.112945', '2025-07-12 10:26:37.112945', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (170, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjI0NTU1MiwiZXhwIjoxNzUyMzMxOTUyfQ.7b-XIra8sOQNFerUtNh4YLOPT_As7yWD175NGcHE700', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 21:52:32.995', '2025-07-11 21:52:33.000773', '2025-07-11 22:10:36.134831', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (171, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjI0OTEyMCwiZXhwIjoxNzUyMzM1NTIwfQ.coYZ7wvqCZ0Ixm8pFxZ2XTAsiAdfXpE2nNQYDTsdZ_k', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 22:52:00.136', '2025-07-11 22:52:00.137879', '2025-07-11 22:52:00.137879', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (172, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjI0OTQzNCwiZXhwIjoxNzUyMzM1ODM0fQ.hsJQsoS_eLDSCfGMZOfPDoXV-PVQY07Rvmw3En0enT4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-12 22:57:14.212', '2025-07-11 22:57:14.213252', '2025-07-11 22:57:14.213252', true);
@@ -2952,63 +2761,53 @@ INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (216, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjM1MDM3MywiZXhwIjoxNzUyNDM2NzczfQ.CjPN25Ukoz5eY3gAuKjFhyTiPUeluzkFiNPSBOAtcQM', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 02:59:33.927', '2025-07-13 02:59:33.927739', '2025-07-13 02:59:33.927739', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (217, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjM1MDc1NSwiZXhwIjoxNzUyNDM3MTU1fQ.ZMZo6v-0UtdfKy14MOYuF3b5IT_l2K01UIQvCstAgwU', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 03:05:55.84', '2025-07-13 03:05:55.846819', '2025-07-13 03:05:55.846819', true);
 INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (218, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjM1MDk4MiwiZXhwIjoxNzUyNDM3MzgyfQ.EAazJaM6PYceCnSSKnw8k5A9mMJIK1Gxjra1Vua2L24', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 03:09:42.326', '2025-07-13 03:09:42.331158', '2025-07-13 03:09:42.331158', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (219, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjM4Nzk0MiwiZXhwIjoxNzUyNDc0MzQyfQ.aSLY06naHNCtso7fSnwcQUKEGPVkvA7Xf90-oK9NvCo', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 13:25:42.785', '2025-07-13 13:25:42.786748', '2025-07-13 13:26:03.63691', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (220, 18, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTgsInJvbGUiOiJzaXN3YSIsImVtYWlsIjoibGludGFuZy5sYW5naXRhbkBnbWFpbC5jb20iLCJpYXQiOjE3NTIzODc5NzksImV4cCI6MTc1MjQ3NDM3OX0.6U7qvpZ35ekm8vpy5Z8Lpbc1ned4LiZ1ZhTBK123Lh0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 13:26:19.377', '2025-07-13 13:26:19.379075', '2025-07-13 13:29:34.336234', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (221, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjM4ODE5MCwiZXhwIjoxNzUyNDc0NTkwfQ.a5dyhRZJEA4Ga0th7eaa-gRc2hWNwAVIECxjiJXNdrw', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-14 13:29:50.51', '2025-07-13 13:29:50.511232', '2025-07-13 13:29:50.511232', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (222, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1MzM1MiwiZXhwIjoxNzUyNTM5NzUyfQ.K5m0xHR3NnKu_u5lsAHhoBlcnj5joudUnLupILtGQh4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 07:35:52.208', '2025-07-14 07:35:52.21038', '2025-07-14 08:06:20.39431', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (223, 13, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTMsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJCdWRpQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1NTE5NiwiZXhwIjoxNzUyNTQxNTk2fQ.rP2Id05w_HWVHgHzxWem5dQgyQ-p_xIoNxRYAqhHc5U', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 08:06:36.576', '2025-07-14 08:06:36.577215', '2025-07-14 08:27:23.450458', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (224, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1NjQ1NywiZXhwIjoxNzUyNTQyODU3fQ.-uFw6j_RMNzlq7stMGNkWn8xAIqBe4NpsuL-_DqE0HM', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 08:27:37.38', '2025-07-14 08:27:37.381144', '2025-07-14 08:27:37.381144', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (225, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1NzI3NywiZXhwIjoxNzUyNTQzNjc3fQ.CReX4cWlCAUZAm91TGzertSMXUSorLs7u0OqaqexXb4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 08:41:17.401', '2025-07-14 08:41:17.401843', '2025-07-14 08:41:17.401843', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (226, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1ODg1NCwiZXhwIjoxNzUyNTQ1MjU0fQ.rMs4mmaXJKz-dglrpXMgtk_MGrKW924rdv6PM55k9VI', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:07:34.74', '2025-07-14 09:07:34.741684', '2025-07-14 09:21:52.631557', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (227, 10, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJhZG1pbiIsImVtYWlsIjoiYWRtaW5AcGxhdGZvcm0uY29tIiwiaWF0IjoxNzUyNDU5NzM2LCJleHAiOjE3NTI1NDYxMzZ9.I0UEQS_j3-8-LJn7fhbvCaf0muG3ZvjHze5tzUlX0Wc', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:22:16.061', '2025-07-14 09:22:16.062599', '2025-07-14 09:22:16.062599', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (228, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ1OTg0NywiZXhwIjoxNzUyNTQ2MjQ3fQ.51b44qIonsprip2JEbReV21eggta9WwwSN6d-I0ePZI', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:24:07.952', '2025-07-14 09:24:07.953164', '2025-07-14 09:24:07.953164', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (229, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MDAyOSwiZXhwIjoxNzUyNTQ2NDI5fQ.8ohEGX_S8rBSNZrM9JaAKINsi7NMkPmwI7dnlXk0j-g', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:27:09.933', '2025-07-14 09:27:09.940214', '2025-07-14 09:27:09.940214', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (230, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MDMyNSwiZXhwIjoxNzUyNTQ2NzI1fQ.uYlB0c3ATlcoDVtqXfKrO3k_dG0FlU17mxgULj9On4w', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:32:05.996', '2025-07-14 09:32:05.998276', '2025-07-14 09:32:05.998276', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (231, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MTExNywiZXhwIjoxNzUyNTQ3NTE3fQ.4XhWy9HLiZ8x8Gxwu4HhqGkGo5qxmzo7UnMArhR5cy0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:45:17.481', '2025-07-14 09:45:17.483462', '2025-07-14 09:45:17.483462', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (232, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MTM1NywiZXhwIjoxNzUyNTQ3NzU3fQ.SGV27RMAI33DGjhMT3s03dMtiPAc2pX450qaOkrM9VU', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 09:49:17.445', '2025-07-14 09:49:17.454035', '2025-07-14 09:49:17.454035', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (233, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MjQyMCwiZXhwIjoxNzUyNTQ4ODIwfQ.B-VsQuF2nnzQNKe6rg1ZeePhA8sjRtysxVdcpvhuYOo', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:07:00.445', '2025-07-14 10:07:00.445737', '2025-07-14 10:07:00.445737', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (234, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MzAyNiwiZXhwIjoxNzUyNTQ5NDI2fQ.Pm6OV3t9EYb4I7hIWzA3VeFwDMXupgQ5MCtwiV-lIZI', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:17:06.056', '2025-07-14 10:17:06.06012', '2025-07-14 10:17:36.831307', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (235, 10, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJhZG1pbiIsImVtYWlsIjoiYWRtaW5AcGxhdGZvcm0uY29tIiwiaWF0IjoxNzUyNDYzMDY4LCJleHAiOjE3NTI1NDk0Njh9.Lnreq6q5P0vCzAKVZfxKBQUOVXepJ6_l76WIbBWK8NI', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:17:48.237', '2025-07-14 10:17:48.240761', '2025-07-14 10:17:48.240761', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (236, 10, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJhZG1pbiIsImVtYWlsIjoiYWRtaW5AcGxhdGZvcm0uY29tIiwiaWF0IjoxNzUyNDYzNzI4LCJleHAiOjE3NTI1NTAxMjh9.xQwsLtCcrRS3rsY5__JCoEL7SqGa-7MgLby8sbWJuog', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:28:48.06', '2025-07-14 10:28:48.06376', '2025-07-14 10:28:48.06376', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (237, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2Mzc5NSwiZXhwIjoxNzUyNTUwMTk1fQ.MHNW8CFaU0orVZrh2yn18ZjgNS3L3GO9wEyKNfOOIas', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:29:55.456', '2025-07-14 10:29:55.457822', '2025-07-14 10:29:55.457822', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (238, 13, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTMsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJCdWRpQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2MzgzNCwiZXhwIjoxNzUyNTUwMjM0fQ.CqDD1OOuYD8VsuZKyDmHnfaFkPfE21ZWpFBbGCkeZb0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:30:34.419', '2025-07-14 10:30:34.420732', '2025-07-14 10:30:34.420732', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (239, 13, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTMsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJCdWRpQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2Mzk0OSwiZXhwIjoxNzUyNTUwMzQ5fQ.Ta_BVB1QXN95G4X5soOcR07DgXJ_CgbLX29ofgEkMmk', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:32:29.331', '2025-07-14 10:32:29.332745', '2025-07-14 10:37:07.258983', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (240, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjQ2NDIzOCwiZXhwIjoxNzUyNTUwNjM4fQ.yoLpwLItQNyvhSw5ylJPiXJ3cFWR8M5-MA3avyAwvqk', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 10:37:18.683', '2025-07-14 10:37:18.683712', '2025-07-14 10:37:18.683712', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (241, 7, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Nywicm9sZSI6Im9yYW5ndHVhIiwiZW1haWwiOiJ0ZWpvQGdtYWlsLmNvbSIsImlhdCI6MTc1MjY3NTE1OCwiZXhwIjoxNzUyNzYxNTU4fQ.qmLpLKRSZrDNafl3G9RWZYXmuY4t8WZn9nUBhVrjdqA', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 21:12:38.921', '2025-07-16 21:12:38.925302', '2025-07-16 21:15:24.724545', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (242, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjY3OTAzMCwiZXhwIjoxNzUyNzY1NDMwfQ.QXJz7Npsd6q4NnwqQ9CxMF6zQPm5W-jbv6i2KuuB-m0', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 22:17:10.384', '2025-07-16 22:17:10.384958', '2025-07-16 22:19:55.29431', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (243, 7, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Nywicm9sZSI6Im9yYW5ndHVhIiwiZW1haWwiOiJ0ZWpvQGdtYWlsLmNvbSIsImlhdCI6MTc1MjY4MTY0NSwiZXhwIjoxNzUyNzY4MDQ1fQ.0rdT8vaBcJ7dnEjV2BkDvbUnT7n1lNJiGuDU1EWEIjg', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 23:00:45.483', '2025-07-16 23:00:45.484286', '2025-07-16 23:01:12.915897', false);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (244, 13, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTMsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJCdWRpQGdtYWlsLmNvbSIsImlhdCI6MTc1MjY4MTY4OSwiZXhwIjoxNzUyNzY4MDg5fQ.q82So_En6p4Bj6HFNvk6X1kP8APjjZBY7hINalq69pI', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 23:01:29.31', '2025-07-16 23:01:29.311178', '2025-07-16 23:01:29.311178', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (245, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjczMDA4NCwiZXhwIjoxNzUzMzM0ODg0fQ.5xoNM361OgYIa_GVFkjt1DlOjRSLLHo3s5fHOR3zTmw', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-18 12:28:04.015', '2025-07-17 12:28:04.019989', '2025-07-17 12:29:04.381565', true);
-INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (246, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1Mjc3MTMxMSwiZXhwIjoxNzUyODU3NzExfQ.5yFgOnuIQ-nt1XP3wgJa4vaAz5bHI2Bh-iPteMqEFL4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-18 23:55:11.979', '2025-07-17 23:55:11.981023', '2025-07-17 23:55:11.981023', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (219, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyNDc2NzY4LCJleHAiOjE3NTI1NjMxNjh9.CfXW94d0T4ryFQYcO92Bj6ovbP4BFKDMel59P8QklQA', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 14:06:08.46', '2025-07-14 14:06:08.461813', '2025-07-14 14:06:56.229108', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (220, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTI0NzY4MjcsImV4cCI6MTc1MjU2MzIyN30.puuUIWhf_0PDXNPCVkgKk01Fd8o6Tq4aqkotpbWIb0g', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-15 14:07:07.716', '2025-07-14 14:07:07.718099', '2025-07-14 14:07:07.718099', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (221, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyNjczMDY5LCJleHAiOjE3NTI3NTk0Njl9.PlMkQkGdCSVwJFngXVE6b_lRxD8IRD1_pZeXULnJpO4', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 20:37:49.842', '2025-07-16 20:37:49.844424', '2025-07-16 20:51:17.463883', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (222, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTI2NzM5MDksImV4cCI6MTc1Mjc2MDMwOX0.ddxTMUDWra0aPtoQ1zrbLMszvxgm0PaGplA-tSP8B4k', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-17 20:51:49.093', '2025-07-16 20:51:49.093715', '2025-07-16 20:52:47.467409', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (225, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODA0ODMxLCJleHAiOjE3NTI4OTEyMzF9.jBHcEVVf3EIbMMmdGNaQu9DifUrlGyncomCIqkrRTPo', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 09:13:51.505', '2025-07-18 09:13:51.51459', '2025-07-18 13:41:58.528494', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (223, 1, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJkaW1hc3Jpemt5ODIyQGdtYWlsLmNvbSIsImlhdCI6MTc1MjcxNTU4MywiZXhwIjoxNzUyODAxOTgzfQ.SXi2xAvZk_ET9opcpoyUaSDBLvVMTyWE3kfJBDuTAx8', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-18 08:26:23.062', '2025-07-17 08:26:23.066805', '2025-07-17 08:27:29.319018', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (226, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTI4MjA5NDAsImV4cCI6MTc1MjkwNzM0MH0.sfJUrv_8T7y9uxZCaAljRHYGcG6Bj5whBy_32r7BNYU', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 13:42:20.843', '2025-07-18 13:42:20.847827', '2025-07-18 13:58:50.949436', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (224, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyNzgxNjY1LCJleHAiOjE3NTI4NjgwNjV9.AaEx7tcxad5J61NAVhWnXWnFiNJ4AfOkhHDZR6ffP7E', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 02:47:45.307', '2025-07-18 02:47:45.31078', '2025-07-18 08:50:36.199257', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (227, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODIxOTQ4LCJleHAiOjE3NTI5MDgzNDh9.ax4-Dbc14AwRf-79lbHucG6rYf2wYyHI96oJt1iFYjE', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 13:59:08.092', '2025-07-18 13:59:08.094359', '2025-07-18 14:20:27.310377', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (228, 14, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsInJvbGUiOiJndXJ1IiwiZW1haWwiOiJTaXRpLkFtaDEyM0BnbWFpbC5jb20iLCJpYXQiOjE3NTI4MjMyNDMsImV4cCI6MTc1MjkwOTY0M30.85FAU5Sat7iNqNUK04l8l5dBpiZWws6vJQp2Qx-49yQ', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 14:20:43.087', '2025-07-18 14:20:43.090162', '2025-07-18 14:21:25.366817', false);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (229, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODIzMzA0LCJleHAiOjE3NTI5MDk3MDR9.O3vH_I4L0hCtggXuitJvpr-pGa_qPTb6mQQ-QSTOExg', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 14:21:44.001', '2025-07-18 14:21:44.002774', '2025-07-18 14:21:44.002774', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (232, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODg4Mjg1LCJleHAiOjE3NTI5NzQ2ODV9.ug_Y2POoAarEXwmgaIeB_hCmaLDE1eBbJXEY9V3m1Lk', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', '2025-07-20 08:24:45.9', '2025-07-19 08:24:45.906243', '2025-07-19 09:19:33.10955', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (231, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODQ4NzY2LCJleHAiOjE3NTI5MzUxNjZ9.RC9_en-UcIVB20_F_FIBDQjtMWT2uGYgRYj5umLHubs', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 21:26:06.378', '2025-07-18 21:26:06.385147', '2025-07-18 21:56:28.459834', true);
+INSERT INTO public.user_sessions (id, user_id, session_token, refresh_token, ip_address, user_agent, expires_at, created_at, last_activity, is_active) VALUES (230, 2, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6InNpc3dhIiwiZW1haWwiOiJ0aW9AZ21haWwuY29tIiwiaWF0IjoxNzUyODQ0Mzk3LCJleHAiOjE3NTI5MzA3OTd9.aPeolgJhDlHKha5978hZSryQOENMXI-eGyInKErZnkU', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0', '2025-07-19 20:13:17.121', '2025-07-18 20:13:17.124201', '2025-07-18 21:17:34.721397', true);
 
 
 --
 -- Data for Name: user_streaks; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.user_streaks (id, user_id, current_streak, longest_streak, last_activity_date, streak_start_date, created_at, updated_at, last_reset_date, is_active) VALUES (2, 18, 0, 0, NULL, NULL, '2025-07-12 18:05:49.998576+07', '2025-07-12 18:05:49.998576+07', '2025-07-12', false);
+INSERT INTO public.user_streaks (id, user_id, current_streak, longest_streak, last_activity_date, streak_start_date, created_at, updated_at, last_reset_date, is_active) VALUES (1, 1, 1, 8, '2025-07-13', '2025-07-12', '2025-07-12 08:54:42.734351+07', '2025-07-12 08:54:42.734351+07', '2025-07-12', false);
 
 
 --
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (7, 'tejo@gmail.com', '$2b$10$iDdH/7Jao9MUlVlw36jnGufSoslRYnklQXZS24MWh/ntntqteW8tO', 'orangtua', '2025-05-11 02:24:15.275135+07', '2025-05-11 02:24:24.716664+07', NULL, false, NULL, NULL, NULL, NULL, NULL, false, NULL, false, NULL);
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (4, 'ayu@gmail.com', '$2b$10$2rqlr.KsFu.7pe7qVuiwu.QTKmyefcVLc9mTFZpy7MiM0WI/0X1hC', 'orangtua', '2025-05-09 11:21:33.881021+07', '2025-06-23 21:28:40.157746+07', NULL, true, 'FY5HEI35EN6XONJYM5TFIW2AFE3HI2LZKRJHQZ2QMVNUCTK6EZGA', NULL, NULL, NULL, NULL, false, NULL, false, NULL);
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (12, 'sakti@gmail.com', '$2b$10$h/MpsaPMYm38ZJDNi9My6OVY2t3VJHM..KeqNOvEVbiFlUXMCzu2G', 'siswa', '2025-06-26 07:46:52.905692+07', '2025-06-26 07:48:28.610203+07', NULL, true, 'NRLVO2JMEUXWC2CKNVAS6UCGIJEDIJCSGIVFA4SEOIUGWXTJEVMA', NULL, NULL, NULL, NULL, false, NULL, false, NULL);
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (5, 'ros@gmail.com', '$2b$10$Uc4yBIVgBocnkP6W/3ituel4Z.8ypaJeKn.avWfOc8.dl/ZfCF5Py', 'guru', '2025-05-09 11:44:14.150172+07', '2025-06-26 22:39:25.178667+07', NULL, true, 'NVFXCTKGLBGEEMDDIVBXEQDIFFGES6KWGQ6HOMTHIIYUA4COPV3A', NULL, NULL, NULL, NULL, false, NULL, false, NULL);
 INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (6, 'nafis@gmail.com', '$2b$10$Q4Vuf/yYl6SOisWi5fP7yu32E1PTfO0UNnzp87aKKKGBi/Vg03AyK', 'siswa', '2025-05-11 02:21:14.196755+07', '2025-06-16 07:55:37.582099+07', NULL, false, NULL, NULL, NULL, NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (14, 'Siti.Amh123@gmail.com', '$2b$10$uXPVa/lQuEbZs3RR8naQReGdN2sfNeuxoROdu/qK1INRLVC6JvXxK', 'guru', '2025-07-06 23:10:42.212824+07', '2025-07-10 11:29:24.782511+07', NULL, true, 'INZE6UTSFQUWCR3LKQXT6QZONVNE6KSCLZYVONKDN4VEM3J2OBVQ', NULL, '2025-07-10 07:39:48.861883', NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (1, 'dimasrizky822@gmail.com', '$2b$10$3UaVMWehk2G7irXhlLw7I.9xnDXqIZqBzKRAhoTpr9IG/s73qW4hS', 'siswa', '2025-05-07 20:48:22.124923+07', '2025-07-17 23:55:11.975198+07', 'uploads/profile-pictures/profile_1_1750688863556.jpeg', true, 'JRKXEOSBJJFWINJPIA4CSQROIEXE2T3ZMV2X23JGMRYSMWRDMFYQ', NULL, '2025-07-17 23:55:11.975198', '106155532212043018420', 'google', true, 'https://lh3.googleusercontent.com/a/ACg8ocKOfZ_BLiD5Yh9w-fZP-DA6-bFUg-5oRiCpKT4Q4hNtJ2UwjtgV=s96-c', false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (2, 'tio@gmail.com', '$2b$10$7LULZ7RBZftd/M9t9zyJdu7ywx8qifCYEqMzuGp2l/oJ9Okqzm4fu', 'siswa', '2025-05-08 15:12:19.104442+07', '2025-07-11 17:55:39.242583+07', 'uploads/profile-pictures/profile_2_1751815244629.png', true, 'M5CUUUZ6HFQV26B6FFTXGOJMMRPHINCWHY4TSRKIJQYUWN3DKRFQ', NULL, '2025-07-10 07:41:12.962865', NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (18, 'lintang.langitan@gmail.com', '$2b$10$XP7mHnnqiG4Qswejk.MnX.YSuUfmivNMA1SXLtfrh5cPy3yXn033O', 'siswa', '2025-07-11 20:12:02.683229+07', '2025-07-13 13:26:19.370713+07', 'uploads/profile-pictures/profile_18_1752239765046.png', true, 'EVKFWLZXMJUE2RR6FJCUAVL5GZDH2233GZFTS22JFEZESYTUMU2A', NULL, '2025-07-13 13:26:19.370713', NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (10, 'admin@platform.com', '$2b$10$Xfm.yJfMM9uY07efA8Zf9enI7JONqBVh89EtDe34pdhxuJ33SdHWu', 'admin', '2025-06-18 10:14:51.162478+07', '2025-07-14 10:28:48.059349+07', 'uploads/profile-pictures/profile_10_1750691161410.png', true, 'NN2EG4CAEE2CQXLVGF6WGYLGKJGCYWRWF4RXC63OHZRHAOB4LJKA', NULL, '2025-07-14 10:28:48.059349', NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (7, 'tejo@gmail.com', '$2b$10$iDdH/7Jao9MUlVlw36jnGufSoslRYnklQXZS24MWh/ntntqteW8tO', 'orangtua', '2025-05-11 02:24:15.275135+07', '2025-07-16 23:00:45.476151+07', NULL, true, 'NRKWYUJJPJ2DUTBGHBHEMUKLOZAX23DPPVPESU2ELURWCZ25FBJA', NULL, '2025-07-16 23:00:45.476151', NULL, NULL, false, NULL, false, NULL);
-INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (13, 'Budi@gmail.com', '$2b$10$LT.UfepEsjDdLsqOOiTMpe9t1./k7SWsbwkP1lDcxX4p4rbVBIoBu', 'guru', '2025-06-26 22:46:31.163405+07', '2025-07-16 23:01:29.305443+07', NULL, true, 'HBSSG2CUKVXCU6JPGVIFU5TVHZWHKILHLJHGKZSUFFDESYKCMJ4A', NULL, '2025-07-16 23:01:29.305443', NULL, NULL, false, NULL, false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (18, 'lintang.langitan@gmail.com', '$2b$10$XP7mHnnqiG4Qswejk.MnX.YSuUfmivNMA1SXLtfrh5cPy3yXn033O', 'siswa', '2025-07-11 20:12:02.683229+07', '2025-07-12 18:05:47.506704+07', 'uploads/profile-pictures/profile_18_1752239765046.png', true, 'EVKFWLZXMJUE2RR6FJCUAVL5GZDH2233GZFTS22JFEZESYTUMU2A', NULL, '2025-07-12 18:05:47.506704', NULL, NULL, false, NULL, false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (10, 'admin@platform.com', '$2b$10$Xfm.yJfMM9uY07efA8Zf9enI7JONqBVh89EtDe34pdhxuJ33SdHWu', 'admin', '2025-06-18 10:14:51.162478+07', '2025-07-11 20:21:18.774647+07', 'uploads/profile-pictures/profile_10_1750691161410.png', true, 'NN2EG4CAEE2CQXLVGF6WGYLGKJGCYWRWF4RXC63OHZRHAOB4LJKA', NULL, '2025-07-11 20:21:18.774647', NULL, NULL, false, NULL, false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (13, 'Budi@gmail.com', '$2b$10$LT.UfepEsjDdLsqOOiTMpe9t1./k7SWsbwkP1lDcxX4p4rbVBIoBu', 'guru', '2025-06-26 22:46:31.163405+07', '2025-07-12 23:14:07.719792+07', NULL, true, 'HBSSG2CUKVXCU6JPGVIFU5TVHZWHKILHLJHGKZSUFFDESYKCMJ4A', NULL, '2025-07-12 23:14:07.719792', NULL, NULL, false, NULL, false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (14, 'Siti.Amh123@gmail.com', '$2b$10$uXPVa/lQuEbZs3RR8naQReGdN2sfNeuxoROdu/qK1INRLVC6JvXxK', 'guru', '2025-07-06 23:10:42.212824+07', '2025-07-18 14:20:43.075153+07', NULL, true, 'INZE6UTSFQUWCR3LKQXT6QZONVNE6KSCLZYVONKDN4VEM3J2OBVQ', NULL, '2025-07-18 14:20:43.075153', NULL, NULL, false, NULL, false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (1, 'dimasrizky822@gmail.com', '$2b$10$3UaVMWehk2G7irXhlLw7I.9xnDXqIZqBzKRAhoTpr9IG/s73qW4hS', 'siswa', '2025-05-07 20:48:22.124923+07', '2025-07-17 08:26:23.034203+07', 'uploads/profile-pictures/profile_1_1750688863556.jpeg', true, 'JRKXEOSBJJFWINJPIA4CSQROIEXE2T3ZMV2X23JGMRYSMWRDMFYQ', NULL, '2025-07-17 08:26:23.034203', '106155532212043018420', 'google', true, 'https://lh3.googleusercontent.com/a/ACg8ocKOfZ_BLiD5Yh9w-fZP-DA6-bFUg-5oRiCpKT4Q4hNtJ2UwjtgV=s96-c', false, NULL);
+INSERT INTO public.users (id, email, password, role, created_at, last_login, profile_picture, is_2fa_enabled, two_factor_secret, backup_codes, last_2fa_verify, google_id, oauth_provider, is_email_verified, avatar_url, role_selected, role_confirmation_date) VALUES (2, 'tio@gmail.com', '$2b$10$7LULZ7RBZftd/M9t9zyJdu7ywx8qifCYEqMzuGp2l/oJ9Okqzm4fu', 'siswa', '2025-05-08 15:12:19.104442+07', '2025-07-19 08:24:45.886299+07', 'uploads/profile-pictures/profile_2_1751815244629.png', true, 'M5CUUUZ6HFQV26B6FFTXGOJMMRPHINCWHY4TSRKIJQYUWN3DKRFQ', NULL, '2025-07-19 08:24:45.886299', NULL, NULL, false, NULL, false, NULL);
 
 
 --
--- Data for Name: weekly_rankings; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: weekly_leaderboard; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.weekly_leaderboard (id, user_id, week_start_date, total_xp, games_played, missions_completed, rank_position, created_at, updated_at) VALUES (1, 1, '2025-07-05', 252, 3, 0, NULL, '2025-07-12 18:00:22.321796+07', '2025-07-12 18:04:00.816758+07');
+INSERT INTO public.weekly_leaderboard (id, user_id, week_start_date, total_xp, games_played, missions_completed, rank_position, created_at, updated_at) VALUES (4, 1, '2025-07-12', 476, 5, 0, NULL, '2025-07-13 00:32:56.575673+07', '2025-07-13 01:46:10.97505+07');
 
 
 --
@@ -3036,7 +2835,7 @@ SELECT pg_catalog.setval('public.admin_id_seq', 4, true);
 -- Name: assignments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.assignments_id_seq', 2, true);
+SELECT pg_catalog.setval('public.assignments_id_seq', 3, true);
 
 
 --
@@ -3078,7 +2877,7 @@ SELECT pg_catalog.setval('public.course_ratings_id_seq', 1, false);
 -- Name: courses_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.courses_id_seq', 7, true);
+SELECT pg_catalog.setval('public.courses_id_seq', 5, true);
 
 
 --
@@ -3099,7 +2898,7 @@ SELECT pg_catalog.setval('public.daily_quiz_completions_id_seq', 8, true);
 -- Name: enrollments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.enrollments_id_seq', 5, true);
+SELECT pg_catalog.setval('public.enrollments_id_seq', 1, true);
 
 
 --
@@ -3138,10 +2937,17 @@ SELECT pg_catalog.setval('public.lesson_progress_id_seq', 1, false);
 
 
 --
+-- Name: lessons_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lessons_id_seq', 1, false);
+
+
+--
 -- Name: login_attempts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.login_attempts_id_seq', 573, true);
+SELECT pg_catalog.setval('public.login_attempts_id_seq', 545, true);
 
 
 --
@@ -3162,7 +2968,7 @@ SELECT pg_catalog.setval('public.modules_id_seq', 4, true);
 -- Name: orangtua_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.orangtua_id_seq', 3, true);
+SELECT pg_catalog.setval('public.orangtua_id_seq', 7, true);
 
 
 --
@@ -3176,7 +2982,7 @@ SELECT pg_catalog.setval('public.siswa_id_seq', 14, true);
 -- Name: submissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.submissions_id_seq', 1, false);
+SELECT pg_catalog.setval('public.submissions_id_seq', 1, true);
 
 
 --
@@ -3190,7 +2996,7 @@ SELECT pg_catalog.setval('public.teacher_profiles_id_seq', 1, false);
 -- Name: temp_2fa_tokens_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.temp_2fa_tokens_id_seq', 35, true);
+SELECT pg_catalog.setval('public.temp_2fa_tokens_id_seq', 33, true);
 
 
 --
@@ -3211,7 +3017,7 @@ SELECT pg_catalog.setval('public.user_activity_log_id_seq', 1, false);
 -- Name: user_daily_missions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.user_daily_missions_id_seq', 1, false);
+SELECT pg_catalog.setval('public.user_daily_missions_id_seq', 22, true);
 
 
 --
@@ -3222,38 +3028,31 @@ SELECT pg_catalog.setval('public.user_game_progress_id_seq', 8, true);
 
 
 --
--- Name: user_levels_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
---
-
-SELECT pg_catalog.setval('public.user_levels_id_seq', 1, false);
-
-
---
 -- Name: user_sessions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.user_sessions_id_seq', 246, true);
+SELECT pg_catalog.setval('public.user_sessions_id_seq', 232, true);
 
 
 --
 -- Name: user_streaks_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.user_streaks_id_seq', 1, false);
+SELECT pg_catalog.setval('public.user_streaks_id_seq', 2, true);
 
 
 --
 -- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.users_id_seq', 18, true);
+SELECT pg_catalog.setval('public.users_id_seq', 22, true);
 
 
 --
--- Name: weekly_rankings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+-- Name: weekly_leaderboard_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.weekly_rankings_id_seq', 1, false);
+SELECT pg_catalog.setval('public.weekly_leaderboard_id_seq', 8, true);
 
 
 --
@@ -3401,27 +3200,11 @@ ALTER TABLE ONLY public.game_progress
 
 
 --
--- Name: game_progress game_progress_user_id_game_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.game_progress
-    ADD CONSTRAINT game_progress_user_id_game_id_key UNIQUE (user_id, game_id);
-
-
---
 -- Name: game_sessions game_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.game_sessions
     ADD CONSTRAINT game_sessions_pkey PRIMARY KEY (id);
-
-
---
--- Name: games games_game_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.games
-    ADD CONSTRAINT games_game_id_key UNIQUE (game_id);
 
 
 --
@@ -3454,6 +3237,14 @@ ALTER TABLE ONLY public.guru
 
 ALTER TABLE ONLY public.lesson_progress
     ADD CONSTRAINT lesson_progress_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lessons lessons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lessons
+    ADD CONSTRAINT lessons_pkey PRIMARY KEY (id);
 
 
 --
@@ -3545,6 +3336,14 @@ ALTER TABLE ONLY public.temp_2fa_tokens
 
 
 --
+-- Name: submissions unique_assignment_student; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT unique_assignment_student UNIQUE (assignment_id, student_id);
+
+
+--
 -- Name: certificates unique_certificate; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3577,6 +3376,14 @@ ALTER TABLE ONLY public.enrollments
 
 
 --
+-- Name: lessons unique_lesson_order; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lessons
+    ADD CONSTRAINT unique_lesson_order UNIQUE (module_id, order_index);
+
+
+--
 -- Name: lesson_progress unique_lesson_progress; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3601,11 +3408,11 @@ ALTER TABLE ONLY public.user_sessions
 
 
 --
--- Name: submissions unique_submission; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: game_progress unique_user_game; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT unique_submission UNIQUE (assignment_id, student_id);
+ALTER TABLE ONLY public.game_progress
+    ADD CONSTRAINT unique_user_game UNIQUE (user_id, game_id);
 
 
 --
@@ -3665,22 +3472,6 @@ ALTER TABLE ONLY public.user_game_progress
 
 
 --
--- Name: user_levels user_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_levels
-    ADD CONSTRAINT user_levels_pkey PRIMARY KEY (id);
-
-
---
--- Name: user_levels user_levels_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_levels
-    ADD CONSTRAINT user_levels_user_id_key UNIQUE (user_id);
-
-
---
 -- Name: user_sessions user_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3721,19 +3512,54 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: weekly_rankings weekly_rankings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: weekly_leaderboard weekly_leaderboard_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.weekly_rankings
-    ADD CONSTRAINT weekly_rankings_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.weekly_leaderboard
+    ADD CONSTRAINT weekly_leaderboard_pkey PRIMARY KEY (id);
 
 
 --
--- Name: weekly_rankings weekly_rankings_user_id_week_start_date_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: weekly_leaderboard weekly_leaderboard_user_id_week_start_date_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.weekly_rankings
-    ADD CONSTRAINT weekly_rankings_user_id_week_start_date_key UNIQUE (user_id, week_start_date);
+ALTER TABLE ONLY public.weekly_leaderboard
+    ADD CONSTRAINT weekly_leaderboard_user_id_week_start_date_key UNIQUE (user_id, week_start_date);
+
+
+--
+-- Name: idx_assignments_class; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_class ON public.assignments USING btree (class_id);
+
+
+--
+-- Name: idx_assignments_teacher; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_teacher ON public.assignments USING btree (teacher_id);
+
+
+--
+-- Name: idx_class_members_class; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_class_members_class ON public.class_members USING btree (class_id);
+
+
+--
+-- Name: idx_class_members_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_class_members_user ON public.class_members USING btree (user_id);
+
+
+--
+-- Name: idx_classes_teacher; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_classes_teacher ON public.classes USING btree (teacher_id);
 
 
 --
@@ -3786,10 +3612,10 @@ CREATE INDEX idx_enrollments_user ON public.enrollments USING btree (user_id);
 
 
 --
--- Name: idx_game_progress_user_game; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_game_sessions_date; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_game_progress_user_game ON public.game_progress USING btree (user_id, game_id);
+CREATE INDEX idx_game_sessions_date ON public.game_sessions USING btree (created_at);
 
 
 --
@@ -3811,6 +3637,13 @@ CREATE INDEX idx_lesson_progress_course ON public.lesson_progress USING btree (c
 --
 
 CREATE INDEX idx_lesson_progress_user ON public.lesson_progress USING btree (user_id);
+
+
+--
+-- Name: idx_lessons_module; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_lessons_module ON public.lessons USING btree (module_id);
 
 
 --
@@ -3842,6 +3675,13 @@ CREATE INDEX idx_submissions_assignment ON public.submissions USING btree (assig
 
 
 --
+-- Name: idx_submissions_assignment_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_submissions_assignment_id ON public.submissions USING btree (assignment_id);
+
+
+--
 -- Name: idx_submissions_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3853,6 +3693,13 @@ CREATE INDEX idx_submissions_status ON public.submissions USING btree (status);
 --
 
 CREATE INDEX idx_submissions_student ON public.submissions USING btree (student_id);
+
+
+--
+-- Name: idx_submissions_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_submissions_student_id ON public.submissions USING btree (student_id);
 
 
 --
@@ -3870,13 +3717,6 @@ CREATE INDEX idx_user_activity_log_user_date ON public.user_activity_log USING b
 
 
 --
--- Name: idx_user_daily_missions_user_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_user_daily_missions_user_date ON public.user_daily_missions USING btree (user_id, mission_date);
-
-
---
 -- Name: idx_user_sessions_expires; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3888,13 +3728,6 @@ CREATE INDEX idx_user_sessions_expires ON public.user_sessions USING btree (expi
 --
 
 CREATE INDEX idx_user_sessions_user_active ON public.user_sessions USING btree (user_id, is_active);
-
-
---
--- Name: idx_user_streaks_user_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_user_streaks_user_id ON public.user_streaks USING btree (user_id);
 
 
 --
@@ -3923,13 +3756,6 @@ CREATE INDEX idx_users_google_id ON public.users USING btree (google_id);
 --
 
 CREATE INDEX idx_users_oauth_provider ON public.users USING btree (oauth_provider);
-
-
---
--- Name: idx_weekly_rankings_week_xp; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_weekly_rankings_week_xp ON public.weekly_rankings USING btree (week_start_date, weekly_xp DESC);
 
 
 --
@@ -3996,10 +3822,10 @@ CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON public.courses FOR EAC
 
 
 --
--- Name: game_progress update_game_progress_updated_at; Type: TRIGGER; Schema: public; Owner: -
+-- Name: lessons update_lessons_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER update_game_progress_updated_at BEFORE UPDATE ON public.game_progress FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER update_lessons_updated_at BEFORE UPDATE ON public.lessons FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -4014,27 +3840,6 @@ CREATE TRIGGER update_materials_updated_at BEFORE UPDATE ON public.materials FOR
 --
 
 CREATE TRIGGER update_modules_updated_at BEFORE UPDATE ON public.modules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: submissions update_submissions_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER update_submissions_updated_at BEFORE UPDATE ON public.submissions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: user_levels update_user_levels_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER update_user_levels_updated_at BEFORE UPDATE ON public.user_levels FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: user_streaks update_user_streaks_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER update_user_streaks_updated_at BEFORE UPDATE ON public.user_streaks FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -4166,6 +3971,22 @@ ALTER TABLE ONLY public.class_members
 
 
 --
+-- Name: submissions fk_submission_assignment; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_submission_assignment FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_submission_student; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_submission_student FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: classes fk_teacher; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4182,27 +4003,11 @@ ALTER TABLE ONLY public.temp_2fa_tokens
 
 
 --
--- Name: game_progress game_progress_game_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.game_progress
-    ADD CONSTRAINT game_progress_game_id_fkey FOREIGN KEY (game_id) REFERENCES public.games(game_id) ON DELETE CASCADE;
-
-
---
 -- Name: game_progress game_progress_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.game_progress
     ADD CONSTRAINT game_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
--- Name: game_sessions game_sessions_game_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.game_sessions
-    ADD CONSTRAINT game_sessions_game_id_fkey FOREIGN KEY (game_id) REFERENCES public.games(game_id) ON DELETE CASCADE;
 
 
 --
@@ -4230,6 +4035,14 @@ ALTER TABLE ONLY public.lesson_progress
 
 
 --
+-- Name: lesson_progress lesson_progress_lesson_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lesson_progress
+    ADD CONSTRAINT lesson_progress_lesson_id_fkey FOREIGN KEY (lesson_id) REFERENCES public.lessons(id);
+
+
+--
 -- Name: lesson_progress lesson_progress_module_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4243,6 +4056,14 @@ ALTER TABLE ONLY public.lesson_progress
 
 ALTER TABLE ONLY public.lesson_progress
     ADD CONSTRAINT lesson_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: lessons lessons_module_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lessons
+    ADD CONSTRAINT lessons_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
 
 
 --
@@ -4283,30 +4104,6 @@ ALTER TABLE ONLY public.orangtua
 
 ALTER TABLE ONLY public.siswa
     ADD CONSTRAINT siswa_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
--- Name: submissions submissions_assignment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_assignment_id_fkey FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
-
-
---
--- Name: submissions submissions_graded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_graded_by_fkey FOREIGN KEY (graded_by) REFERENCES public.users(id);
-
-
---
--- Name: submissions submissions_student_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.submissions
-    ADD CONSTRAINT submissions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -4366,14 +4163,6 @@ ALTER TABLE ONLY public.user_game_progress
 
 
 --
--- Name: user_levels user_levels_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.user_levels
-    ADD CONSTRAINT user_levels_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-
---
 -- Name: user_streaks user_streaks_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4382,11 +4171,11 @@ ALTER TABLE ONLY public.user_streaks
 
 
 --
--- Name: weekly_rankings weekly_rankings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: weekly_leaderboard weekly_leaderboard_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.weekly_rankings
-    ADD CONSTRAINT weekly_rankings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.weekly_leaderboard
+    ADD CONSTRAINT weekly_leaderboard_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
