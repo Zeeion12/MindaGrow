@@ -747,6 +747,56 @@ app.get('/api/test', authenticateToken, (req, res) => {
   });
 });
 
+// Get children data for parent dashboard
+app.get('/api/parent/children', authenticateToken, async (req, res) => {
+  try {
+    // Pastikan user adalah orangtua
+    if (req.user.role !== 'orangtua') {
+      return res.status(403).json({ message: 'Access denied. Only parents can access this endpoint.' });
+    }
+
+    // Ambil data orangtua berdasarkan user_id
+    const parentResult = await pool.query(
+      'SELECT nik FROM orangtua WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (parentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Parent data not found.' });
+    }
+
+    const parentNik = parentResult.rows[0].nik;
+
+    // Ambil data anak-anak berdasarkan NIK orangtua
+    const childrenResult = await pool.query(`
+      SELECT 
+        s.user_id,
+        s.nis,
+        s.nama_lengkap,
+        s.no_telepon,
+        'Belum ada kelas' as class,
+        'SD Negeri 1 Surakarta' as school
+      FROM siswa s
+      WHERE s.nik_orangtua = $1
+      ORDER BY s.nama_lengkap
+    `, [parentNik]);
+
+    const children = childrenResult.rows.map(child => ({
+      id: child.user_id,
+      name: child.nama_lengkap,
+      class: child.class,
+      school: child.school,
+      image: 'https://via.placeholder.com/50',
+      nis: child.nis
+    }));
+
+    res.json({ children });
+  } catch (error) {
+    console.error('Error fetching children data:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get user streak
 app.get('/api/games/streak', authenticateToken, async (req, res) => {
   const userId = req.user.id;

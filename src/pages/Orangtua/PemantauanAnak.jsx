@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/authContext';
+import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/layout/layoutParts/Header';
 import {
   RiBookOpenLine,
@@ -24,34 +24,35 @@ const PemantauanAnakPage = () => {
   const [filterActive, setFilterActive] = useState('all'); // all, active, completed
   const [sortBy, setSortBy] = useState('recent'); // recent, name, progress, score
 
+  // Ganti bagian useEffect untuk fetch data sebenarnya
   useEffect(() => {
     const fetchChildrenData = async () => {
       try {
         setLoading(true);
 
-        // Dalam implementasi sebenarnya, ini akan menjadi panggilan API
-        // const childrenResponse = await axios.get('/api/parents/children');
-        // setChildren(childrenResponse.data);
+        // Ambil token dari localStorage atau context
+        const token = localStorage.getItem('token');
+        
+        // Fetch data anak-anak dari API
+        const response = await fetch('/api/parent/children', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-        // Untuk demo, kita gunakan data dummy
-        const dummyChildren = [
-          { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', nis: '23523252', image: '/api/placeholder/50/50' },
-          { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', nis: '23523253', image: '/api/placeholder/50/50' }
-        ];
+        if (!response.ok) {
+          throw new Error('Failed to fetch children data');
+        }
 
-        setChildren(dummyChildren);
+        const data = await response.json();
+        setChildren(data.children);
 
         // Set anak pertama sebagai default yang dipilih
-        if (dummyChildren.length > 0 && !selectedChild) {
-          setSelectedChild(dummyChildren[0]);
+        if (data.children.length > 0 && !selectedChild) {
+          setSelectedChild(data.children[0]);
 
-          // Fetch data for selected child
-          // const [coursesRes, activitiesRes] = await Promise.all([
-          //   axios.get(`/api/parents/children/${dummyChildren[0].id}/courses`),
-          //   axios.get(`/api/parents/children/${dummyChildren[0].id}/activities`)
-          // ]);
-
-          // Dummy data untuk kursus anak
+          // Dummy data untuk kursus anak (sementara masih dummy)
           setCourses([
             {
               id: 1,
@@ -111,7 +112,7 @@ const PemantauanAnakPage = () => {
             },
           ]);
 
-          // Dummy data untuk aktivitas anak
+          // Dummy data untuk aktivitas anak (sementara masih dummy)
           setActivities([
             { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
             { id: 2, type: 'assignment_complete', course: 'Matematika - Aljabar', description: 'Mengumpulkan tugas Persamaan Kuadrat', score: 85, date: '1 hari lalu' },
@@ -126,6 +127,8 @@ const PemantauanAnakPage = () => {
       } catch (error) {
         console.error('Error fetching children data:', error);
         setLoading(false);
+        // Fallback ke data kosong atau tampilkan pesan error
+        alert('Gagal mengambil data anak. Silakan coba lagi.');
       }
     };
 
@@ -205,7 +208,6 @@ const PemantauanAnakPage = () => {
                 </div>
                 <div>
                   <p className="font-medium">{child.name}</p>
-                  <p className="text-xs text-gray-500">Kelas {child.class}</p>
                 </div>
               </div>
             ))}
@@ -222,7 +224,6 @@ const PemantauanAnakPage = () => {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">{selectedChild.name}</h2>
-                  <p className="text-gray-500">Kelas {selectedChild.class} - {selectedChild.school}</p>
                   <p className="text-gray-500">NIS: {selectedChild.nis}</p>
                 </div>
               </div>
@@ -279,7 +280,7 @@ const PemantauanAnakPage = () => {
 
             {/* Kursus */}
             <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-4">Kursus {filterActive === 'all' ? '' : filterActive === 'active' ? 'Aktif' : 'Selesai'}</h2>
+              <h2 className="text-xl font-semibold mb-4">Kelas {filterActive === 'all' ? '' : filterActive === 'active' ? 'Aktif' : 'Selesai'}</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {sortedCourses.map(course => (

@@ -31,26 +31,36 @@ const DashboardOrangtua = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Ganti bagian useEffect untuk fetch data sebenarnya
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
 
-        // Dalam implementasi nyata, ini akan menjadi panggilan API
-        // Dummy data untuk demo
-        const dummyChildren = [
-          { id: 1, name: 'Muhamad Dimas', class: '5A', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523252' },
-          { id: 2, name: 'Aisyah Putri', class: '3B', school: 'SD Negeri 1 Surakarta', image: 'https://via.placeholder.com/50', nis: '23523253' }
-        ];
+        // Ambil token dari localStorage atau context
+        const token = localStorage.getItem('token');
+        
+        // Fetch data anak-anak dari API
+        const response = await fetch('/api/parent/children', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-        setChildren(dummyChildren);
+        if (!response.ok) {
+          throw new Error('Failed to fetch children data');
+        }
 
-        // Set anak pertama sebagai default
-        if (dummyChildren.length > 0) {
-          const firstChild = dummyChildren[0];
+        const data = await response.json();
+        setChildren(data.children);
+
+        // Set anak pertama sebagai default jika ada
+        if (data.children.length > 0) {
+          const firstChild = data.children[0];
           setSelectedChild(firstChild);
 
-          // Dummy stats untuk anak yang dipilih
+          // Sementara masih gunakan dummy stats (nanti bisa dibuat endpoint terpisah)
           setChildStats({
             completedCourses: 5,
             activeCourses: 3,
@@ -59,7 +69,7 @@ const DashboardOrangtua = () => {
             totalMinutes: 1280
           });
 
-          // Dummy data untuk aktivitas terbaru
+          // Dummy data untuk aktivitas terbaru (nanti bisa dibuat endpoint terpisah)
           setRecentActivities([
             { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
             { id: 2, type: 'assignment_complete', course: 'Matematika - Aljabar', description: 'Mengumpulkan tugas Persamaan Kuadrat', score: 85, date: '1 hari lalu' },
@@ -67,7 +77,7 @@ const DashboardOrangtua = () => {
             { id: 4, type: 'course_started', course: 'Fisika - Hukum Newton', description: 'Memulai kursus baru', date: '3 hari lalu' },
           ]);
 
-          // Dummy data untuk acara mendatang
+          // Dummy data untuk acara mendatang (nanti bisa dibuat endpoint terpisah)
           setUpcomingEvents([
             { id: 1, title: 'Ujian Matematika', date: 'Senin, 12 Mei 2025', course: 'Matematika - Aljabar' },
             { id: 2, title: 'Deadline Tugas Biologi', date: 'Rabu, 14 Mei 2025', course: 'Biologi - Reproduksi Manusia' },
@@ -79,6 +89,8 @@ const DashboardOrangtua = () => {
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         setLoading(false);
+        // Tampilkan pesan error atau fallback ke dummy data
+        alert('Gagal mengambil data anak. Silakan coba lagi.');
       }
     };
 
@@ -125,7 +137,6 @@ const DashboardOrangtua = () => {
                 </div>
                 <div>
                   <p className="font-medium">{child.name}</p>
-                  <p className="text-xs text-gray-500">Kelas {child.class}</p>
                 </div>
               </div>
             ))}
