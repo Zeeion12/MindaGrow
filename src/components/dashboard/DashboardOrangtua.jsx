@@ -31,7 +31,6 @@ const DashboardOrangtua = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Ganti bagian useEffect untuk fetch data sebenarnya
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -39,7 +38,7 @@ const DashboardOrangtua = () => {
 
         // Ambil token dari localStorage atau context
         const token = localStorage.getItem('token');
-        
+
         // Fetch data anak-anak dari API
         const response = await fetch('/api/parent/children', {
           headers: {
@@ -137,6 +136,7 @@ const DashboardOrangtua = () => {
                 </div>
                 <div>
                   <p className="font-medium">{child.name}</p>
+                  <p className="text-xs text-gray-500">Kelas {child.class}</p>
                 </div>
               </div>
             ))}

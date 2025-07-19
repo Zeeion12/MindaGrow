@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/layout/layoutParts/Header';
+import ParentInsightsPanel from '../../components/ParentInsightsPanel';
 import {
+  RiBrainLine,
+  RiStarLine,
+  RiAlarmWarningLine,
   RiBookOpenLine,
   RiTimeLine,
   RiArrowUpLine,
@@ -18,13 +22,15 @@ const PemantauanAnakPage = () => {
   const { user } = useAuth();
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
+  const [childClasses, setChildClasses] = useState([]);
   const [courses, setCourses] = useState([]);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterActive, setFilterActive] = useState('all'); // all, active, completed
-  const [sortBy, setSortBy] = useState('recent'); // recent, name, progress, score
+  const [filterActive, setFilterActive] = useState('all');
+  const [sortBy, setSortBy] = useState('recent');
+  const [showInsights, setShowInsights] = useState(false);
 
-  // Ganti bagian useEffect untuk fetch data sebenarnya
+  // Modifikasi bagian useEffect
   useEffect(() => {
     const fetchChildrenData = async () => {
       try {
@@ -32,7 +38,7 @@ const PemantauanAnakPage = () => {
 
         // Ambil token dari localStorage atau context
         const token = localStorage.getItem('token');
-        
+
         // Fetch data anak-anak dari API
         const response = await fetch('/api/parent/children', {
           headers: {
@@ -50,84 +56,17 @@ const PemantauanAnakPage = () => {
 
         // Set anak pertama sebagai default yang dipilih
         if (data.children.length > 0 && !selectedChild) {
-          setSelectedChild(data.children[0]);
+          const firstChild = data.children[0];
+          setSelectedChild(firstChild);
 
-          // Dummy data untuk kursus anak (sementara masih dummy)
-          setCourses([
-            {
-              id: 1,
-              title: 'Matematika - Aljabar',
-              progress: 82,
-              last_accessed: '2 jam lalu',
-              score: 85,
-              status: 'active',
-              teacher: 'Ibu Indah Pertiwi',
-              upcoming_tasks: [
-                { id: 1, title: 'Quiz Persamaan Kuadrat', deadline: '12 Mei 2025' }
-              ]
-            },
-            {
-              id: 2,
-              title: 'Biologi - Reproduksi Manusia',
-              progress: 43,
-              last_accessed: '1 hari lalu',
-              score: 78,
-              status: 'active',
-              teacher: 'Bapak Ahmad Jauhari',
-              upcoming_tasks: [
-                { id: 1, title: 'Tugas Laporan Praktikum', deadline: '14 Mei 2025' }
-              ]
-            },
-            {
-              id: 3,
-              title: 'Fisika - Hukum Newton',
-              progress: 10,
-              last_accessed: '3 hari lalu',
-              score: null,
-              status: 'active',
-              teacher: 'Ibu Sri Wahyuni',
-              upcoming_tasks: [
-                { id: 1, title: 'Quiz Hukum Newton', deadline: '16 Mei 2025' }
-              ]
-            },
-            {
-              id: 4,
-              title: 'Bahasa Indonesia - Puisi',
-              progress: 100,
-              last_accessed: '1 minggu lalu',
-              score: 90,
-              status: 'completed',
-              teacher: 'Bapak Darmawan',
-              upcoming_tasks: []
-            },
-            {
-              id: 5,
-              title: 'IPS - Sejarah Indonesia',
-              progress: 100,
-              last_accessed: '2 minggu lalu',
-              score: 88,
-              status: 'completed',
-              teacher: 'Ibu Ratna Sari',
-              upcoming_tasks: []
-            },
-          ]);
-
-          // Dummy data untuk aktivitas anak (sementara masih dummy)
-          setActivities([
-            { id: 1, type: 'course_progress', course: 'Matematika - Aljabar', description: 'Menyelesaikan modul Persamaan Kuadrat', date: '2 jam lalu' },
-            { id: 2, type: 'assignment_complete', course: 'Matematika - Aljabar', description: 'Mengumpulkan tugas Persamaan Kuadrat', score: 85, date: '1 hari lalu' },
-            { id: 3, type: 'quiz_complete', course: 'Biologi', description: 'Menyelesaikan quiz Sistem Reproduksi', score: 78, date: '3 hari lalu' },
-            { id: 4, type: 'course_started', course: 'Fisika - Hukum Newton', description: 'Memulai kursus baru', date: '3 hari lalu' },
-            { id: 5, type: 'course_complete', course: 'Bahasa Indonesia - Puisi', description: 'Menyelesaikan kursus', score: 90, date: '1 minggu lalu' },
-            { id: 6, type: 'course_complete', course: 'IPS - Sejarah Indonesia', description: 'Menyelesaikan kursus', score: 88, date: '2 minggu lalu' },
-          ]);
+          // Fetch kelas yang diikuti anak pertama
+          await fetchChildClasses(firstChild.id, token);
         }
 
         setLoading(false);
       } catch (error) {
         console.error('Error fetching children data:', error);
         setLoading(false);
-        // Fallback ke data kosong atau tampilkan pesan error
         alert('Gagal mengambil data anak. Silakan coba lagi.');
       }
     };
@@ -135,9 +74,58 @@ const PemantauanAnakPage = () => {
     fetchChildrenData();
   }, []);
 
-  const handleChildSelect = (child) => {
+  // fungsi untuk fetch kelas anak
+  const fetchChildClasses = async (childId, token) => {
+    try {
+      // Fetch kelas
+      const classesResponse = await fetch(`/api/parent/children/${childId}/classes`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (classesResponse.ok) {
+        const classesData = await classesResponse.json();
+        setCourses(classesData.classes);
+      } else {
+        console.error('Failed to fetch child classes');
+        setCourses([]);
+      }
+
+      // Fetch aktivitas tugas
+      const activitiesResponse = await fetch(`/api/parent/children/${childId}/activities`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (activitiesResponse.ok) {
+        const activitiesData = await activitiesResponse.json();
+        setActivities(activitiesData.activities);
+      } else {
+        console.error('Failed to fetch child activities');
+        // Fallback ke dummy data jika gagal
+        setActivities([
+          { id: 1, type: 'course_progress', course: 'Tidak ada aktivitas', description: 'Belum ada aktivitas tugas', date: '-' }
+        ]);
+      }
+
+    } catch (error) {
+      console.error('Error fetching child data:', error);
+      setCourses([]);
+      setActivities([]);
+    }
+  };
+
+  // Modifikasi fungsi handleChildSelect
+  const handleChildSelect = async (child) => {
     setSelectedChild(child);
-    // In a real implementation, we would fetch data for the selected child here
+
+    // Fetch kelas untuk anak yang dipilih
+    const token = localStorage.getItem('token');
+    await fetchChildClasses(child.id, token);
   };
 
   const filteredCourses = courses.filter(course => {
@@ -163,12 +151,6 @@ const PemantauanAnakPage = () => {
         return courses.indexOf(a) - courses.indexOf(b);
     }
   });
-
-  const getProgressColorClass = (progress) => {
-    if (progress < 30) return 'bg-red-500';
-    if (progress < 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
 
   const getScoreColorClass = (score) => {
     if (!score) return 'text-gray-500';
@@ -278,7 +260,7 @@ const PemantauanAnakPage = () => {
               </div>
             </div>
 
-            {/* Kursus */}
+            {/* Kelas */}
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-4">Kelas {filterActive === 'all' ? '' : filterActive === 'active' ? 'Aktif' : 'Selesai'}</h2>
 
@@ -293,39 +275,35 @@ const PemantauanAnakPage = () => {
                             <RiCheckboxCircleLine className="mr-1" /> Selesai
                           </span>
                         )}
+                        {course.status === 'active' && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full flex items-center">
+                            Aktif
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-sm text-gray-500 mb-3">Pengajar: {course.teacher}</p>
 
-                      <div className="mb-3">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>Kemajuan</span>
-                          <span className="font-medium">{course.progress}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full">
-                          <div
-                            className={`h-2 rounded-full ${getProgressColorClass(course.progress)}`}
-                            style={{ width: `${course.progress}%` }}
-                          ></div>
-                        </div>
-                      </div>
+                      {course.subject && (
+                        <p className="text-sm text-gray-600 mb-3">Mata Pelajaran: {course.subject}</p>
+                      )}
 
                       <div className="flex justify-between items-center">
                         <div className="flex items-center text-sm text-gray-500">
                           <RiTimeLine className="mr-1" />
-                          <span>Terakhir diakses {course.last_accessed}</span>
+                          <span>{course.last_accessed}</span>
                         </div>
 
                         <div className="flex items-center">
                           <RiMedalLine className="mr-1" />
                           <span className={`font-bold ${getScoreColorClass(course.score)}`}>
-                            {course.score ? `${course.score}/100` : 'Belum ada nilai'}
+                            {course.score ? `${course.score}/100` : 'Sedang Berlangsung'}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {course.upcoming_tasks.length > 0 && (
+                    {course.upcoming_tasks && course.upcoming_tasks.length > 0 && (
                       <div className="border-t border-gray-100 p-4 bg-gray-50">
                         <p className="text-sm font-medium mb-2">Tugas Mendatang:</p>
                         {course.upcoming_tasks.map(task => (
@@ -344,11 +322,7 @@ const PemantauanAnakPage = () => {
                 <div className="bg-white rounded-lg shadow p-8 text-center">
                   <RiErrorWarningLine size={48} className="mx-auto text-gray-400 mb-3" />
                   <p className="text-gray-500">
-                    {filterActive === 'all'
-                      ? 'Tidak ada kursus yang tersedia'
-                      : filterActive === 'active'
-                        ? 'Tidak ada kursus aktif'
-                        : 'Tidak ada kursus yang telah selesai'}
+                    {selectedChild?.name} belum mengikuti kelas apapun
                   </p>
                 </div>
               )}
@@ -360,13 +334,93 @@ const PemantauanAnakPage = () => {
                 <h2 className="text-xl font-semibold">Aktivitas Terbaru</h2>
               </div>
 
+              {/* AI Insights Button */}
+              <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-purple-50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-semibold text-gray-800 flex items-center">
+                      <RiBrainLine className="mr-2 text-blue-600" />
+                      AI Insights & Rekomendasi
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Dapatkan analisis mendalam dan rekomendasi berbasis AI untuk mendukung pembelajaran {selectedChild?.name}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowInsights(true)}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center shadow-lg"
+                  >
+                    <RiBrainLine className="mr-2" />
+                    Lihat AI Insights
+                  </button>
+                </div>
+              </div>
+
               <div className="p-4">
                 <div className="space-y-4">
+                  {/* Quick AI Summary Card - tambahkan sebelum activities loop */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 p-4 rounded-lg">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-indigo-800 flex items-center mb-2">
+                          <RiBrainLine className="mr-2" />
+                          AI Quick Insights
+                        </h4>
+                        <div className="space-y-2">
+                          {/* Quick status indicator */}
+                          <div className="flex items-center space-x-2">
+                            <div className="flex items-center">
+                              {activities.filter(a => a.score >= 80).length > activities.filter(a => a.score < 80).length ? (
+                                <RiStarLine className="text-green-600 mr-1" />
+                              ) : (
+                                <RiAlarmWarningLine className="text-yellow-600 mr-1" />
+                              )}
+                              <span className="text-sm text-gray-700">
+                                {activities.filter(a => a.score >= 80).length > activities.filter(a => a.score < 80).length
+                                  ? `${selectedChild?.name} menunjukkan performa yang baik`
+                                  : `${selectedChild?.name} memerlukan perhatian lebih`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Quick stats */}
+                          <div className="grid grid-cols-3 gap-4 mt-3">
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-blue-600">
+                                {activities.filter(a => a.status === 'graded').length}
+                              </div>
+                              <div className="text-xs text-gray-600">Tugas Dinilai</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-green-600">
+                                {activities.filter(a => a.score >= 75).length}
+                              </div>
+                              <div className="text-xs text-gray-600">Nilai Baik</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-yellow-600">
+                                {activities.filter(a => a.status === 'submitted').length}
+                              </div>
+                              <div className="text-xs text-gray-600">Menunggu</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowInsights(true)}
+                        className="bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium"
+                      >
+                        Detail
+                      </button>
+                    </div>
+                  </div>
+
                   {activities.map(activity => (
                     <div key={activity.id} className="flex py-3 border-b border-gray-100 last:border-0">
                       <div className="bg-blue-100 p-2 rounded-full h-10 w-10 flex items-center justify-center mr-3">
+                        {activity.type === 'assignment_graded' && <RiCheckboxCircleLine className="text-green-600" />}
+                        {activity.type === 'assignment_submitted' && <RiFileChartLine className="text-blue-600" />}
                         {activity.type === 'course_progress' && <RiBarChartGroupedLine className="text-blue-600" />}
-                        {activity.type === 'assignment_complete' && <RiFileChartLine className="text-green-600" />}
                         {activity.type === 'quiz_complete' && <RiMedalLine className="text-purple-600" />}
                         {activity.type === 'course_started' && <RiBookOpenLine className="text-yellow-600" />}
                         {activity.type === 'course_complete' && <RiCheckboxCircleLine className="text-green-600" />}
@@ -374,13 +428,48 @@ const PemantauanAnakPage = () => {
                       <div className="flex-1">
                         <h3 className="font-medium">{activity.course}</h3>
                         <p className="text-sm text-gray-700">{activity.description}</p>
-                        {activity.score && (
-                          <p className="text-sm font-medium text-green-600">Nilai: {activity.score}/100</p>
+
+                        {/* Tampilkan nilai jika ada */}
+                        {activity.score !== null && activity.score !== undefined && (
+                          <div className="mt-1">
+                            <span className={`text-sm font-medium ${activity.score >= 80 ? 'text-green-600' :
+                              activity.score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                              Nilai: {activity.score}/100
+                            </span>
+                          </div>
                         )}
+
+                        {/* Tampilkan feedback jika ada */}
+                        {activity.feedback && (
+                          <p className="text-xs text-gray-600 mt-1 italic">
+                            Feedback: "{activity.feedback}"
+                          </p>
+                        )}
+
+                        {/* Tampilkan status jika belum dinilai */}
+                        {activity.status === 'submitted' && (
+                          <span className="inline-block mt-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                            Menunggu Penilaian
+                          </span>
+                        )}
+
                         <p className="text-xs text-gray-500 mt-1">{activity.date}</p>
                       </div>
                     </div>
                   ))}
+
+                  {activities.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Belum ada aktivitas tugas</p>
+                      <button
+                        onClick={() => setShowInsights(true)}
+                        className="mt-3 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Lihat AI Insights untuk rekomendasi
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -468,6 +557,14 @@ const PemantauanAnakPage = () => {
           </>
         )}
       </div>
+
+      {/* AI Insights Panel */}
+      {showInsights && selectedChild && (
+        <ParentInsightsPanel
+          childId={selectedChild.id}
+          onClose={() => setShowInsights(false)}
+        />
+      )}
     </div>
   );
 };

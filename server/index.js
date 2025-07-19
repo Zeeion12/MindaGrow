@@ -213,6 +213,10 @@ app.use('/api', studentScoreRoutes);
 const scoreAnalysisRoutes = require('./routes/scoreAnalysisRoutes');
 app.use('/api/analytics', scoreAnalysisRoutes);
 
+// Parent Insights Routes 
+const parentInsightsRoutes = require('./routes/parentInsightsRoutes');
+app.use('/api/analytics', parentInsightsRoutes);
+
 // Open Ai For Learning Duration route
 const analyticsRoutes = require('./routes/analytics');
 app.use('/api/analytics', analyticsRoutes);
