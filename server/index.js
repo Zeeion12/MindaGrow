@@ -801,6 +801,168 @@ app.get('/api/parent/children', authenticateToken, async (req, res) => {
   }
 });
 
+
+
+// Get classes for parent's children
+app.get('/api/parent/children/:childId/classes', authenticateToken, async (req, res) => {
+  try {
+    const { childId } = req.params;
+
+    // Pastikan user adalah orangtua
+    if (req.user.role !== 'orangtua') {
+      return res.status(403).json({ message: 'Access denied. Only parents can access this endpoint.' });
+    }
+
+    // Ambil NIK orangtua
+    const parentResult = await pool.query(
+      'SELECT nik FROM orangtua WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (parentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Parent data not found.' });
+    }
+
+    const parentNik = parentResult.rows[0].nik;
+
+    // Validasi bahwa child ini memang anak dari orangtua yang sedang login
+    const childValidation = await pool.query(
+      'SELECT user_id FROM siswa WHERE user_id = $1 AND nik_orangtua = $2',
+      [childId, parentNik]
+    );
+
+    if (childValidation.rows.length === 0) {
+      return res.status(403).json({ message: 'You do not have access to this child data.' });
+    }
+
+    // Ambil kelas yang diikuti anak - HAPUS c.subject
+    const classesResult = await pool.query(`
+      SELECT 
+        c.id,
+        c.name,
+        c.grade,
+        c.description,
+        c.schedule,
+        g.nama_lengkap as teacher_name,
+        cm.joined_at,
+        c.status
+      FROM classes c
+      JOIN class_members cm ON c.id = cm.class_id
+      JOIN guru g ON c.teacher_id = g.user_id
+      WHERE cm.user_id = $1 AND c.status = 'active'
+      ORDER BY c.name
+    `, [childId]);
+
+    const classes = classesResult.rows.map(cls => ({
+      id: cls.id,
+      title: cls.name, // Ubah jadi title agar sesuai dengan struktur courses yang ada
+      progress: Math.floor(Math.random() * 100), // Dummy progress untuk sementara
+      last_accessed: 'Aktif',
+      score: null,
+      status: 'active',
+      teacher: cls.teacher_name,
+      subject: cls.name, // Gunakan nama kelas sebagai subject
+      grade: cls.grade,
+      schedule: cls.schedule,
+      description: cls.description,
+      joined_at: cls.joined_at,
+      upcoming_tasks: [] // Kosong untuk sementara
+    }));
+
+    res.json({ classes });
+  } catch (error) {
+    console.error('Error fetching child classes:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get child activities (assignments/submissions) for parent
+app.get('/api/parent/children/:childId/activities', authenticateToken, async (req, res) => {
+  try {
+    const { childId } = req.params;
+
+    // Pastikan user adalah orangtua
+    if (req.user.role !== 'orangtua') {
+      return res.status(403).json({ message: 'Access denied. Only parents can access this endpoint.' });
+    }
+
+    // Ambil NIK orangtua
+    const parentResult = await pool.query(
+      'SELECT nik FROM orangtua WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (parentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Parent data not found.' });
+    }
+
+    const parentNik = parentResult.rows[0].nik;
+
+    // Validasi bahwa child ini memang anak dari orangtua yang sedang login
+    const childValidation = await pool.query(
+      'SELECT user_id FROM siswa WHERE user_id = $1 AND nik_orangtua = $2',
+      [childId, parentNik]
+    );
+
+    if (childValidation.rows.length === 0) {
+      return res.status(403).json({ message: 'You do not have access to this child data.' });
+    }
+
+    // Ambil aktivitas tugas anak (submissions)
+    const activitiesResult = await pool.query(`
+      SELECT 
+        s.id,
+        s.score,
+        s.feedback,
+        s.status,
+        s.submitted_at,
+        s.graded_at,
+        a.title as assignment_title,
+        c.name as class_name,
+        g.nama_lengkap as teacher_name
+      FROM submissions s
+      JOIN assignments a ON s.assignment_id = a.id
+      JOIN classes c ON a.class_id = c.id
+      JOIN guru g ON a.teacher_id = g.user_id
+      WHERE s.student_id = $1
+      ORDER BY s.submitted_at DESC
+      LIMIT 10
+    `, [childId]);
+
+    const activities = activitiesResult.rows.map(activity => ({
+      id: activity.id,
+      type: activity.status === 'graded' ? 'assignment_graded' : 'assignment_submitted',
+      course: activity.class_name,
+      description: activity.status === 'graded'
+        ? `Tugas "${activity.assignment_title}" telah dinilai oleh ${activity.teacher_name}`
+        : `Mengumpulkan tugas "${activity.assignment_title}"`,
+      score: activity.score,
+      feedback: activity.feedback,
+      date: activity.status === 'graded' && activity.graded_at
+        ? new Date(activity.graded_at).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        : new Date(activity.submitted_at).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+      status: activity.status
+    }));
+
+    res.json({ activities });
+  } catch (error) {
+    console.error('Error fetching child activities:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get user streak
 app.get('/api/games/streak', authenticateToken, async (req, res) => {
   const userId = req.user.id;
