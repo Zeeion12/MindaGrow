@@ -162,12 +162,11 @@ const BuatKursus = () => {
   const handleModuleFileChange = (moduleIndex, file) => {
     if (!file) return;
 
-    // Check file type
-    const allowedTypes = ['.pdf', '.doc', '.docx', '.ppt', '.pptx'];
+    // Check file type - only allow PDF
     const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
     
-    if (!allowedTypes.includes(fileExtension)) {
-      alert('File harus berupa PDF, DOC, DOCX, PPT, atau PPTX');
+    if (fileExtension !== '.pdf') {
+      alert('File materi harus berupa PDF');
       return;
     }
 
@@ -261,6 +260,11 @@ const BuatKursus = () => {
         errors[`module_${moduleIndex}_title`] = `Judul module ${moduleIndex + 1} harus diisi`;
       }
       
+      // Validate module file
+      if (!module.file) {
+        errors[`module_${moduleIndex}_file`] = `File PDF untuk module ${moduleIndex + 1} harus diupload`;
+      }
+      
       // Validate lessons
       module.lessons.forEach((lesson, lessonIndex) => {
         if (!lesson.title.trim()) {
@@ -288,49 +292,33 @@ const BuatKursus = () => {
     try {
       setLoading(true);
 
-      // Prepare FormData
+      // Prepare FormData - SIMPLE VERSION
       const courseData = new FormData();
 
-      // Add basic course data
+      // Add basic course data ONLY
       courseData.append('title', formData.title.trim());
-      courseData.append('slug', formData.slug.trim());
       courseData.append('description', formData.description.trim());
-      courseData.append('short_description', formData.short_description.trim());
       courseData.append('category_id', formData.category_id);
       courseData.append('level', formData.level);
-      courseData.append('estimated_duration', formData.estimated_duration);
       courseData.append('price', formData.price || 0);
-      courseData.append('is_featured', formData.is_featured);
-      courseData.append('is_published', formData.is_published);
-      courseData.append('instructor_id', user.id);
 
-      // Add banner image
+      // Add banner image if exists
       if (formData.banner_image) {
-        courseData.append('thumbnail', formData.banner_image);
+        courseData.append('banner_image', formData.banner_image);
+        console.log('🖼️ Banner image added:', formData.banner_image.name);
       }
 
-      // Add modules data
-      courseData.append('modules', JSON.stringify(modules.map(module => ({
-        title: module.title,
-        description: module.description,
-        order_index: module.order_index,
-        lessons: module.lessons.map(lesson => ({
-          title: lesson.title,
-          content: lesson.content,
-          order_index: lesson.order_index,
-          duration: lesson.duration
-        }))
-      }))));
+      // DEBUG: Log FormData contents
+      console.log('📋 FormData contents:');
+      for (let [key, value] of courseData.entries()) {
+        console.log(`  ${key}:`, value instanceof File ? `File: ${value.name}` : value);
+      }
 
-      // Add module files
-      modules.forEach((module, index) => {
-        if (module.file) {
-          courseData.append(`module_file_${index}`, module.file);
-        }
-      });
-
-      // Call API
+      // Call API with simplified data
+      console.log('🚀 Calling API...');
       const response = await courseAPI.createCourse(courseData);
+
+      console.log('✅ API Response:', response.data);
 
       if (response.data.success) {
         setSubmitStatus({
@@ -341,11 +329,7 @@ const BuatKursus = () => {
 
         // Redirect after success
         setTimeout(() => {
-          if (formData.is_published) {
-            navigate(`/kursus/${response.data.data.id}`);
-          } else {
-            navigate('/kelas-diajar');
-          }
+          navigate('/kelas-diajar');
         }, 2000);
       } else {
         setSubmitStatus({
@@ -355,7 +339,7 @@ const BuatKursus = () => {
       }
 
     } catch (error) {
-      console.error('Error creating course:', error);
+      console.error('❌ Error creating course:', error);
       
       let errorMessage = 'Gagal membuat kursus. Silakan coba lagi.';
       
@@ -390,7 +374,7 @@ const BuatKursus = () => {
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-gray-800">Buat Kursus Baru</h1>
             <button
-              onClick={() => navigate('/kelas-diajar')}
+              onClick={() => navigate('/dashboard/guru')}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md flex items-center hover:bg-gray-200"
             >
               <RiArrowGoBackLine className="mr-2" />
@@ -686,13 +670,14 @@ const BuatKursus = () => {
                     {/* Module File */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        File Materi (PDF, DOC, DOCX, PPT, PPTX)
+                        File Materi PDF <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.ppt,.pptx"
+                        accept=".pdf"
                         onChange={(e) => handleModuleFileChange(moduleIndex, e.target.files[0])}
                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        required
                       />
                       {module.file && (
                         <div className="flex items-center mt-2 text-sm text-green-600">
@@ -700,6 +685,9 @@ const BuatKursus = () => {
                           File dipilih: {module.file.name}
                         </div>
                       )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Wajib upload file PDF untuk setiap modul. File ini akan ditampilkan sebagai materi pembelajaran.
+                      </p>
                     </div>
                   </div>
 
@@ -892,11 +880,12 @@ const BuatKursus = () => {
               </h3>
               <div className="mt-2 text-sm text-gray-600">
                 <ul className="list-disc list-inside space-y-1">
-                  <li><strong>Format yang didukung:</strong> PDF, DOC, DOCX, PPT, PPTX</li>
+                  <li><strong>Format yang didukung:</strong> PDF saja</li>
                   <li><strong>Ukuran maksimal:</strong> 10MB per file</li>
-                  <li><strong>Rekomendasi:</strong> Gunakan PDF untuk materi teks dan PPT untuk presentasi</li>
+                  <li><strong>Wajib:</strong> Setiap modul harus memiliki file PDF materi</li>
                   <li><strong>Penamaan file:</strong> Gunakan nama yang deskriptif, contoh: "Modul_1_Pengenalan_Biologi.pdf"</li>
-                  <li><strong>Konten file:</strong> Pastikan file berisi materi yang lengkap dan mudah dipahami</li>
+                  <li><strong>Konten file:</strong> Pastikan PDF berisi materi pembelajaran yang lengkap dan mudah dibaca</li>
+                  <li><strong>Kualitas:</strong> Gunakan PDF dengan resolusi yang baik dan teks yang dapat dibaca</li>
                 </ul>
               </div>
             </div>

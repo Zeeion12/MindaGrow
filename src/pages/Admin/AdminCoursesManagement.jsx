@@ -120,7 +120,7 @@ const AdminCourseManagement = () => {
       }
       
       if (formData.thumbnail && formData.thumbnail instanceof File) {
-        formDataToSend.append('banner_image', formData.thumbnail);
+        formDataToSend.append('thumbnail', formData.thumbnail);
       }
 
       const url = activeTab === 'edit' 

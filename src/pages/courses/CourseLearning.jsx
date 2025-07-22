@@ -1,188 +1,182 @@
 // src/pages/courses/CourseLearning.jsx
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { courseAPI, progressAPI, getErrorMessage } from '../../service/api';
-import Header from '../../components/layout/layoutParts/Header';
+import { courseAPI } from '../../service/api';
 import {
   RiArrowLeftLine,
-  RiPlayFill,
-  RiPauseFill,
   RiCheckboxCircleLine,
-  RiCheckboxBlankLine,
-  RiTimeLine,
-  RiFileTextLine,
+  RiCheckboxBlankCircleLine,
   RiDownloadLine,
+  RiMessageLine,
   RiBookOpenLine,
-  RiVideoLine,
-  RiCloseLine,
+  RiPlayCircleLine,
+  RiPauseCircleLine,
+  RiFileTextLine,
   RiFullscreenLine,
-  RiVolumeUpLine,
-  RiLoader4Line,
-  RiErrorWarningLine,
-  RiArrowRightLine,
-  RiArrowUpSLine,
-  RiArrowDownSLine
+  RiFullscreenExitLine,
+  RiZoomInLine,
+  RiZoomOutLine
 } from 'react-icons/ri';
 
 const CourseLearning = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const pdfViewerRef = useRef(null);
 
   // State management
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [course, setCourse] = useState(null);
   const [modules, setModules] = useState([]);
   const [currentModule, setCurrentModule] = useState(null);
   const [currentLesson, setCurrentLesson] = useState(null);
-  const [expandedModules, setExpandedModules] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [progress, setProgress] = useState({});
-  const [courseProgress, setCourseProgress] = useState({
-    completed_lessons: 0,
-    total_lessons: 0,
-    progress_percentage: 0
-  });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [updateingProgress, setUpdatingProgress] = useState(false);
+  const [expandedModules, setExpandedModules] = useState({});
+  const [pdfZoom, setPdfZoom] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [lessonNotes, setLessonNotes] = useState('');
+  const [showNotes, setShowNotes] = useState(false);
 
-  // Initialize data
+  // Fetch course data and modules
   useEffect(() => {
-    if (!user) {
-      navigate('/login', { state: { returnTo: `/kursus/${courseId}/belajar` } });
-      return;
+    if (courseId) {
+      fetchCourseData();
     }
+  }, [courseId]);
 
-    if (user.role !== 'siswa') {
-      navigate('/');
-      return;
+  // Auto-select first lesson when modules are loaded
+  useEffect(() => {
+    if (modules.length > 0 && !currentLesson) {
+      const firstModule = modules[0];
+      if (firstModule.lessons && firstModule.lessons.length > 0) {
+        selectLesson(firstModule.lessons[0], firstModule);
+        setExpandedModules({ [firstModule.id]: true });
+      }
     }
+  }, [modules, currentLesson]);
 
-    fetchCourseContent();
-  }, [courseId, user, navigate]);
-
-  // Fetch course content and progress
-  const fetchCourseContent = async () => {
+  const fetchCourseData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch course content (modules and lessons)
-      const courseResponse = await courseAPI.getCourseContent(courseId);
+      // Check if user is enrolled
+      if (!user || user.role !== 'siswa') {
+        navigate('/login');
+        return;
+      }
+
+      const response = await courseAPI.getCourseById(courseId);
       
-      if (!courseResponse.data.success) {
-        throw new Error(courseResponse.data.message || 'Failed to fetch course content');
-      }
-
-      const courseData = courseResponse.data.data;
-      setCourse(courseData.course);
-      setModules(courseData.modules || []);
-
-      // Set initial module and lesson
-      if (courseData.modules && courseData.modules.length > 0) {
-        const firstModule = courseData.modules[0];
-        setCurrentModule(firstModule);
-        setExpandedModules({ [firstModule.id]: true });
-
-        if (firstModule.lessons && firstModule.lessons.length > 0) {
-          setCurrentLesson(firstModule.lessons[0]);
+      if (response.data.success) {
+        const courseData = response.data.data;
+        
+        // Check if user is enrolled
+        if (!courseData.is_enrolled) {
+          navigate(`/kursus/${courseId}`);
+          return;
         }
+
+        setCourse(courseData);
+        setModules(courseData.modules || []);
+        
+        // Fetch user progress
+        await fetchProgress();
+      } else {
+        setError('Course not found');
       }
-
-      // Fetch progress
-      await fetchProgress();
-
-    } catch (error) {
-      console.error('Error fetching course content:', error);
-      setError(error.message || 'Failed to load course content');
+    } catch (err) {
+      console.error('Error fetching course data:', err);
+      setError('Failed to load course data');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch student progress
   const fetchProgress = async () => {
     try {
-      const progressResponse = await progressAPI.getStudentCourseProgress(courseId);
-      
-      if (progressResponse.data.success) {
-        const progressData = progressResponse.data.progress || [];
-        const progressStats = progressResponse.data.stats || {};
-        
-        // Convert progress array to object for easier lookup
-        const progressMap = {};
-        progressData.forEach(item => {
-          progressMap[item.lesson_id] = item;
-        });
-        
-        setProgress(progressMap);
-        setCourseProgress(progressStats);
-      }
-    } catch (error) {
-      console.error('Error fetching progress:', error);
+      // This would be an API call to get user's progress
+      // For now, using mock data
+      const mockProgress = {
+        completedLessons: [],
+        currentProgress: 45,
+        totalLessons: 20
+      };
+      setProgress(mockProgress);
+    } catch (err) {
+      console.error('Error fetching progress:', err);
     }
   };
 
-  // Toggle module expansion
-  const toggleModule = (moduleId) => {
+  const selectLesson = (lesson, module) => {
+    setCurrentLesson(lesson);
+    setCurrentModule(module);
+    setLessonNotes(''); // Reset notes for new lesson
+    
+    // Mark lesson as accessed
+    markLessonAccessed(lesson.id);
+  };
+
+  const markLessonAccessed = async (lessonId) => {
+    try {
+      // API call to mark lesson as accessed
+      console.log('Marking lesson as accessed:', lessonId);
+    } catch (err) {
+      console.error('Error marking lesson as accessed:', err);
+    }
+  };
+
+  const toggleLessonComplete = async (lessonId) => {
+    try {
+      // API call to toggle lesson completion
+      const isCompleted = progress.completedLessons.includes(lessonId);
+      
+      if (isCompleted) {
+        setProgress(prev => ({
+          ...prev,
+          completedLessons: prev.completedLessons.filter(id => id !== lessonId)
+        }));
+      } else {
+        setProgress(prev => ({
+          ...prev,
+          completedLessons: [...prev.completedLessons, lessonId]
+        }));
+      }
+    } catch (err) {
+      console.error('Error toggling lesson completion:', err);
+    }
+  };
+
+  const toggleModuleExpansion = (moduleId) => {
     setExpandedModules(prev => ({
       ...prev,
       [moduleId]: !prev[moduleId]
     }));
   };
 
-  // Select lesson
-  const selectLesson = async (lesson, module) => {
-    setCurrentLesson(lesson);
-    setCurrentModule(module);
-
-    // Mark lesson as started if not already
-    if (!progress[lesson.id]) {
-      await updateLessonProgress(lesson.id, { completed: false, started: true });
+  const handlePdfZoom = (type) => {
+    if (type === 'in' && pdfZoom < 3) {
+      setPdfZoom(prev => prev + 0.25);
+    } else if (type === 'out' && pdfZoom > 0.5) {
+      setPdfZoom(prev => prev - 0.25);
     }
   };
 
-  // Update lesson progress
-  const updateLessonProgress = async (lessonId, progressData) => {
-    try {
-      setUpdatingProgress(true);
-      
-      const response = await progressAPI.updateLessonProgress(lessonId, progressData);
-      
-      if (response.data.success) {
-        // Update local progress state
-        setProgress(prev => ({
-          ...prev,
-          [lessonId]: {
-            ...prev[lessonId],
-            ...progressData,
-            last_accessed_at: new Date().toISOString()
-          }
-        }));
-
-        // Refresh course progress stats
-        await fetchProgress();
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      if (pdfViewerRef.current.requestFullscreen) {
+        pdfViewerRef.current.requestFullscreen();
       }
-    } catch (error) {
-      console.error('Error updating lesson progress:', error);
-      alert('Gagal memperbarui progress. Silakan coba lagi.');
-    } finally {
-      setUpdatingProgress(false);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
     }
+    setIsFullscreen(!isFullscreen);
   };
 
-  // Mark lesson as complete
-  const markLessonComplete = async (lessonId) => {
-    await updateLessonProgress(lessonId, { completed: true });
-  };
-
-  // Mark lesson as incomplete
-  const markLessonIncomplete = async (lessonId) => {
-    await updateLessonProgress(lessonId, { completed: false });
-  };
-
-  // Navigate to next lesson
   const goToNextLesson = () => {
     if (!currentModule || !currentLesson) return;
 
@@ -206,8 +200,7 @@ const CourseLearning = () => {
     }
   };
 
-  // Navigate to previous lesson
-  const goToPreviousLesson = () => {
+  const goToPrevLesson = () => {
     if (!currentModule || !currentLesson) return;
 
     const currentLessonIndex = currentModule.lessons.findIndex(l => l.id === currentLesson.id);
@@ -231,82 +224,43 @@ const CourseLearning = () => {
     }
   };
 
-  // Download module file
-  const downloadModuleFile = (fileUrl, fileName) => {
-    const link = document.createElement('a');
-    link.href = fileUrl;
-    link.download = fileName;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleChatWithTeacher = () => {
+    // Navigate to chat with teacher
+    navigate(`/chat?teacher=${course.instructor_id}&course=${courseId}`);
   };
 
-  // Get file type icon
-  const getFileTypeIcon = (fileType) => {
-    if (!fileType) return <RiFileTextLine />;
+  const calculateOverallProgress = () => {
+    if (!modules.length) return 0;
     
-    const type = fileType.toLowerCase();
-    if (type.includes('pdf')) return <RiFileTextLine className="text-red-500" />;
-    if (type.includes('doc')) return <RiFileTextLine className="text-blue-500" />;
-    if (type.includes('ppt')) return <RiFileTextLine className="text-orange-500" />;
-    return <RiFileTextLine />;
+    const totalLessons = modules.reduce((total, module) => 
+      total + (module.lessons ? module.lessons.length : 0), 0);
+    
+    if (totalLessons === 0) return 0;
+    
+    return Math.round((progress.completedLessons.length / totalLessons) * 100);
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <RiLoader4Line className="animate-spin text-6xl text-blue-600 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 mb-2">Memuat Kursus...</h3>
-          <p className="text-gray-600">Sedang menyiapkan materi pembelajaran</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading course...</p>
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto">
-          <RiErrorWarningLine className="text-6xl text-red-500 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 mb-2">Terjadi Kesalahan</h3>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <div className="space-x-4">
-            <button
-              onClick={() => navigate(`/kursus/${courseId}`)}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-            >
-              Kembali ke Detail
-            </button>
-            <button
-              onClick={fetchCourseContent}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Coba Lagi
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // No content state
-  if (!course || !modules.length) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-          <RiBookOpenLine className="text-6xl text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 mb-2">Belum Ada Materi</h3>
-          <p className="text-gray-600 mb-6">Kursus ini belum memiliki materi pembelajaran.</p>
+        <div className="text-center">
+          <div className="text-red-600 text-lg mb-4">{error}</div>
           <button
-            onClick={() => navigate(`/kursus/${courseId}`)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            onClick={() => navigate('/kursus')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
           >
-            Kembali ke Detail Kursus
+            Back to Courses
           </button>
         </div>
       </div>
@@ -314,338 +268,319 @@ const CourseLearning = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header />
-      
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Module List */}
-        <div className={`bg-white border-r border-gray-200 transition-all duration-300 ${
-          sidebarCollapsed ? 'w-16' : 'w-80'
-        } flex-shrink-0 overflow-hidden`}>
-          {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              {!sidebarCollapsed && (
-                <div className="flex-1 mr-2">
-                  <button
-                    onClick={() => navigate(`/kursus/${courseId}`)}
-                    className="flex items-center text-blue-600 hover:text-blue-700 text-sm mb-2"
-                  >
-                    <RiArrowLeftLine className="mr-1" />
-                    Kembali ke Detail
-                  </button>
-                  <h2 className="font-semibold text-gray-900 text-sm line-clamp-2">
-                    {course.title}
-                  </h2>
-                </div>
-              )}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-full mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
               <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
+                onClick={() => navigate(`/kursus/${courseId}`)}
+                className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                {sidebarCollapsed ? <RiArrowRightLine /> : <RiCloseLine />}
+                <RiArrowLeftLine size={20} />
               </button>
-            </div>
-          </div>
-
-          {/* Progress Overview */}
-          {!sidebarCollapsed && (
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Progress Kursus</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {courseProgress.progress_percentage}%
-                </span>
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">
+                  {course?.title}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  Progress: {calculateOverallProgress()}%
+                </p>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="flex-1 max-w-md mx-8">
+              <div className="bg-gray-200 rounded-full h-2">
                 <div
-                  className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${courseProgress.progress_percentage}%` }}
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${calculateOverallProgress()}%` }}
                 ></div>
               </div>
-              <div className="text-xs text-gray-500">
-                {courseProgress.completed_lessons} dari {courseProgress.total_lessons} lesson selesai
+              <div className="text-xs text-gray-500 mt-1 text-center">
+                {progress.completedLessons.length} of {modules.reduce((total, m) => total + (m.lessons?.length || 0), 0)} lessons completed
               </div>
             </div>
-          )}
 
-          {/* Module List */}
-          <div className="flex-1 overflow-y-auto">
-            {!sidebarCollapsed ? (
-              <div className="p-4 space-y-3">
-                {modules.map((module, moduleIndex) => (
-                  <div key={module.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                    {/* Module Header */}
-                    <button
-                      onClick={() => toggleModule(module.id)}
-                      className={`w-full p-3 text-left hover:bg-gray-50 transition-colors ${
-                        currentModule?.id === module.id ? 'bg-blue-50 border-blue-200' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900 text-sm mb-1">
-                            Lesson {moduleIndex + 1}: {module.title}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {module.lessons?.length || 0} materi
-                          </div>
-                        </div>
-                        <div className="ml-2">
-                          {expandedModules[module.id] ? (
-                            <RiArrowUpSLine className="text-gray-500" />
-                          ) : (
-                            <RiArrowDownSLine className="text-gray-500" />
-                          )}
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Module Content */}
-                    {expandedModules[module.id] && (
-                      <div className="border-t border-gray-200">
-                        {/* Module Description */}
-                        {module.description && (
-                          <div className="p-3 bg-gray-50 text-sm text-gray-600">
-                            {module.description}
-                          </div>
-                        )}
-
-                        {/* Module File */}
-                        {module.file_url && (
-                          <div className="p-3 bg-blue-50 border-b border-gray-200">
-                            <button
-                              onClick={() => downloadModuleFile(module.file_url, `${module.title}.${module.file_type}`)}
-                              className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
-                            >
-                              {getFileTypeIcon(module.file_type)}
-                              <span className="ml-2">Download Materi</span>
-                              <RiDownloadLine className="ml-1" />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Lessons */}
-                        <div className="divide-y divide-gray-200">
-                          {module.lessons?.map((lesson, lessonIndex) => {
-                            const lessonProgress = progress[lesson.id];
-                            const isCompleted = lessonProgress?.completed || false;
-                            const isCurrent = currentLesson?.id === lesson.id;
-
-                            return (
-                              <button
-                                key={lesson.id}
-                                onClick={() => selectLesson(lesson, module)}
-                                className={`w-full p-3 text-left hover:bg-gray-50 transition-colors ${
-                                  isCurrent ? 'bg-blue-100' : ''
-                                }`}
-                              >
-                                <div className="flex items-center">
-                                  <div className="mr-3">
-                                    {isCompleted ? (
-                                      <RiCheckboxCircleLine className="text-green-500 text-lg" />
-                                    ) : (
-                                      <RiCheckboxBlankLine className="text-gray-400 text-lg" />
-                                    )}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className={`text-sm font-medium ${
-                                      isCurrent ? 'text-blue-900' : 'text-gray-900'
-                                    }`}>
-                                      {lessonIndex + 1}. {lesson.title}
-                                    </div>
-                                    {lesson.duration && (
-                                      <div className="flex items-center text-xs text-gray-500 mt-1">
-                                        <RiTimeLine className="mr-1" />
-                                        {lesson.duration} menit
-                                      </div>
-                                    )}
-                                  </div>
-                                  {isCurrent && (
-                                    <RiPlayFill className="text-blue-600 ml-2" />
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // Collapsed sidebar - show minimal info
-              <div className="p-2 space-y-2">
-                {modules.map((module) => (
-                  <div key={module.id} className="relative">
-                    <button
-                      onClick={() => {
-                        setSidebarCollapsed(false);
-                        toggleModule(module.id);
-                      }}
-                      className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                        currentModule?.id === module.id 
-                          ? 'bg-blue-100 text-blue-600' 
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                      title={module.title}
-                    >
-                      <RiBookOpenLine />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="text-sm text-gray-600">
+              {course?.instructor_name}
+            </div>
           </div>
         </div>
+      </div>
 
+      <div className="flex h-[calc(100vh-80px)]">
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {currentLesson ? (
-            <>
-              {/* Content Header */}
-              <div className="bg-white border-b border-gray-200 p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center text-sm text-gray-500 mb-2">
-                      <span>{currentModule?.title}</span>
-                      <span className="mx-2">•</span>
-                      <span>Lesson {currentModule?.lessons?.findIndex(l => l.id === currentLesson.id) + 1}</span>
-                    </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                      {currentLesson.title}
-                    </h1>
-                    {currentLesson.duration && (
-                      <div className="flex items-center text-sm text-gray-500">
-                        <RiTimeLine className="mr-1" />
-                        Estimasi: {currentLesson.duration} menit
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    {/* Progress Toggle */}
-                    <button
-                      onClick={() => {
-                        const isCompleted = progress[currentLesson.id]?.completed || false;
-                        if (isCompleted) {
-                          markLessonIncomplete(currentLesson.id);
-                        } else {
-                          markLessonComplete(currentLesson.id);
-                        }
-                      }}
-                      disabled={updateingProgress}
-                      className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        progress[currentLesson.id]?.completed
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                      } disabled:opacity-50`}
-                    >
-                      {updateingProgress ? (
-                        <RiLoader4Line className="animate-spin mr-2" />
-                      ) : progress[currentLesson.id]?.completed ? (
-                        <RiCheckboxCircleLine className="mr-2" />
-                      ) : (
-                        <RiCheckboxBlankLine className="mr-2" />
-                      )}
-                      {progress[currentLesson.id]?.completed ? 'Selesai' : 'Tandai Selesai'}
-                    </button>
-                  </div>
+        <div className="flex-1 bg-white">
+          {currentModule && currentModule.file_url ? (
+            /* PDF Viewer */
+            <div className="h-full flex flex-col">
+              {/* PDF Controls */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 border-b">
+                <div className="flex items-center space-x-2">
+                  <RiFileTextLine className="text-blue-600" size={20} />
+                  <span className="font-medium">{currentModule.title}</span>
+                  {currentLesson && (
+                    <span className="text-gray-500">- {currentLesson.title}</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handlePdfZoom('out')}
+                    className="p-2 hover:bg-gray-200 rounded transition-colors"
+                    disabled={pdfZoom <= 0.5}
+                  >
+                    <RiZoomOutLine size={16} />
+                  </button>
+                  <span className="text-sm px-2">{Math.round(pdfZoom * 100)}%</span>
+                  <button
+                    onClick={() => handlePdfZoom('in')}
+                    className="p-2 hover:bg-gray-200 rounded transition-colors"
+                    disabled={pdfZoom >= 3}
+                  >
+                    <RiZoomInLine size={16} />
+                  </button>
+                  <button
+                    onClick={toggleFullscreen}
+                    className="p-2 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    {isFullscreen ? <RiFullscreenExitLine size={16} /> : <RiFullscreenLine size={16} />}
+                  </button>
+                  <a
+                    href={currentModule.file_url}
+                    download
+                    className="p-2 hover:bg-gray-200 rounded transition-colors"
+                  >
+                    <RiDownloadLine size={16} />
+                  </a>
                 </div>
               </div>
 
-              {/* Lesson Content */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="max-w-4xl mx-auto p-8">
-                  {/* Content Display */}
-                  <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-                    <div className="text-center mb-8">
-                      <h2 className="text-6xl font-bold text-gray-800 mb-8">MATERI</h2>
-                    </div>
-
-                    {/* Lesson Content */}
-                    <div className="prose prose-lg max-w-none">
-                      {currentLesson.content ? (
-                        <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                          {currentLesson.content}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12 text-gray-500">
-                          <RiFileTextLine className="text-4xl mx-auto mb-4" />
-                          <p>Konten lesson belum tersedia</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Module File Download */}
-                    {currentModule?.file_url && (
-                      <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 className="font-medium text-blue-900 mb-3 flex items-center">
-                          {getFileTypeIcon(currentModule.file_type)}
-                          <span className="ml-2">Materi Tambahan</span>
-                        </h4>
-                        <p className="text-blue-700 text-sm mb-4">
-                          Download file materi untuk pembelajaran yang lebih mendalam
-                        </p>
-                        <button
-                          onClick={() => downloadModuleFile(
-                            currentModule.file_url, 
-                            `${currentModule.title}.${currentModule.file_type || 'pdf'}`
-                          )}
-                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          <RiDownloadLine className="mr-2" />
-                          Download Materi ({currentModule.file_type?.toUpperCase() || 'PDF'})
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Navigation */}
-                  <div className="flex justify-between items-center">
-                    <button
-                      onClick={goToPreviousLesson}
-                      className="flex items-center px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!currentModule || !currentLesson || 
-                        (currentModule.lessons?.[0]?.id === currentLesson.id && 
-                         modules?.[0]?.id === currentModule.id)}
-                    >
-                      <RiArrowLeftLine className="mr-2" />
-                      Lesson Sebelumnya
-                    </button>
-
-                    <div className="text-center">
-                      <div className="text-sm text-gray-500">
-                        Lesson {(currentModule?.lessons?.findIndex(l => l.id === currentLesson.id) || 0) + 1} dari {currentModule?.lessons?.length || 0}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={goToNextLesson}
-                      className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!currentModule || !currentLesson || 
-                        (currentModule.lessons?.[currentModule.lessons.length - 1]?.id === currentLesson.id && 
-                         modules?.[modules.length - 1]?.id === currentModule.id)}
-                    >
-                      Lesson Selanjutnya
-                      <RiArrowRightLine className="ml-2" />
-                    </button>
-                  </div>
+              {/* PDF Display */}
+              <div ref={pdfViewerRef} className="flex-1 overflow-auto bg-gray-100 p-4">
+                <div className="max-w-4xl mx-auto">
+                  <iframe
+                    src={`${currentModule.file_url}#zoom=${pdfZoom * 100}`}
+                    className="w-full h-full min-h-[800px] border border-gray-300 rounded"
+                    title={`${currentModule.title} - Module Material`}
+                  />
                 </div>
               </div>
-            </>
+
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 border-t">
+                <button
+                  onClick={goToPrevLesson}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                  disabled={!currentLesson || (modules.findIndex(m => m.id === currentModule.id) === 0 && 
+                    currentModule.lessons.findIndex(l => l.id === currentLesson.id) === 0)}
+                >
+                  Previous Lesson
+                </button>
+                
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => toggleLessonComplete(currentLesson?.id)}
+                    className={`flex items-center px-4 py-2 rounded transition-colors ${
+                      progress.completedLessons.includes(currentLesson?.id)
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}
+                  >
+                    {progress.completedLessons.includes(currentLesson?.id) ? (
+                      <RiCheckboxCircleLine className="mr-2" />
+                    ) : (
+                      <RiCheckboxBlankCircleLine className="mr-2" />
+                    )}
+                    {progress.completedLessons.includes(currentLesson?.id) ? 'Completed' : 'Mark Complete'}
+                  </button>
+                </div>
+
+                <button
+                  onClick={goToNextLesson}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  disabled={!currentLesson || (modules.findIndex(m => m.id === currentModule.id) === modules.length - 1 && 
+                    currentModule.lessons.findIndex(l => l.id === currentLesson.id) === currentModule.lessons.length - 1)}
+                >
+                  Next Lesson
+                </button>
+              </div>
+            </div>
           ) : (
-            /* No Lesson Selected */
-            <div className="flex-1 flex items-center justify-center">
+            /* No Material Selected */
+            <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <RiBookOpenLine className="text-6xl text-gray-300 mx-auto mb-4" />
                 <h3 className="text-xl font-medium text-gray-900 mb-2">
-                  Pilih Lesson untuk Memulai
+                  {currentLesson ? 'No Material Available' : 'Select a Lesson'}
                 </h3>
                 <p className="text-gray-600">
-                  Klik pada lesson di sidebar untuk memulai pembelajaran
+                  {currentLesson 
+                    ? 'This lesson does not have a PDF material attached.'
+                    : 'Choose a lesson from the course outline to start learning.'
+                  }
                 </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+          {/* Course Progress */}
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Your Progress</span>
+              <span className="text-sm font-bold text-blue-600">{calculateOverallProgress()}%</span>
+            </div>
+            <div className="bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${calculateOverallProgress()}%` }}
+              ></div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {progress.completedLessons.length}/{modules.reduce((total, m) => total + (m.lessons?.length || 0), 0)} lessons
+            </div>
+          </div>
+
+          {/* Course Modules */}
+          <div className="flex-1 overflow-y-auto">
+            {modules.map((module, moduleIndex) => (
+              <div key={module.id} className="border-b border-gray-100">
+                {/* Module Header */}
+                <button
+                  onClick={() => toggleModuleExpansion(module.id)}
+                  className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 text-sm">
+                        Lesson {moduleIndex + 1}: {module.title}
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {module.lessons?.length || 0} Content{module.lessons?.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <div className={`transform transition-transform ${
+                      expandedModules[module.id] ? 'rotate-90' : ''
+                    }`}>
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Module Lessons */}
+                {expandedModules[module.id] && module.lessons && (
+                  <div className="border-t border-gray-100">
+                    {module.lessons.map((lesson, lessonIndex) => {
+                      const isCompleted = progress.completedLessons.includes(lesson.id);
+                      const isActive = currentLesson?.id === lesson.id;
+                      
+                      return (
+                        <button
+                          key={lesson.id}
+                          onClick={() => selectLesson(lesson, module)}
+                          className={`w-full text-left p-3 pl-8 hover:bg-gray-50 transition-colors border-l-2 ${
+                            isActive 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <div className="mr-3">
+                              {isCompleted ? (
+                                <RiCheckboxCircleLine className="text-green-500" size={16} />
+                              ) : (
+                                <RiCheckboxBlankCircleLine className="text-gray-400" size={16} />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className={`text-sm ${
+                                isActive ? 'font-medium text-blue-900' : 'text-gray-900'
+                              }`}>
+                                {lessonIndex + 1}. {lesson.title}
+                              </div>
+                              {lesson.duration && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {lesson.duration} min
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Lesson Details */}
+          {currentLesson && (
+            <div className="border-t border-gray-200">
+              {/* Lesson Info */}
+              <div className="p-4">
+                <h5 className="font-medium text-gray-900 mb-2">
+                  {currentLesson.title}
+                </h5>
+                {currentLesson.content && (
+                  <p className="text-sm text-gray-600 mb-3">
+                    {currentLesson.content}
+                  </p>
+                )}
+                {currentLesson.duration && (
+                  <div className="text-xs text-gray-500 mb-3">
+                    Duration: {currentLesson.duration} minutes
+                  </div>
+                )}
+              </div>
+
+              {/* Notes Section */}
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setShowNotes(!showNotes)}
+                  className="flex items-center text-sm text-blue-600 hover:text-blue-800 transition-colors mb-2"
+                >
+                  <RiFileTextLine className="mr-1" size={14} />
+                  {showNotes ? 'Hide Notes' : 'Add Notes'}
+                </button>
+                
+                {showNotes && (
+                  <div className="mt-2">
+                    <textarea
+                      value={lessonNotes}
+                      onChange={(e) => setLessonNotes(e.target.value)}
+                      placeholder="Add your notes about this lesson..."
+                      className="w-full h-20 text-xs border border-gray-300 rounded p-2 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        // Save notes logic here
+                        console.log('Saving notes:', lessonNotes);
+                      }}
+                      className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Save Notes
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Chat with Teacher */}
+              <div className="p-4 border-t border-gray-200">
+                <button
+                  onClick={handleChatWithTeacher}
+                  className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                >
+                  <RiMessageLine className="mr-2" size={16} />
+                  Chat with Teacher
+                </button>
               </div>
             </div>
           )}

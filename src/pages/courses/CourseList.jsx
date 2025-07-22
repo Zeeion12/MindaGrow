@@ -310,12 +310,26 @@ const CourseList = () => {
             src={course.thumbnail}
             alt={course.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              // Hide broken image and show fallback
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
-            <RiBookOpenLine className="text-white text-4xl" />
+        ) : null}
+        
+        {/* Fallback when no thumbnail or image fails to load */}
+        <div 
+          className={`w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 ${
+            course.thumbnail ? 'hidden' : 'flex'
+          }`}
+          style={{ display: course.thumbnail ? 'none' : 'flex' }}
+        >
+          <div className="text-center text-white">
+            <RiBookOpenLine className="text-4xl mx-auto mb-2" />
+            <div className="text-sm font-medium">{course.category_name || 'Course'}</div>
           </div>
-        )}
+        </div>
         
         {/* Level Badge */}
         <div className={`absolute top-3 left-3 px-2 py-1 rounded-full text-xs font-medium ${getLevelBadgeColor(course.level)}`}>
@@ -366,12 +380,30 @@ const CourseList = () => {
             <RiTimeLine className="mr-1" />
             <span>{formatDuration(course.duration || course.estimated_duration)}</span>
           </div>
-          {course.rating && (
+          {course.average_rating && (
             <div className="flex items-center">
               <RiStarFill className="mr-1 text-yellow-400" />
-              <span>{course.rating}</span>
+              <span>{course.average_rating.toFixed(1)}</span>
             </div>
           )}
+        </div>
+
+        {/* Course Stats */}
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
+          <div className="flex items-center">
+            <span className="mr-1">👥</span>
+            <span>{course.enrolled_count || 0} siswa</span>
+          </div>
+          {course.modules && course.modules.length > 0 && (
+            <div className="flex items-center">
+              <span className="mr-1">📚</span>
+              <span>{course.modules.length} modul</span>
+            </div>
+          )}
+          <div className="flex items-center">
+            <span className="mr-1">📄</span>
+            <span>{course.modules?.filter(m => m.file_url).length || 0} PDF</span>
+          </div>
         </div>
 
         {/* Action Buttons */}

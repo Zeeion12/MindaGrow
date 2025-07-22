@@ -51,17 +51,79 @@ export const authAPI = {
 // Course API
 export const courseAPI = {
   getAllCourses: (filters = {}) => api.get('/courses', { params: filters }),
+
   getCategories: () => {
     return api.get('/courses/categories');
   },
-  getCourseById: (id) => api.get(`/courses/${id}`),
-  createCourse: (courseData) => api.post('/courses', courseData),
+
+  createCourseWithModules: (courseData) => {
+    return api.post('/courses', courseData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 60000 // 60 seconds timeout for file uploads
+    });
+  },
+
+  getCourseById: (id) => {
+    return api.get(`/courses/${id}`);
+  },
+
+  createCourse: (courseData) => {
+    return api.post('/courses', courseData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 60000 // 60 seconds for file upload
+    });
+  },
+
+  createCourseWithModules: (courseData) => {
+    return api.post('/courses', courseData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 60000
+    });
+  },
+
   updateCourse: (id, courseData) => api.put(`/courses/${id}`, courseData),
   deleteCourse: (id) => api.delete(`/courses/${id}`),
-  enrollCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
-  getEnrolledCourses: () => api.get('/courses/enrolled'),
+
+  enrollCourse: (courseId) => {
+    return api.post(`/courses/${courseId}/enroll`);
+  },
+
+  unenrollCourse: (courseId) => {
+    return api.delete(`/courses/${courseId}/enroll`);
+  },
+
+  getEnrolledCourses: () => {
+    return api.get('/courses/enrolled');
+  },
+  
   getCourseContent: (courseId) => api.get(`/courses/${courseId}/content`),
-  updateLessonProgress: (courseId, lessonId, progressData) => api.put(`/courses/${courseId}/lessons/${lessonId}/progress`, progressData),
+
+  getCourseLearningData: (courseId) => {
+    return api.get(`/courses/${courseId}/learning`);
+  },
+
+   getCourseProgress: (courseId) => {
+    return api.get(`/courses/${courseId}/progress`);
+  },
+
+   saveLessonNotes: (lessonId, notes) => {
+    return api.post(`/lessons/${lessonId}/notes`, { notes });
+  },
+
+  // Get lesson notes
+  getLessonNotes: (lessonId) => {
+    return api.get(`/lessons/${lessonId}/notes`);
+  },
+
+  updateLessonProgress: (lessonId, progressData) => {
+    return api.put(`/lessons/${lessonId}/progress`, progressData);
+  },
 };
 
 export const gameAPI = {
